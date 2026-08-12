@@ -141,3 +141,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Cube.dev runtime state (shadowed by a named volume in docker-compose.yml,
+# but ignored defensively in case Cube is ever run without it)
+cube/.cubestore/

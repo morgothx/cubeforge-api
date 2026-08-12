@@ -1,0 +1,7 @@
+# Lifecycle scripts are blocked by default (pnpm's supply-chain protection).
+# Every entry here is an explicit, reviewed exception — see CLAUDE.md.
+allowBuilds:
+  # Native resolver pulled in transitively by the ESLint toolchain. Prebuilt
+  # platform binaries are published as optional deps, so the postinstall build
+  # is not needed and stays denied.
+  unrs-resolver: false

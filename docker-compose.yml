@@ -1,0 +1,70 @@
+name: cubeforge
+
+services:
+  # Local AWS emulator (floci.io). Never a real AWS account — see CLAUDE.md.
+  # The Docker socket is required because Lambda and other stateful services
+  # are backed by real containers that Floci spawns itself.
+  floci:
+    image: floci/floci:latest
+    ports:
+      - "4566:4566"
+    environment:
+      FLOCI_HOSTNAME: floci
+      FLOCI_DEFAULT_REGION: us-east-1
+      FLOCI_STORAGE_MODE: persistent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - floci-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/4566 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # OLTP store. Analytical queries never run here — they go to Athena.
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cubeforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cubeforge}
+      POSTGRES_DB: ${POSTGRES_DB:-cubeforge}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cubeforge} -d ${POSTGRES_DB:-cubeforge}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Semantic layer. Long-lived by design (persistent pre-aggregation cache),
+  # which is why it is not deployed to Lambda. The Athena data source is added
+  # once the S3/Parquet export pipeline exists.
+  cube:
+    image: cubejs/cube:latest
+    ports:
+      - "4000:4000" # dev playground + REST API
+      - "15432:15432" # SQL API
+    environment:
+      CUBEJS_DEV_MODE: "true"
+      CUBEJS_DB_TYPE: postgres
+      CUBEJS_DB_HOST: postgres
+      CUBEJS_DB_PORT: "5432"
+      CUBEJS_DB_NAME: ${POSTGRES_DB:-cubeforge}
+      CUBEJS_DB_USER: ${POSTGRES_USER:-cubeforge}
+      CUBEJS_DB_PASS: ${POSTGRES_PASSWORD:-cubeforge}
+      CUBEJS_API_SECRET: ${CUBEJS_API_SECRET:-dev-only-not-a-real-secret}
+    volumes:
+      - ./cube:/cube/conf
+      # Cube Store runtime state is shadowed by a named volume so the
+      # container (running as root) never writes into the source tree.
+      - cube-store:/cube/conf/.cubestore
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  floci-data:
+  postgres-data:
+  cube-store:
