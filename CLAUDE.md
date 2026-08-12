@@ -25,6 +25,7 @@ This project targets Floci (local AWS emulator, floci.io) for all development an
 - Package manager: pnpm (not npm) — blocks lifecycle scripts by default and enforces a strict dependency graph (no phantom dependencies), meaningfully reducing supply-chain attack surface (e.g. the Shai-Hulud/Glassworm npm worms). Use `pnpm install`, `pnpm add`, `pnpm --frozen-lockfile install` in CI.
 - Runtime/framework: NestJS, running on top of Express under the hood — prior hands-on experience is with Express directly; NestJS was chosen here for its module system, dependency injection, and Guards (a natural fit for the RBAC requirement below and for keeping the hexagonal architecture clean).
 - Database (OLTP): PostgreSQL
+- Data access: Drizzle ORM (`drizzle-orm` + `drizzle-kit` for migrations), not TypeORM. TypeORM is decorator-based on the entities themselves, so a `@Entity()`/`@Column()` class is no longer a framework-free domain object — it would silently break the one hexagonal rule this project actually enforces. Drizzle declares schema as plain TypeScript objects that live in the persistence adapter and never leak into `src/domain/`. Wire it into Nest with a small first-party module and provider; do not add a third-party integrator package (`@sixaphone/nestjs-drizzle` was last published in January 2025 and is effectively unmaintained).
 - Analytical query engine (OLAP): Amazon Athena, querying Parquet exports in S3
 - Semantic/BI layer: Cube.dev
 - Serverless compute: AWS Lambda + API Gateway (primary deployment mode for the CRUD/RBAC API)
@@ -50,7 +51,12 @@ The domain layer must never import Express, the AWS SDK, or any infrastructure p
 
 ## Multi-tenancy and RBAC — required, not optional
 
-- Every query that touches tenant-owned data must be scoped by tenant_id, prefer enforcing this at the repository/adapter layer (or Postgres row-level security) so no individual use case can forget it.
+- Tenant isolation is enforced in **two independent layers that do not share a point of failure**, not one:
+  1. **Repository-level scoping** — every query that touches tenant-owned data is scoped by `tenant_id` inside the persistence adapter, so no individual use case can forget it. Fast to test, explicit, lives in our code.
+  2. **PostgreSQL Row-Level Security** — a policy on every tenant-owned table, as a backstop at the database engine. If a future use case ever bypasses the repository or gets the scoping wrong, RLS still blocks the cross-tenant read.
+
+  RLS implies two things that are easy to get wrong: the application role must **not** be the table owner or a superuser (owners bypass RLS unless `FORCE ROW LEVEL SECURITY` is set), and the current tenant must be published to the session — `SET LOCAL app.current_tenant = $1` inside the same transaction as the query, never a connection-level setting, because connections are pooled and would leak the tenant across requests.
+- Authentication uses two distinct mechanisms, deliberately: **JWT** for dashboard users, and **API keys** for machine-to-machine callers (the inventory sync integration). Guards authorize an already-resolved principal; resolving that principal is a separate concern from authorizing it.
 - Roles (e.g. admin, editor, viewer) are enforced via NestJS Guards before the request reaches application logic, never inline per-route.
 - Every RBAC/multi-tenant feature needs an explicit isolation test: verify that tenant A can never read or write tenant B's data, for every role.
 
