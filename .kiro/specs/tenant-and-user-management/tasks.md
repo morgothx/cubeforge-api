@@ -86,7 +86,7 @@ database until these exist.
   - _Requirements: 9.1_
   - _Boundary: Persistence module_
 
-- [ ] 2.2 Create the schema and its migration
+- [x] 2.2 Create the schema and its migration
   - Create tables for tenants, people and memberships with status and creation
     time on each
   - Enforce unique tenant names, platform-wide case-insensitive unique emails,
@@ -400,3 +400,12 @@ formality.
   `_name` to be tolerated.
 - The domain boundary rule was verified live, not assumed: adding a `@nestjs/common`
   import to a domain file was confirmed to fail lint before being reverted.
+- Migrations cannot run until the migration role exists, and the Postgres
+  container only creates the bootstrap superuser. `pnpm db:bootstrap` creates
+  `cubeforge_migrator` idempotently and must run once before `pnpm db:migrate`
+  on a fresh database. This prerequisite was missing from the task plan.
+- drizzle-kit does not model extensions. `CREATE EXTENSION citext` was added by
+  hand at the top of the generated migration; regenerating that migration would
+  drop it.
+- PostgreSQL `DO $$ ... $$` blocks accept no parameters. Quote identifiers with
+  `quote_ident`/`quote_literal` on the server and splice the result instead.
