@@ -113,7 +113,7 @@ database until these exist.
   - _Boundary: Schema, Database roles_
   - _Depends: 2.2_
 
-- [ ] 2.4 Build the integration test harness
+- [x] 2.4 Build the integration test harness
   - Run migrations against the local database before the suite and reset state
     between tests
   - Provide helpers to act as a given person in a given tenant, and to act as an
@@ -421,6 +421,14 @@ formality.
   0002: SECURITY DEFINER, pinned `search_path`, returns an id and nothing else,
   executable only by `cubeforge_app`. Recorded in design.md as a boundary
   commitment. Task 4.3 must call it instead of inserting into `people` directly.
+- Integration tests run under their own Jest config (`test/jest-integration.json`,
+  `pnpm test:integration`) with `maxWorkers: 1`. They share one database and reset
+  it by truncating, so parallel workers would delete each other's fixtures. Unit
+  tests keep `rootDir: src`, so the two suites cannot pick up each other's files.
+- Nothing in this repo loaded `.env` on its own; `pnpm db:bootstrap` only ever
+  worked because the environment happened to be sourced. Both it and the
+  integration suite now run under `node --env-file-if-exists=.env`. drizzle-kit
+  loads `.env` itself, which is why `db:migrate` never showed the problem.
 - A SECURITY DEFINER function does not escape FORCE RLS — it runs as the owner,
   and the owner is subject to policies. The `ON CONFLICT DO UPDATE` branch needs
   an owner UPDATE policy, not just SELECT and INSERT; without it the conflict

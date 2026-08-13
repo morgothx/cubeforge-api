@@ -21,7 +21,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "db:bootstrap": "ts-node scripts/bootstrap-roles.ts",
+    "test:integration": "node --env-file-if-exists=.env node_modules/jest/bin/jest.js --config ./test/jest-integration.json",
+    "db:bootstrap": "node --env-file-if-exists=.env -r ts-node/register scripts/bootstrap-roles.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },
