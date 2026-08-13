@@ -50,6 +50,18 @@ rather than left to discipline.
   invariant.
 - The eight use cases listed under Components, and the request and response
   contracts that expose them.
+- The `find_or_create_person(uuid, citext)` function, which resolves a person by
+  email across the whole platform without granting the application any read over
+  `people`. Added after the policies were verified against a real database: the
+  application identity cannot see a person who belongs only to another tenant,
+  yet `people.email` is unique platform-wide, so adding a member whose address is
+  already registered elsewhere failed with a duplicate-key error. That made
+  requirement 4.2 impossible to satisfy and disclosed the person's existence,
+  breaking 4.3. The function runs `SECURITY DEFINER` with a pinned `search_path`,
+  returns an identifier and nothing else, and is executable only by
+  `cubeforge_app`. It is the single sanctioned crossing of the people-read
+  boundary; any future need to widen what it returns is a design change, not an
+  implementation detail.
 
 ### Out of boundary
 

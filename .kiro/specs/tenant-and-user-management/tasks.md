@@ -99,7 +99,7 @@ database until these exist.
   - _Boundary: Schema_
   - _Depends: 2.1_
 
-- [ ] 2.3 Create database roles and row-level security policies
+- [x] 2.3 Create database roles and row-level security policies
   - Create a schema-owning migration identity, a tenant-scoped runtime identity,
     and an operator identity, granting each only what it needs
   - Enable and force row-level security on every tenant-owned table so ownership
@@ -409,3 +409,19 @@ formality.
   drop it.
 - PostgreSQL `DO $$ ... $$` blocks accept no parameters. Quote identifiers with
   `quote_ident`/`quote_literal` on the server and splice the result instead.
+- FORCE ROW LEVEL SECURITY applies to the table owner too, so the migration role
+  can no longer read or write these tables. Seed data in the integration harness
+  must be inserted as the container superuser, which bypasses RLS unconditionally.
+- RESOLVED design gap (was blocking 4.3): the `people_app_read` policy hides
+  people who belong only to another tenant, but `people.email` is unique
+  platform-wide. A tenant admin creating a member whose email existed only
+  elsewhere therefore got a duplicate-key error — which both prevented
+  requirement 4.2 and leaked the person's existence, violating 4.3. Verified
+  empirically. Resolved by `find_or_create_person(uuid, citext)` in migration
+  0002: SECURITY DEFINER, pinned `search_path`, returns an id and nothing else,
+  executable only by `cubeforge_app`. Recorded in design.md as a boundary
+  commitment. Task 4.3 must call it instead of inserting into `people` directly.
+- A SECURITY DEFINER function does not escape FORCE RLS — it runs as the owner,
+  and the owner is subject to policies. The `ON CONFLICT DO UPDATE` branch needs
+  an owner UPDATE policy, not just SELECT and INSERT; without it the conflict
+  path fails and precisely the case the function exists for stays broken.
