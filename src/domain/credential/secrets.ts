@@ -20,6 +20,9 @@ export type OpaqueSecret = Secret<'OpaqueSecret'>;
 /** The stored form of an opaque secret. Safe to store, useless to a thief. */
 export type SecretDigest = Secret<'SecretDigest'>;
 
+/** A signed statement that a person authenticated. Never stored. */
+export type AccessToken = Secret<'AccessToken'>;
+
 export function passwordDigest(value: string): PasswordDigest {
   return requireNonBlank(value, 'password digest') as PasswordDigest;
 }
@@ -30,6 +33,10 @@ export function opaqueSecret(value: string): OpaqueSecret {
 
 export function secretDigest(value: string): SecretDigest {
   return requireNonBlank(value, 'secret digest') as SecretDigest;
+}
+
+export function accessToken(value: string): AccessToken {
+  return requireNonBlank(value, 'access token') as AccessToken;
 }
 
 function requireNonBlank(value: string, label: string): string {

@@ -123,7 +123,7 @@ they are proven before anything is built on them.
   - _Requirements: 7.3, 11.2, 11.6_
   - _Boundary: Actor context_
 
-- [ ] 3.2 Declare the authentication contracts
+- [x] 3.2 Declare the authentication contracts
   - Declare contracts for hashing, token issuing, secret generation, and for the
     credential, session and API key stores
   - Declare the authenticating transaction as the only route to the credential
@@ -136,7 +136,7 @@ they are proven before anything is built on them.
   - _Boundary: Ports_
   - _Depends: 3.1_
 
-- [ ] 3.3 Implement in-memory adapters for the contracts
+- [x] 3.3 Implement in-memory adapters for the contracts
   - Satisfy every contract from 3.2 with in-memory storage, including single-use
     and expiry semantics
   - Make hashing and token issuing deterministic under test without weakening the
@@ -431,6 +431,20 @@ them rather than rediscovering them.
   check ran `require()` in a plain Node process and concluded the package was
   usable. It was not. Any future ESM-only dependency needs the same two-place
   check that task 1.1 now performs: the runner and the compiled output.
+- **Issuing a setup token and redeeming one are different contracts on different
+  connections**, which the design did not separate. The operator may create a
+  token and never read one back; the authenticator may read and retire one and
+  never create one. The grants in migration 0006 already said this — the ports
+  now say it too.
+- `ApiKeyRepository` and `SetupTokenIssuingRepository` are declared but not yet
+  members of the tenant-scoped and platform repository bundles. Adding a field to
+  a bundle obliges every adapter to supply it, and the Postgres ones belong to
+  tasks 5.2 and 5.1; wiring them in early would have meant writing those adapters
+  under a task that says "contracts". They join the bundles when their adapters
+  exist.
+- `PasswordHasher` carries `verifyAgainstDecoy`, which the design did not name.
+  Requirement 2.2 needs an unknown address to cost the same as a wrong password,
+  and leaving that to each caller to remember is how a timing channel reappears.
 - Widening `ActorContext` broke three specs that each declared their own
   operator headers instead of importing the shared constant. Worth knowing before
   task 7.1 replaces those headers with credentials: the duplication is in
