@@ -7,6 +7,7 @@ import {
 } from '../../../domain/identifiers';
 import { createMembership } from '../../../domain/membership/membership.entity';
 import { createTenant } from '../../../domain/tenant/tenant.entity';
+import { InMemoryCredentialStore } from './in-memory-credential-store';
 import { InMemoryIdentityStore } from './in-memory-identity-store';
 import { InMemoryPlatformUnitOfWork } from './in-memory-platform-unit-of-work';
 import { InMemoryTenantScopedUnitOfWork } from './in-memory-tenant-scoped-unit-of-work';
@@ -24,7 +25,10 @@ describe('in-memory identity adapters', () => {
   beforeEach(async () => {
     store = new InMemoryIdentityStore();
     tenantScoped = new InMemoryTenantScopedUnitOfWork(store);
-    platform = new InMemoryPlatformUnitOfWork(store);
+    platform = new InMemoryPlatformUnitOfWork(
+      store,
+      new InMemoryCredentialStore(() => null),
+    );
 
     await platform.runAsOperator(async ({ tenants }) => {
       await tenants.insert(
@@ -280,7 +284,15 @@ describe('in-memory identity adapters', () => {
   describe('the operator boundary', () => {
     it('offers the operator no route to memberships', async () => {
       await platform.runAsOperator((repositories) => {
-        expect(Object.keys(repositories).sort()).toEqual(['people', 'tenants']);
+        // The absence is the assertion. The full list is checked too, so that
+        // growing the operator's reach has to be a deliberate edit here rather
+        // than something that slips in with a new feature.
+        expect(Object.keys(repositories)).not.toContain('memberships');
+        expect(Object.keys(repositories).sort()).toEqual([
+          'people',
+          'setupTokens',
+          'tenants',
+        ]);
         return Promise.resolve();
       });
     });

@@ -2,13 +2,16 @@ import type {
   PlatformRepositories,
   PlatformUnitOfWork,
 } from '../../../application/ports/platform-unit-of-work';
+import type { SetupTokenIssuingRepository } from '../../../application/ports/credential.repository';
 import type { PlatformPersonRepository } from '../../../application/ports/person.repository';
 import type { TenantRepository } from '../../../application/ports/tenant.repository';
+import type { SecretDigest } from '../../../domain/credential/secrets';
 import type { PersonId, TenantId } from '../../../domain/identifiers';
 import type {
   Tenant,
   TenantStatus,
 } from '../../../domain/tenant/tenant.entity';
+import type { InMemoryCredentialStore } from './in-memory-credential-store';
 import { InMemoryIdentityStore } from './in-memory-identity-store';
 
 /**
@@ -18,7 +21,10 @@ import { InMemoryIdentityStore } from './in-memory-identity-store';
  * check that could be forgotten.
  */
 export class InMemoryPlatformUnitOfWork implements PlatformUnitOfWork {
-  constructor(private readonly store: InMemoryIdentityStore) {}
+  constructor(
+    private readonly store: InMemoryIdentityStore,
+    private readonly credentials: InMemoryCredentialStore,
+  ) {}
 
   async runAsOperator<T>(
     work: (repositories: PlatformRepositories) => Promise<T>,
@@ -28,6 +34,7 @@ export class InMemoryPlatformUnitOfWork implements PlatformUnitOfWork {
       return await work({
         tenants: new InMemoryTenantRepository(this.store),
         people: new InMemoryPlatformPersonRepository(this.store),
+        setupTokens: new InMemorySetupTokenIssuingRepository(this.credentials),
       });
     } catch (error) {
       this.store.restore(snapshot);
@@ -76,6 +83,20 @@ class InMemoryPlatformPersonRepository implements PlatformPersonRepository {
     if (person) {
       this.store.people.set(personId, { ...person, status: 'deactivated' });
     }
+    return Promise.resolve();
+  }
+}
+
+class InMemorySetupTokenIssuingRepository implements SetupTokenIssuingRepository {
+  constructor(private readonly store: InMemoryCredentialStore) {}
+
+  insert(token: {
+    readonly id: string;
+    readonly personId: PersonId;
+    readonly secretDigest: SecretDigest;
+    readonly expiresAt: Date;
+  }): Promise<void> {
+    this.store.setupTokens.set(token.id, { ...token, redeemedAt: null });
     return Promise.resolve();
   }
 }

@@ -1,6 +1,8 @@
 import type {
+  ApiKeyId,
   MembershipId,
   PersonId,
+  SignInId,
   TenantId,
 } from '../../domain/identifiers';
 
@@ -15,4 +17,13 @@ export interface IdentifierGenerator {
   tenantId(): TenantId;
   personId(): PersonId;
   membershipId(): MembershipId;
+  apiKeyId(): ApiKeyId;
+  signInId(): SignInId;
+
+  /**
+   * For rows nothing refers to by type — a setup token, a refresh token. They
+   * need an identity in the database and nowhere else, so branding them would
+   * add a type for no reader to benefit from.
+   */
+  rowId(): string;
 }

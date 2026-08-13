@@ -2,11 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { IdentifierGenerator } from '../../application/ports/identifier-generator';
 import {
+  apiKeyId,
   membershipId,
   personId,
+  signInId,
   tenantId,
+  type ApiKeyId,
   type MembershipId,
   type PersonId,
+  type SignInId,
   type TenantId,
 } from '../../domain/identifiers';
 
@@ -27,5 +31,17 @@ export class UuidIdentifierGenerator implements IdentifierGenerator {
 
   membershipId(): MembershipId {
     return membershipId(randomUUID());
+  }
+
+  apiKeyId(): ApiKeyId {
+    return apiKeyId(randomUUID());
+  }
+
+  signInId(): SignInId {
+    return signInId(randomUUID());
+  }
+
+  rowId(): string {
+    return randomUUID();
   }
 }

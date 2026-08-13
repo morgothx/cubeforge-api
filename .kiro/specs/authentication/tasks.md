@@ -151,7 +151,7 @@ they are proven before anything is built on them.
 All of these run against the in-memory adapters. Each occupies its own boundary,
 which is what makes them parallel-safe.
 
-- [ ] 4.1 (P) Establish a credential
+- [x] 4.1 (P) Establish a credential
   - Let a platform operator issue a single-use setup token for a person, returned
     once and stored only as a digest
   - Let the holder redeem it with a new password, invalidating the token and
@@ -431,6 +431,19 @@ them rather than rediscovering them.
   check ran `require()` in a plain Node process and concluded the package was
   usable. It was not. Any future ESM-only dependency needs the same two-place
   check that task 1.1 now performs: the runner and the compiled output.
+- Task 4.1 forced the deferred wiring: `setupTokens` had to join
+  `PlatformRepositories`, which obliges the Postgres adapter to supply it, so a
+  slice of task 5.1 landed here. A repository bundle cannot be half-populated;
+  the alternative was giving the use case a construction path that skips the
+  unit of work, which is the thing the design forbids.
+- The password rule is checked *before* the token is looked up, so a mistyped
+  password does not burn the holder's single-use token. Ordering, not an extra
+  branch.
+- The identifier port grew `apiKeyId`, `signInId` and `rowId`. `rowId` is
+  deliberately unbranded: setup tokens and refresh tokens need an identity in
+  the database and nowhere else, so a brand would add a type no reader benefits
+  from. Caught while writing the use case, where a `membershipId` was standing
+  in for a setup token id.
 - **Issuing a setup token and redeeming one are different contracts on different
   connections**, which the design did not separate. The operator may create a
   token and never read one back; the authenticator may read and retire one and

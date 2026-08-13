@@ -4,8 +4,10 @@ import type {
   PlatformRepositories,
   PlatformUnitOfWork,
 } from '../../../application/ports/platform-unit-of-work';
+import type { SetupTokenIssuingRepository } from '../../../application/ports/credential.repository';
 import type { PlatformPersonRepository } from '../../../application/ports/person.repository';
 import type { TenantRepository } from '../../../application/ports/tenant.repository';
+import type { SecretDigest } from '../../../domain/credential/secrets';
 import type { PersonId, TenantId } from '../../../domain/identifiers';
 import type {
   Tenant,
@@ -15,7 +17,7 @@ import { OPERATOR_DATABASE, type Database } from './drizzle.module';
 import { translateConstraintViolation } from './postgres-errors';
 import type { Transaction } from './postgres-tenant-scoped-unit-of-work';
 import { toTenant } from './row-mapping';
-import { tenants } from './schema';
+import { credentialSetupTokens, tenants } from './schema';
 
 /**
  * Operator transactions, on a separate connection as `cubeforge_operator`.
@@ -37,6 +39,7 @@ export class PostgresPlatformUnitOfWork implements PlatformUnitOfWork {
       work({
         tenants: new PostgresTenantRepository(tx),
         people: new PostgresPlatformPersonRepository(tx),
+        setupTokens: new PostgresSetupTokenIssuingRepository(tx),
       }),
     );
   }
@@ -97,5 +100,28 @@ class PostgresPlatformPersonRepository implements PlatformPersonRepository {
    */
   async deactivate(personId: PersonId): Promise<void> {
     await this.tx.execute(sql`select deactivate_person(${personId}::uuid)`);
+  }
+}
+
+/**
+ * The operator's whole reach over setup tokens: creating one. There is no read
+ * and no update here, and the grant in migration 0006 says the same — an
+ * operator who could retire a token could suppress evidence of issuing it.
+ */
+class PostgresSetupTokenIssuingRepository implements SetupTokenIssuingRepository {
+  constructor(private readonly tx: Transaction) {}
+
+  async insert(token: {
+    readonly id: string;
+    readonly personId: PersonId;
+    readonly secretDigest: SecretDigest;
+    readonly expiresAt: Date;
+  }): Promise<void> {
+    await this.tx.insert(credentialSetupTokens).values({
+      id: token.id,
+      personId: token.personId,
+      secretDigest: token.secretDigest,
+      expiresAt: token.expiresAt,
+    });
   }
 }

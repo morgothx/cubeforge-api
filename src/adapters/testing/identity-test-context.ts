@@ -7,6 +7,7 @@ import {
 import { createMembership } from '../../domain/membership/membership.entity';
 import type { Role } from '../../domain/membership/role';
 import { createTenant } from '../../domain/tenant/tenant.entity';
+import { InMemoryCredentialStore } from '../persistence/in-memory/in-memory-credential-store';
 import { InMemoryIdentityStore } from '../persistence/in-memory/in-memory-identity-store';
 import { InMemoryPlatformUnitOfWork } from '../persistence/in-memory/in-memory-platform-unit-of-work';
 import { InMemoryTenantScopedUnitOfWork } from '../persistence/in-memory/in-memory-tenant-scoped-unit-of-work';
@@ -23,8 +24,15 @@ export const TEST_MOMENT = new Date('2026-01-01T00:00:00.000Z');
  */
 export function createIdentityTestContext() {
   const store = new InMemoryIdentityStore();
+  // Authentication keeps its own store, and resolves people through the
+  // identity one rather than duplicating them — the two must never disagree
+  // about who exists.
+  const credentials = new InMemoryCredentialStore((email) => {
+    const person = store.findPersonByEmail(email);
+    return person ? { id: person.id, status: person.status } : null;
+  });
   const tenantScoped = new InMemoryTenantScopedUnitOfWork(store);
-  const platform = new InMemoryPlatformUnitOfWork(store);
+  const platform = new InMemoryPlatformUnitOfWork(store, credentials);
   const clock = new FixedClock(TEST_MOMENT);
   const identifiers = new SequentialIdentifierGenerator();
 
@@ -77,6 +85,7 @@ export function createIdentityTestContext() {
 
   return {
     store,
+    credentials,
     tenantScoped,
     platform,
     clock,

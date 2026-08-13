@@ -1,10 +1,14 @@
 import type { IdentifierGenerator } from '../../application/ports/identifier-generator';
 import {
+  apiKeyId,
   membershipId,
   personId,
+  signInId,
   tenantId,
+  type ApiKeyId,
   type MembershipId,
   type PersonId,
+  type SignInId,
   type TenantId,
 } from '../../domain/identifiers';
 
@@ -25,6 +29,18 @@ export class SequentialIdentifierGenerator implements IdentifierGenerator {
 
   membershipId(): MembershipId {
     return membershipId(this.next('membership'));
+  }
+
+  apiKeyId(): ApiKeyId {
+    return apiKeyId(this.next('api-key'));
+  }
+
+  signInId(): SignInId {
+    return signInId(this.next('sign-in'));
+  }
+
+  rowId(): string {
+    return this.next('row');
   }
 
   private next(kind: string): string {
