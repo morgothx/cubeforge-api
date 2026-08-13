@@ -50,6 +50,13 @@
       "when": 1786658229377,
       "tag": "0006_credential_roles_and_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786658644074,
+      "tag": "0007_operator_bootstrap",
+      "breakpoints": true
     }
   ]
 }

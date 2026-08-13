@@ -89,7 +89,7 @@ they are proven before anything is built on them.
   - _Boundary: Database roles_
   - _Depends: 2.1_
 
-- [ ] 2.3 Provide the operator bootstrap act
+- [x] 2.3 Provide the operator bootstrap act
   - Offer a script that records an existing person as a platform operator,
     outside the API entirely
   - Refuse to run against an unknown person, so a typo cannot create a dangling
@@ -100,7 +100,7 @@ they are proven before anything is built on them.
   - _Boundary: Operator bootstrap_
   - _Depends: 2.1_
 
-- [ ] 2.4 Extend the integration harness for authentication
+- [x] 2.4 Extend the integration harness for authentication
   - Let a test act as the authenticating identity, and reset the new tables
     between tests
   - Provide a way to arrange a person with a usable credential without going
@@ -431,6 +431,14 @@ them rather than rediscovering them.
   check ran `require()` in a plain Node process and concluded the package was
   usable. It was not. Any future ESM-only dependency needs the same two-place
   check that task 1.1 now performs: the runner and the compiled output.
+- `pnpm ops:grant-operator <email> [--withdraw]` runs as the **migration**
+  identity, not a superuser, so the act is available wherever migrations run
+  rather than only on a developer's machine. Migration 0007 adds the owner
+  policies it needs — owning the table is not enough under `FORCE ROW LEVEL
+  SECURITY`, which is the same lesson 0002 records for `people`.
+- The harness truncates the credential tables by name rather than relying on
+  `CASCADE` from `people`, so a table added without being listed here leaks a row
+  into the next test immediately instead of silently much later.
 - The authenticating role is created `NOLOGIN` in the same migration as the
   policies that reference it, because a policy cannot name a role that does not
   exist yet. `pnpm db:bootstrap` grants it LOGIN with a password from the

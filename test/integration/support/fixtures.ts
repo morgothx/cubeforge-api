@@ -1,4 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import {
+  Argon2PasswordHasher,
+  loadHashingConfig,
+} from '../../../src/adapters/crypto/argon2-password-hasher';
 import { closeDatabaseConnections, resetDatabase, seed } from './database';
 
 /**
@@ -78,4 +82,48 @@ export async function seedMember(attributes: {
   });
 
   return { personId, membershipId, email };
+}
+
+/**
+ * Gives a person a usable password without going through the operator flow.
+ *
+ * Most tests are about something other than how a credential came to exist, and
+ * making each of them issue and redeem a setup token would bury what they are
+ * actually asserting. The tests that *are* about that flow go through it.
+ */
+export async function seedCredential(
+  personId: string,
+  password: string,
+): Promise<void> {
+  const digest = await hasher().hash(password);
+  await seed((client) =>
+    client.query(
+      `INSERT INTO person_credentials (person_id, password_digest)
+       VALUES ($1, $2)
+       ON CONFLICT (person_id) DO UPDATE SET password_digest = excluded.password_digest`,
+      [personId, digest],
+    ),
+  );
+}
+
+/** Records a person as a platform operator, as the bootstrap script would. */
+export async function seedOperator(personId: string): Promise<void> {
+  await seed((client) =>
+    client.query(
+      `INSERT INTO platform_operators (person_id) VALUES ($1)
+       ON CONFLICT (person_id) DO NOTHING`,
+      [personId],
+    ),
+  );
+}
+
+let sharedHasher: Argon2PasswordHasher | undefined;
+
+/**
+ * One hasher for the suite, at the configured cost. Hashing is deliberately
+ * slow, so seeding several people per test would otherwise dominate the run.
+ */
+function hasher(): Argon2PasswordHasher {
+  sharedHasher ??= new Argon2PasswordHasher(loadHashingConfig(process.env));
+  return sharedHasher;
 }

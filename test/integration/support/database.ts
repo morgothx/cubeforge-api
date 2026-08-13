@@ -5,18 +5,19 @@ import {
 } from '../../../src/adapters/persistence/postgres/database-config';
 
 /**
- * The three connections an integration test may need, plus a fourth the
+ * The three runtime identities an integration test may need, plus one the
  * production code never has.
  *
- * `app` and `operator` are the identities the running system uses, and tests
- * reach the database through them precisely so row-level security applies
- * exactly as it will in production. `superuser` exists only to arrange
+ * `app`, `operator` and `authenticator` are the identities the running system
+ * uses, and tests reach the database through them precisely so row-level
+ * security applies exactly as it will in production. `superuser` exists only to
+ * arrange
  * fixtures: FORCE ROW LEVEL SECURITY subjects even the schema owner to the
  * policies, so there is no non-superuser identity that can seed a tenant and
  * its members. Using it for assertions would prove nothing, so nothing outside
  * `seed` should.
  */
-type Identity = 'app' | 'operator' | 'superuser';
+type Identity = 'app' | 'operator' | 'authenticator' | 'superuser';
 
 const pools = new Map<Identity, Pool>();
 let cachedConfig: DatabaseConfig | undefined;
@@ -67,7 +68,9 @@ function poolFor(identity: Identity): Pool {
  * real adapters rather than issuing SQL themselves. Both are closed by
  * `closeDatabaseConnections`.
  */
-export function runtimePool(identity: 'app' | 'operator'): Pool {
+export function runtimePool(
+  identity: 'app' | 'operator' | 'authenticator',
+): Pool {
   return poolFor(identity);
 }
 
@@ -140,6 +143,16 @@ export async function asAppWithoutTenant<T>(
   return inTransaction('app', work);
 }
 
+/**
+ * Acts as the authenticating identity: the only one that may read secret
+ * material, and the only one with no tenant context at all.
+ */
+export async function asAuthenticator<T>(
+  work: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return inTransaction('authenticator', work);
+}
+
 /** Acts as the platform operator, which holds no grant on memberships at all. */
 export async function asOperator<T>(
   work: (client: PoolClient) => Promise<T>,
@@ -160,8 +173,12 @@ export async function seed<T>(
  * those some policy would have revealed.
  */
 export async function resetDatabase(): Promise<void> {
+  // The credential tables are listed explicitly rather than relying on CASCADE
+  // from `people`, so adding a table without adding it here fails visibly the
+  // first time a test leaks a row instead of silently much later.
   await poolFor('superuser').query(
-    'TRUNCATE memberships, people, tenants CASCADE',
+    `TRUNCATE refresh_tokens, credential_setup_tokens, person_credentials,
+              platform_operators, api_keys, memberships, people, tenants CASCADE`,
   );
 }
 
