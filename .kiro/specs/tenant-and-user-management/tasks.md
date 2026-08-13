@@ -327,7 +327,7 @@ which is what makes them parallel-safe.
 These are the tests the feature exists to make possible. They are not a coverage
 formality.
 
-- [ ] 8.1 Prove tenant isolation across the role matrix
+- [x] 8.1 Prove tenant isolation across the role matrix
   - For each of admin, editor and viewer, assert a member of one tenant is
     refused every read and write against another
   - Assert the refusal is indistinguishable from a record that does not exist
@@ -339,7 +339,7 @@ formality.
   - _Boundary: Isolation matrix tests_
   - _Depends: 7.1_
 
-- [ ] 8.2 Prove the second isolation layer works independently
+- [x] 8.2 Prove the second isolation layer works independently
   - Issue a query deliberately missing its tenant predicate and assert it still
     returns no foreign rows
   - Done when removing application-level scoping does not produce a cross-tenant
@@ -348,7 +348,7 @@ formality.
   - _Boundary: Second-layer tests_
   - _Depends: 7.1_
 
-- [ ] 8.3 (P) Prove the operator boundary
+- [x] 8.3 (P) Prove the operator boundary
   - Assert an operator can create, list and deactivate tenants
   - Assert an operator receives nothing when reaching for members or memberships,
     and that no operator response reveals tenant participation
@@ -358,14 +358,14 @@ formality.
   - _Boundary: Operator boundary tests_
   - _Depends: 8.1_
 
-- [ ] 8.4 (P) Guard against future tables shipping without policies
+- [x] 8.4 (P) Guard against future tables shipping without policies
   - Assert every tenant-owned table has row-level security enabled and forced
   - Done when adding a tenant-owned table without a policy fails the suite
   - _Requirements: 9.1_
   - _Boundary: Policy coverage tests_
   - _Depends: 8.1_
 
-- [ ] 8.5 (P) Prove the deactivation paths deny access
+- [x] 8.5 (P) Prove the deactivation paths deny access
   - Assert deactivating a tenant refuses every subsequent request in it,
     regardless of role
   - Assert deactivating a person refuses them in every tenant simultaneously
@@ -375,7 +375,7 @@ formality.
   - _Boundary: Deactivation tests_
   - _Depends: 8.1_
 
-- [ ] 8.6 (P) Prove non-disclosure on member creation
+- [x] 8.6 (P) Prove non-disclosure on member creation
   - Assert the response for an email new to the platform and one already
     registered in a different tenant are identical in status and body
   - Assert a duplicate within the actor's own tenant is rejected, since that
@@ -412,6 +412,26 @@ formality.
 - FORCE ROW LEVEL SECURITY applies to the table owner too, so the migration role
   can no longer read or write these tables. Seed data in the integration harness
   must be inserted as the container superuser, which bypasses RLS unconditionally.
+- Tasks 8.1 and 8.2 contradict each other as written. 8.1 wants the role matrix
+  to "fail loudly if scoping is removed from any single query"; 8.2 wants
+  removing application scoping to produce no cross-tenant read. Both cannot
+  hold — and 8.2 is the one that matters, so it wins. Verified: deleting the
+  tenant predicate from two repository queries left all 44 tests green.
+- Resolved by adding `first-isolation-layer.integration-spec.ts`, the mirror of
+  the second-layer suite: it drives the real repositories over a superuser
+  connection, which policies do not apply to, so only the application predicate
+  is left to do the work. Between the two suites neither layer can be credited
+  for the other's, and 8.1's intent is met. Verified: with it in place, removing
+  one predicate fails the suite.
+- Every guard in section 8 was checked in the negative, not merely observed to
+  pass: `DISABLE ROW LEVEL SECURITY` on memberships fails 7 tests; a new table
+  created without a policy fails both policy-coverage tests; removing a
+  repository predicate fails the first-layer suite.
+- Requirement 4.3 mentions observable timing. No wall-clock assertion was
+  written: it would be flaky and would prove nothing about the code. What the
+  tests assert instead is the property that makes timing uniform — one operation
+  resolving the address, no branch on whether the person already existed.
+
 - `main.ts` exports the `configure` function that registers the global pipe and
   filter, and the end-to-end suite calls it rather than assembling its own
   pipeline. A test that built its own could pass while the real one is

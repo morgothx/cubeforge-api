@@ -72,6 +72,18 @@ export function runtimePool(identity: 'app' | 'operator'): Pool {
 }
 
 /**
+ * A connection that row-level security does not apply to, for the one suite
+ * that needs to observe the application's own tenant predicate with the
+ * database's protection switched off.
+ *
+ * Nothing else may use this to make an assertion: everywhere else, running
+ * without policies would prove the opposite of what the test claims.
+ */
+export function policyBypassingPool(): Pool {
+  return poolFor('superuser');
+}
+
+/**
  * Runs `work` inside one transaction, committing on success and rolling back on
  * failure. Committing matters: a test that writes and then asserts through a
  * second connection would see nothing if the harness rolled everything back.
