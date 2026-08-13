@@ -269,7 +269,7 @@ which is what makes them parallel-safe.
 
 ## 6. Inbound edge
 
-- [ ] 6.1 Define request and response contracts with validation
+- [x] 6.1 Define request and response contracts with validation
   - Validate every incoming payload before it reaches business logic, reporting
     the offending field
   - Reject roles outside the permitted set at the edge, reporting the same
@@ -279,7 +279,7 @@ which is what makes them parallel-safe.
   - _Boundary: HTTP contracts_
   - _Depends: 4.1_
 
-- [ ] 6.2 Map domain errors to responses uniformly
+- [x] 6.2 Map domain errors to responses uniformly
   - Translate the domain error union in one place
   - Return the same response for refusal and absence, so a caller cannot tell
     whether a record exists in another tenant
@@ -290,7 +290,7 @@ which is what makes them parallel-safe.
   - _Boundary: HTTP error mapping_
   - _Depends: 1.5_
 
-- [ ] 6.3 Expose the tenant, member and person operations
+- [x] 6.3 Expose the tenant, member and person operations
   - Route operator tenant management, administrator member management, and
     operator person deactivation
   - Done when every use case from section 4 is reachable and returns the mapped
@@ -299,7 +299,7 @@ which is what makes them parallel-safe.
   - _Boundary: HTTP controllers_
   - _Depends: 6.1, 6.2_
 
-- [ ] 6.4 Supply the provisional actor context
+- [x] 6.4 Supply the provisional actor context
   - Resolve the acting person, their kind and their tenant at the inbound edge
   - Register it only outside production, since it trusts its input and exists
     solely until authentication arrives
@@ -412,6 +412,24 @@ formality.
 - FORCE ROW LEVEL SECURITY applies to the table owner too, so the migration role
   can no longer read or write these tables. Seed data in the integration harness
   must be inserted as the container superuser, which bypasses RLS unconditionally.
+- The HTTP edge maps `forbidden` and `not-found` to byte-identical 404s, and two
+  tests assert the equality of the whole response body rather than just the
+  status. Verified in the negative: mapping `forbidden` to 403 fails both.
+- Routes are `/tenants/:tenantId/members`, but use cases take the tenant from the
+  actor and never see that path segment. The controller reconciles the two and
+  reports absence on a mismatch — otherwise a member could address another
+  tenant's URL and silently operate on their own.
+- `createActorContextMiddleware` throws when the environment is production
+  instead of returning a no-op. Leaving it out of the pipeline is survivable;
+  leaving it in is a total authentication bypass, so the failure is loud.
+- An unresolved actor is a 404, not a 401. There is no credential to challenge
+  for until feature 2, and 9.2 already wants every unauthorized outcome to look
+  alike.
+- `class-validator` and `class-transformer` were added here; the CLAUDE.md
+  mandates DTO validation at the edge. `IsIn(PERMITTED_ROLES)` imports the domain
+  constant rather than restating the list, so 4.5 cannot report one set at the
+  edge and another inside.
+
 - The operator could never have deactivated a person through `GRANT UPDATE
   (status)` alone. Targeting one row needs `WHERE id = ...`, a WHERE clause reads
   a column, and reading a column needs SELECT privilege — which the operator
