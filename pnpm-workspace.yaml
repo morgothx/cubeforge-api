@@ -4,4 +4,8 @@ allowBuilds:
   # Native resolver pulled in transitively by the ESLint toolchain. Prebuilt
   # platform binaries are published as optional deps, so the postinstall build
   # is not needed and stays denied.
+  # Bundler used by drizzle-kit. Platform binaries ship as optional deps, so the
+  # postinstall link step is unnecessary; verified by running drizzle-kit with
+  # the script denied.
+  esbuild: false
   unrs-resolver: false

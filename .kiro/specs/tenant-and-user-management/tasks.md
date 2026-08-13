@@ -73,7 +73,7 @@ is the point of keeping it separate.
 Infrastructure prerequisites. Nothing in section 4 can be verified against a real
 database until these exist.
 
-- [ ] 2.1 Wire the query builder into the application container
+- [x] 2.1 Wire the query builder into the application container
   - Provide a first-party module exposing a configured client, with no
     third-party integrator package
   - Read separate connection settings for the migration identity and the runtime
