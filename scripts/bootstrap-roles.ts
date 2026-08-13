@@ -37,8 +37,9 @@ async function main(): Promise<void> {
   const canonical = {
     app: 'cubeforge_app',
     operator: 'cubeforge_operator',
+    authenticator: 'cubeforge_authenticator',
   } as const;
-  for (const identity of ['app', 'operator'] as const) {
+  for (const identity of ['app', 'operator', 'authenticator'] as const) {
     if (config[identity].user !== canonical[identity]) {
       throw new Error(
         `POSTGRES_${identity.toUpperCase()}_USER must be "${canonical[identity]}" ` +
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
     await grantLogin(client, config.migrator, { createRole: true });
     await grantLogin(client, config.app, { createRole: false });
     await grantLogin(client, config.operator, { createRole: false });
+    await grantLogin(client, config.authenticator, { createRole: false });
 
     const { rows } = await client.query<{ role: string; database: string }>(
       'SELECT quote_ident($1) AS role, quote_ident($2) AS database',
@@ -63,7 +65,8 @@ async function main(): Promise<void> {
     await client.query(`GRANT CREATE, USAGE ON SCHEMA public TO ${role}`);
 
     process.stdout.write(
-      `bootstrapped roles: ${config.migrator.user}, ${config.app.user}, ${config.operator.user}\n`,
+      `bootstrapped roles: ${config.migrator.user}, ${config.app.user}, ` +
+        `${config.operator.user}, ${config.authenticator.user}\n`,
     );
   } finally {
     await client.end();

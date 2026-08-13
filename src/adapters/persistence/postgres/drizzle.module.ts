@@ -17,8 +17,10 @@ import { loadDatabaseConfig, type DatabaseConfig } from './database-config';
 export const DATABASE_CONFIG = Symbol('DATABASE_CONFIG');
 export const APP_POOL = Symbol('APP_POOL');
 export const OPERATOR_POOL = Symbol('OPERATOR_POOL');
+export const AUTHENTICATOR_POOL = Symbol('AUTHENTICATOR_POOL');
 export const APP_DATABASE = Symbol('APP_DATABASE');
 export const OPERATOR_DATABASE = Symbol('OPERATOR_DATABASE');
+export const AUTHENTICATOR_DATABASE = Symbol('AUTHENTICATOR_DATABASE');
 
 export type Database = NodePgDatabase<Record<string, never>>;
 
@@ -59,6 +61,12 @@ function poolFor(
         poolFor(config, config.operator),
     },
     {
+      provide: AUTHENTICATOR_POOL,
+      inject: [DATABASE_CONFIG],
+      useFactory: (config: DatabaseConfig): Pool =>
+        poolFor(config, config.authenticator),
+    },
+    {
       provide: APP_DATABASE,
       inject: [APP_POOL],
       useFactory: (pool: Pool): Database => drizzle(pool),
@@ -68,17 +76,32 @@ function poolFor(
       inject: [OPERATOR_POOL],
       useFactory: (pool: Pool): Database => drizzle(pool),
     },
+    {
+      provide: AUTHENTICATOR_DATABASE,
+      inject: [AUTHENTICATOR_POOL],
+      useFactory: (pool: Pool): Database => drizzle(pool),
+    },
   ],
-  exports: [APP_DATABASE, OPERATOR_DATABASE, DATABASE_CONFIG],
+  exports: [
+    APP_DATABASE,
+    OPERATOR_DATABASE,
+    AUTHENTICATOR_DATABASE,
+    DATABASE_CONFIG,
+  ],
 })
 export class DrizzleModule implements OnApplicationShutdown {
   constructor(
     @Inject(APP_POOL) private readonly appPool: Pool,
     @Inject(OPERATOR_POOL) private readonly operatorPool: Pool,
+    @Inject(AUTHENTICATOR_POOL) private readonly authenticatorPool: Pool,
   ) {}
 
   /** Without this the process hangs on open sockets after integration runs. */
   async onApplicationShutdown(): Promise<void> {
-    await Promise.all([this.appPool.end(), this.operatorPool.end()]);
+    await Promise.all([
+      this.appPool.end(),
+      this.operatorPool.end(),
+      this.authenticatorPool.end(),
+    ]);
   }
 }

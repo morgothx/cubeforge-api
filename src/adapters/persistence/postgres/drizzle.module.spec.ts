@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import {
   APP_DATABASE,
+  AUTHENTICATOR_DATABASE,
   DrizzleModule,
   OPERATOR_DATABASE,
 } from './drizzle.module';
@@ -15,6 +16,8 @@ const complete: Record<string, string> = {
   POSTGRES_APP_PASSWORD: 'app-secret',
   POSTGRES_OPERATOR_USER: 'cubeforge_operator',
   POSTGRES_OPERATOR_PASSWORD: 'operator-secret',
+  POSTGRES_AUTHENTICATOR_USER: 'cubeforge_authenticator',
+  POSTGRES_AUTHENTICATOR_PASSWORD: 'authenticator-secret',
 };
 
 describe('DrizzleModule', () => {
@@ -40,11 +43,16 @@ describe('DrizzleModule', () => {
   it('starts and exposes a separate handle per runtime identity', async () => {
     const moduleRef = await withEnv(complete);
 
-    expect(moduleRef.get(APP_DATABASE)).toBeDefined();
-    expect(moduleRef.get(OPERATOR_DATABASE)).toBeDefined();
-    expect(moduleRef.get(APP_DATABASE)).not.toBe(
+    const handles = [
+      moduleRef.get(APP_DATABASE),
       moduleRef.get(OPERATOR_DATABASE),
-    );
+      moduleRef.get(AUTHENTICATOR_DATABASE),
+    ];
+
+    // Separate connections, not one connection that switches role: the grants
+    // differ, and that is the whole reason the identities exist.
+    expect(handles.every((handle) => handle !== undefined)).toBe(true);
+    expect(new Set(handles).size).toBe(3);
 
     await moduleRef.close();
   });

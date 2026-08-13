@@ -66,7 +66,7 @@ they are proven before anything is built on them.
 
 ## 2. Persistence foundation
 
-- [ ] 2.1 Create the credential tables and their policies
+- [x] 2.1 Create the credential tables and their policies
   - Add tables for credentials, setup tokens, refresh tokens, API keys and
     operator status, storing digests and never secrets
   - Enable and force row-level security on every one of them
@@ -77,7 +77,7 @@ they are proven before anything is built on them.
   - _Requirements: 7.1, 7.5, 7.6, 11.1_
   - _Boundary: Schema_
 
-- [ ] 2.2 Add the authenticating database identity
+- [x] 2.2 Add the authenticating database identity
   - Create a fourth runtime identity with grants on the credential tables and no
     tenant context
   - Grant the tenant-scoped identity nothing at all on credentials, refresh
@@ -431,6 +431,17 @@ them rather than rediscovering them.
   check ran `require()` in a plain Node process and concluded the package was
   usable. It was not. Any future ESM-only dependency needs the same two-place
   check that task 1.1 now performs: the runner and the compiled output.
+- The authenticating role is created `NOLOGIN` in the same migration as the
+  policies that reference it, because a policy cannot name a role that does not
+  exist yet. `pnpm db:bootstrap` grants it LOGIN with a password from the
+  environment, exactly as the other runtime roles are handled.
+- `platform_operators` has no `revoked_at`: withdrawing the status deletes the
+  row. Unlike a membership it attributes no historical data, so there is nothing
+  to retain.
+- Verified after migrating: no table in `public` lacks forced row-level security
+  or a policy, and `cubeforge_app` is refused on all four credential tables with
+  a permission error rather than an empty result — which is what task 8.1 will
+  assert rather than assume.
 - **`@node-rs/argon2` installs with no build script**, as the design predicted:
   `pnpm install` reports nothing ignored, so no reviewed exception was needed.
   Its `Algorithm` enum is an ambient `const enum`, which `isolatedModules`

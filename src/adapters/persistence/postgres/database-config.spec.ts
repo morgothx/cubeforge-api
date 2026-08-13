@@ -10,6 +10,8 @@ const complete = {
   POSTGRES_APP_PASSWORD: 'app-secret',
   POSTGRES_OPERATOR_USER: 'cubeforge_operator',
   POSTGRES_OPERATOR_PASSWORD: 'operator-secret',
+  POSTGRES_AUTHENTICATOR_USER: 'cubeforge_authenticator',
+  POSTGRES_AUTHENTICATOR_PASSWORD: 'authenticator-secret',
 };
 
 describe('loadDatabaseConfig', () => {
@@ -22,6 +24,16 @@ describe('loadDatabaseConfig', () => {
     expect(config.migrator.user).toBe('cubeforge_migrator');
     expect(config.app.user).toBe('cubeforge_app');
     expect(config.operator.user).toBe('cubeforge_operator');
+    expect(config.authenticator.user).toBe('cubeforge_authenticator');
+  });
+
+  it('refuses to point the authenticating identity at the schema owner', () => {
+    expect(() =>
+      loadDatabaseConfig({
+        ...complete,
+        POSTGRES_AUTHENTICATOR_USER: complete.POSTGRES_MIGRATOR_USER,
+      }),
+    ).toThrow(/POSTGRES_AUTHENTICATOR_USER.*owner/s);
   });
 
   it('names every missing setting at once rather than one per restart', () => {

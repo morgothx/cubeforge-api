@@ -13,6 +13,12 @@ export interface DatabaseConfig {
   readonly app: DatabaseIdentity;
   /** Platform-operator identity. Holds no grant on tenant-owned tables. */
   readonly operator: DatabaseIdentity;
+  /**
+   * Reads credentials, with no tenant context at all. Resolving an API key must
+   * discover which tenant it belongs to, so it cannot run under a policy keyed
+   * on the tenant it is trying to learn.
+   */
+  readonly authenticator: DatabaseIdentity;
 }
 
 type Env = Record<string, string | undefined>;
@@ -62,6 +68,11 @@ export function loadDatabaseConfig(env: Env): DatabaseConfig {
     ['POSTGRES_OPERATOR_USER', 'POSTGRES_OPERATOR_PASSWORD'],
     missing,
   );
+  const [authenticatorUser, authenticatorPassword] = collect(
+    env,
+    ['POSTGRES_AUTHENTICATOR_USER', 'POSTGRES_AUTHENTICATOR_PASSWORD'],
+    missing,
+  );
 
   if (missing.length > 0) {
     throw new Error(`missing database configuration: ${missing.join(', ')}`);
@@ -81,6 +92,7 @@ export function loadDatabaseConfig(env: Env): DatabaseConfig {
   for (const [label, user] of [
     ['POSTGRES_APP_USER', appUser],
     ['POSTGRES_OPERATOR_USER', operatorUser],
+    ['POSTGRES_AUTHENTICATOR_USER', authenticatorUser],
   ] as const) {
     if (user === migratorUser) {
       throw new Error(
@@ -97,5 +109,9 @@ export function loadDatabaseConfig(env: Env): DatabaseConfig {
     migrator: { user: migratorUser, password: migratorPassword },
     app: { user: appUser, password: appPassword },
     operator: { user: operatorUser, password: operatorPassword },
+    authenticator: {
+      user: authenticatorUser,
+      password: authenticatorPassword,
+    },
   };
 }
