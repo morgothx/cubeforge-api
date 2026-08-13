@@ -65,6 +65,11 @@ const TENANT_STATUSES: readonly TenantStatus[] = ['active', 'inactive'];
 const PERSON_STATUSES: readonly PersonStatus[] = ['active', 'deactivated'];
 const MEMBERSHIP_STATUSES: readonly MembershipStatus[] = ['active', 'revoked'];
 
+/** Exposed for readers that need only a person's status, without the row. */
+export function narrowPersonStatus(value: string): PersonStatus {
+  return narrow(value, PERSON_STATUSES, 'people.status');
+}
+
 export function toTenant(row: TenantRow): Tenant {
   return {
     id: tenantId(row.id),

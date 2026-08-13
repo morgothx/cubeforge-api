@@ -223,7 +223,7 @@ which is what makes them parallel-safe.
 
 ## 5. Database adapters
 
-- [ ] 5.1 Implement the authenticating transactional adapter and its stores
+- [x] 5.1 Implement the authenticating transactional adapter and its stores
   - Open transactions as the authenticating identity, publishing no tenant
   - Implement the credential, setup token and refresh token stores against it
   - Done when the same use-case assertions pass against a real database as
@@ -232,7 +232,7 @@ which is what makes them parallel-safe.
   - _Boundary: Persistence adapters_
   - _Depends: 2.2, 3.2_
 
-- [ ] 5.2 Implement the API key store for both audiences
+- [x] 5.2 Implement the API key store for both audiences
   - Resolve a key without any tenant context, for authentication
   - Manage a tenant's keys under the tenant predicate, for administrators
   - Record the time a key was last used successfully
@@ -243,7 +243,7 @@ which is what makes them parallel-safe.
   - _Boundary: Persistence adapters_
   - _Depends: 5.1_
 
-- [ ] 5.3 Implement the operator status store
+- [x] 5.3 Implement the operator status store
   - Read whether a person is recorded as an operator, with no way to write it
     through the application
   - Done when withdrawing operator status outside the API takes effect on the
@@ -431,6 +431,20 @@ them rather than rediscovering them.
   check ran `require()` in a plain Node process and concluded the package was
   usable. It was not. Any future ESM-only dependency needs the same two-place
   check that task 1.1 now performs: the runner and the compiled output.
+- The design's grant table was incomplete: the authenticating identity also
+  needs `SELECT` on `people` (sign-in starts from an address, refresh must see a
+  deactivation) and on `tenants` (requirement 6.3 rejects a key of an inactive
+  tenant, and resolution joins to check). Migrations 0008 and 0009 add them, each
+  with its reason. The containment is not a policy predicate — a tenant-keyed
+  policy is meaningless for an identity with no tenant — it is that this role
+  serves no request but authentication and holds no grant on any tenant-owned
+  table. A test asserts it is refused on `memberships`.
+- Revoked keys and keys of inactive tenants are filtered **during resolution**,
+  so no caller has to remember either rule.
+- Every "do not overwrite" rule is a predicate rather than a read-then-write:
+  `markExchanged`, `markSetupTokenRedeemed` and both invalidations only match
+  rows that have not already been marked. Two concurrent calls cannot disagree
+  about when something happened.
 - **4.5 completed 6.6 as a side effect**, because changing the use case's command
   breaks the controller that calls it. Both are marked done; the route validates
   the administrator's address at the edge and the use case parses it again.

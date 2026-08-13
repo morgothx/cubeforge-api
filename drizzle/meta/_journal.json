@@ -57,6 +57,20 @@
       "when": 1786658644074,
       "tag": "0007_operator_bootstrap",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786664993195,
+      "tag": "0008_authenticator_people_read",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786665074352,
+      "tag": "0009_authenticator_tenant_status",
+      "breakpoints": true
     }
   ]
 }
