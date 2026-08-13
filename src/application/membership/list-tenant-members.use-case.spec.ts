@@ -2,6 +2,7 @@ import {
   createIdentityTestContext,
   type IdentityTestContext,
 } from '../../adapters/testing/identity-test-context';
+import { apiKeyId } from '../../domain/identifiers';
 import { ListTenantMembersUseCase } from './list-tenant-members.use-case';
 import { RevokeMembershipUseCase } from './revoke-membership.use-case';
 
@@ -118,6 +119,29 @@ describe('listing the members of a tenant', () => {
 
     const attempt = list.execute({
       actor: { kind: 'tenant-member', personId: globexAdmin, tenantId: acme },
+      includeInactive: false,
+    });
+
+    await expect(attempt).rejects.toMatchObject({
+      error: { kind: 'not-found' },
+    });
+  });
+
+  /**
+   * A machine principal holds an API key, not a membership. These routes serve
+   * people, so it is answered as an absence rather than being handled — and
+   * nothing had to be added to make that true.
+   */
+  it('denies the listing to a machine principal', async () => {
+    const acme = await context.seedTenant('Acme');
+
+    const attempt = list.execute({
+      actor: {
+        kind: 'machine',
+        apiKeyId: apiKeyId('a-key'),
+        tenantId: acme,
+        role: 'admin',
+      },
       includeInactive: false,
     });
 

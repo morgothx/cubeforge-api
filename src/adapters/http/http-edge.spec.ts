@@ -39,7 +39,11 @@ describe('the HTTP edge', () => {
   let app: INestApplication<App>;
   let context: IdentityTestContext;
 
-  const operator = { 'x-actor-kind': 'platform-operator' };
+  // An operator is a person now, so the provisional headers must name one.
+  const operator = {
+    'x-actor-kind': 'platform-operator',
+    'x-person-id': '018f2c00-0000-7000-8000-0000000000aa',
+  };
 
   function asMember(tenantId: string, personId: string) {
     return {

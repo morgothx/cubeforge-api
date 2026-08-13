@@ -67,7 +67,13 @@ export function createIdentityTestContext() {
     return { kind: 'tenant-member', personId, tenantId };
   }
 
-  const operator: ActorContext = { kind: 'platform-operator' };
+  // Any identifier will do here: nothing verifies operator status until
+  // authentication does, and these tests are about what an operator may do
+  // rather than about how one is recognized.
+  const operator: ActorContext = {
+    kind: 'platform-operator',
+    personId: identifiers.personId(),
+  };
 
   return {
     store,

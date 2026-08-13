@@ -27,7 +27,10 @@ describe('the application, end to end', () => {
 
   let app: INestApplication<App>;
 
-  const operator = { 'x-actor-kind': 'platform-operator' };
+  const operator = {
+    'x-actor-kind': 'platform-operator',
+    'x-person-id': '018f2c00-0000-7000-8000-0000000000aa',
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({

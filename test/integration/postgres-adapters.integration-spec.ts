@@ -25,9 +25,12 @@ const CREATED_AT = new Date('2026-01-01T00:00:00.000Z');
 describe('the identity use cases against PostgreSQL', () => {
   useIntegrationDatabase();
 
-  const operator: ActorContext = { kind: 'platform-operator' };
   const clock = new FixedClock(CREATED_AT);
   const identifiers = new UuidIdentifierGenerator();
+  const operator: ActorContext = {
+    kind: 'platform-operator',
+    personId: identifiers.personId(),
+  };
 
   let provisionTenant: ProvisionTenantUseCase;
   let deactivateTenant: DeactivateTenantUseCase;

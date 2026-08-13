@@ -44,11 +44,12 @@ export function createActorContextMiddleware(environment: string | undefined) {
 
 function readActor(request: Request): ActorContext | undefined {
   const kind = header(request, 'x-actor-kind');
-  if (kind === 'platform-operator') {
-    return { kind: 'platform-operator' };
-  }
   const person = header(request, 'x-person-id');
   const tenant = header(request, 'x-tenant-id');
+
+  if (kind === 'platform-operator' && person) {
+    return { kind: 'platform-operator', personId: personId(person) };
+  }
   if (kind === 'tenant-member' && person && tenant) {
     return {
       kind: 'tenant-member',

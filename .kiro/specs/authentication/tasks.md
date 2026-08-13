@@ -113,7 +113,7 @@ they are proven before anything is built on them.
 
 ## 3. Contracts and test doubles
 
-- [ ] 3.1 Widen the acting principal
+- [x] 3.1 Widen the acting principal
   - Give the operator an identity, so operator actions are attributable
   - Add a machine kind carrying its tenant and role
   - Update every existing construction of an actor, in code and in tests, to the
@@ -431,6 +431,14 @@ them rather than rediscovering them.
   check ran `require()` in a plain Node process and concluded the package was
   usable. It was not. Any future ESM-only dependency needs the same two-place
   check that task 1.1 now performs: the runner and the compiled output.
+- Widening `ActorContext` broke three specs that each declared their own
+  operator headers instead of importing the shared constant. Worth knowing before
+  task 7.1 replaces those headers with credentials: the duplication is in
+  `http-edge.spec.ts` and `application.integration-spec.ts`.
+- The machine kind needed no handling anywhere: `tenantOf` already refuses any
+  actor that is not a tenant member, so a machine principal reaching an identity
+  route is answered as an absence. A test asserts it rather than leaving it to
+  be rediscovered.
 - `pnpm ops:grant-operator <email> [--withdraw]` runs as the **migration**
   identity, not a superuser, so the act is available wherever migrations run
   rather than only on a developer's machine. Migration 0007 adds the owner

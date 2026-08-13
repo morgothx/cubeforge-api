@@ -10,7 +10,15 @@ import { asPersonInTenant } from './database';
 
 export type Role = 'admin' | 'editor' | 'viewer';
 
-export const OPERATOR = { 'x-actor-kind': 'platform-operator' };
+/**
+ * The provisional principal of an operator. The identifier is arbitrary until
+ * authentication verifies operator status; feature 2's later tasks replace
+ * these headers with a real credential.
+ */
+export const OPERATOR = {
+  'x-actor-kind': 'platform-operator',
+  'x-person-id': '018f2c00-0000-7000-8000-0000000000aa',
+};
 
 /** Supertest types `body` as `any`; naming the shape keeps assertions honest. */
 export function body<T>(response: Response): T {
