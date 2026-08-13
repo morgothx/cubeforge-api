@@ -311,7 +311,7 @@ which is what makes them parallel-safe.
 
 ## 7. Integration
 
-- [ ] 7.1 Compose the feature into the application
+- [x] 7.1 Compose the feature into the application
   - Bind every contract to its database adapter in one module and import it into
     the application root
   - Keep the same bindings swappable for in-memory adapters under test
@@ -412,6 +412,24 @@ formality.
 - FORCE ROW LEVEL SECURITY applies to the table owner too, so the migration role
   can no longer read or write these tables. Seed data in the integration harness
   must be inserted as the container superuser, which bypasses RLS unconditionally.
+- `main.ts` exports the `configure` function that registers the global pipe and
+  filter, and the end-to-end suite calls it rather than assembling its own
+  pipeline. A test that built its own could pass while the real one is
+  misassembled, which is precisely the failure this suite exists to catch.
+- `node dist/main` was broken: `drizzle.config.ts` and `scripts/` were being
+  compiled, and because they sit outside `src` the whole output moved to
+  `dist/src/`. Both are excluded from `tsconfig.build.json` now — drizzle-kit
+  reads its config as TypeScript and the scripts run under ts-node, so neither
+  needs building. Found by actually starting the built application.
+- Removed `test/app.e2e-spec.ts`, `test/jest-e2e.json` and the `test:e2e` script.
+  The scaffolded e2e test had started failing (AppModule now needs database
+  configuration and that config never loaded `.env`), and
+  `application.integration-spec.ts` supersedes it end to end.
+- A tenant's first administrator has no route: creating a member requires an
+  administrator to exist. Both end-to-end suites seed that one membership
+  directly. This is a genuine bootstrap gap, not a test shortcut, and it belongs
+  to feature 2 along with credentials.
+
 - The HTTP edge maps `forbidden` and `not-found` to byte-identical 404s, and two
   tests assert the equality of the whole response body rather than just the
   status. Verified in the negative: mapping `forbidden` to 403 fails both.

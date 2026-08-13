@@ -1,7 +1,7 @@
 {
   "name": "cubeforge-api",
   "version": "0.0.1",
-  "description": "Multi-tenant SaaS analytics API — NestJS, PostgreSQL, Athena and Cube.dev",
+  "description": "Multi-tenant SaaS analytics API \u2014 NestJS, PostgreSQL, Athena and Cube.dev",
   "private": true,
   "license": "MIT",
   "packageManager": "pnpm@11.21.0",
@@ -20,7 +20,6 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:integration": "node --env-file-if-exists=.env node_modules/jest/bin/jest.js --config ./test/jest-integration.json",
     "db:bootstrap": "node --env-file-if-exists=.env -r ts-node/register scripts/bootstrap-roles.ts",
     "db:generate": "drizzle-kit generate",

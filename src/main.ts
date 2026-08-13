@@ -1,4 +1,6 @@
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { DomainErrorFilter } from './adapters/http/domain-error.filter';
 import { AppModule } from './app.module';
 
 /**
@@ -8,7 +10,30 @@ import { AppModule } from './app.module';
  */
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+  configure(app);
   await app.listen(process.env.PORT ?? 3000);
 }
 
-void bootstrap();
+/**
+ * Shared with the end-to-end tests, so what they exercise is what runs. A test
+ * that assembled its own pipeline could pass while the real one is misassembled.
+ */
+export function configure(app: {
+  useGlobalPipes: (pipe: ValidationPipe) => unknown;
+  useGlobalFilters: (filter: DomainErrorFilter) => unknown;
+}): void {
+  app.useGlobalPipes(
+    new ValidationPipe({
+      // Unknown properties are rejected rather than stripped: silently ignoring
+      // a field the caller believed was applied is worse than saying no.
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+  app.useGlobalFilters(new DomainErrorFilter());
+}
+
+if (require.main === module) {
+  void bootstrap();
+}

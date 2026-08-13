@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { PostgresPlatformUnitOfWork } from '../../src/adapters/persistence/postgres/postgres-platform-unit-of-work';
 import { PostgresTenantScopedUnitOfWork } from '../../src/adapters/persistence/postgres/postgres-tenant-scoped-unit-of-work';
+import { UuidIdentifierGenerator } from '../../src/adapters/system/uuid-identifier-generator';
 import { FixedClock } from '../../src/adapters/testing/fixed-clock';
 import { CreateTenantMemberUseCase } from '../../src/application/membership/create-tenant-member.use-case';
 import { ListTenantMembersUseCase } from '../../src/application/membership/list-tenant-members.use-case';
@@ -9,32 +10,11 @@ import { DeactivatePersonUseCase } from '../../src/application/person/deactivate
 import { DeactivateTenantUseCase } from '../../src/application/tenant/deactivate-tenant.use-case';
 import { ProvisionTenantUseCase } from '../../src/application/tenant/provision-tenant.use-case';
 import type { ActorContext } from '../../src/application/actor-context';
-import type { IdentifierGenerator } from '../../src/application/ports/identifier-generator';
-import {
-  membershipId,
-  personId,
-  tenantId,
-  type MembershipId,
-  type PersonId,
-  type TenantId,
-} from '../../src/domain/identifiers';
+import type { PersonId, TenantId } from '../../src/domain/identifiers';
 import { asPersonInTenant, runtimePool } from './support/database';
 import { useIntegrationDatabase } from './support/fixtures';
 
 const CREATED_AT = new Date('2026-01-01T00:00:00.000Z');
-
-/** Real UUIDs, because the columns are `uuid` rather than text. */
-class UuidIdentifierGenerator implements IdentifierGenerator {
-  tenantId(): TenantId {
-    return tenantId(crypto.randomUUID());
-  }
-  personId(): PersonId {
-    return personId(crypto.randomUUID());
-  }
-  membershipId(): MembershipId {
-    return membershipId(crypto.randomUUID());
-  }
-}
 
 /**
  * The use cases from section 4, running against PostgreSQL instead of the
