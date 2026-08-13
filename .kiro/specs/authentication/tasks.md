@@ -165,7 +165,7 @@ which is what makes them parallel-safe.
   - _Boundary: Credential establishment_
   - _Depends: 3.3, 1.4_
 
-- [ ] 4.2 (P) Sign in
+- [x] 4.2 (P) Sign in
   - Issue an access token and a refresh token for a correct address and password
   - Reject an unknown address, an address without a credential, and a wrong
     password with one identical response
@@ -179,7 +179,7 @@ which is what makes them parallel-safe.
   - _Boundary: Sign-in_
   - _Depends: 3.3_
 
-- [ ] 4.3 (P) Refresh and end sessions
+- [x] 4.3 (P) Refresh and end sessions
   - Exchange a valid refresh token for a new pair and retire the presented one
   - Invalidate every token descended from the same sign-in when an already
     exchanged one is presented
@@ -431,6 +431,26 @@ them rather than rediscovering them.
   check ran `require()` in a plain Node process and concluded the package was
   usable. It was not. Any future ESM-only dependency needs the same two-place
   check that task 1.1 now performs: the runner and the compiled output.
+- **A refusal that has work to do cannot throw inside the transaction.** Refresh
+  invalidates a family when a token is replayed, then rejects — and throwing
+  rolled the invalidation back with everything else. Found by a test asserting
+  the successor token also died; it did not. The transaction now reports its
+  verdict and the rejection is raised after it commits. Any later use case whose
+  rejection writes something must do the same.
+- Refreshing does not extend the session: the successor inherits the family's
+  deadline. Otherwise a session used daily would never end.
+- Signing out with an unrecognized token succeeds silently. Refusing would tell
+  someone holding a guessed value that it never existed, and there is nothing to
+  protect in an operation whose only effect is removing access.
+- Sign-in has **one** branch and it chooses which digest to compare, not whether
+  to compare. Unknown address, no credential and deactivated all verify against a
+  decoy at full cost; returning early on any of them would make those paths
+  measurably faster than a wrong password. The decoy is computed once per hasher.
+- A malformed email is rejected exactly like an unknown one. Reporting it as
+  invalid would be a small, reliable oracle: it tells the caller their guess was
+  never going to match.
+- The non-disclosure test collects the outcomes of all five failure paths and
+  asserts the set has one member, rather than checking each against a literal.
 - Task 4.1 forced the deferred wiring: `setupTokens` had to join
   `PlatformRepositories`, which obliges the Postgres adapter to supply it, so a
   slice of task 5.1 landed here. A repository bundle cannot be half-populated;

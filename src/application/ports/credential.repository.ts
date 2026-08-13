@@ -35,6 +35,12 @@ export interface CredentialRepository {
   findByEmail(email: EmailAddress): Promise<StoredCredential | null>;
 
   /**
+   * Refreshing starts from a token, not an address, and still has to know
+   * whether the person behind it has been deactivated (requirement 6.1).
+   */
+  findByPerson(personId: PersonId): Promise<StoredCredential | null>;
+
+  /**
    * Replaces any existing password rather than refusing. Requirement 1.2 makes
    * redemption the only way to set one, and an operator re-issuing a token for
    * someone who forgot is the platform's whole recovery story.

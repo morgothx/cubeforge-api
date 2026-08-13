@@ -27,9 +27,9 @@ export function createIdentityTestContext() {
   // Authentication keeps its own store, and resolves people through the
   // identity one rather than duplicating them — the two must never disagree
   // about who exists.
-  const credentials = new InMemoryCredentialStore((email) => {
-    const person = store.findPersonByEmail(email);
-    return person ? { id: person.id, status: person.status } : null;
+  const credentials = new InMemoryCredentialStore({
+    byEmail: (email) => store.findPersonByEmail(email) ?? null,
+    byId: (id) => store.people.get(id) ?? null,
   });
   const tenantScoped = new InMemoryTenantScopedUnitOfWork(store);
   const platform = new InMemoryPlatformUnitOfWork(store, credentials);

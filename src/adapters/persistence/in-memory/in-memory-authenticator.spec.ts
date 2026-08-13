@@ -27,11 +27,12 @@ describe('the in-memory authenticating adapters', () => {
   let unitOfWork: InMemoryAuthenticatorUnitOfWork;
 
   beforeEach(() => {
-    store = new InMemoryCredentialStore((email) =>
-      email === emailAddress('member@example.com')
-        ? { id: person, status: 'active' }
-        : null,
-    );
+    const known = { id: person, status: 'active' as const };
+    store = new InMemoryCredentialStore({
+      byEmail: (email) =>
+        email === emailAddress('member@example.com') ? known : null,
+      byId: (id) => (id === person ? known : null),
+    });
     keys = new InMemoryApiKeyStore();
     unitOfWork = new InMemoryAuthenticatorUnitOfWork(store, keys);
   });

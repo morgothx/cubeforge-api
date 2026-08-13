@@ -88,3 +88,37 @@ describe('hashing configuration', () => {
     });
   });
 });
+
+describe('the decoy verification', () => {
+  const hasher = new Argon2PasswordHasher({
+    memoryCostKiB: 8192,
+    timeCost: 1,
+    parallelism: 1,
+  });
+
+  it('always fails', async () => {
+    await expect(hasher.verifyAgainstDecoy('anything at all')).resolves.toBe(
+      false,
+    );
+  });
+
+  /**
+   * The property that matters is cost, not the answer. A decoy that returned
+   * immediately would leave sign-in with a timing channel that says whether an
+   * address is known.
+   */
+  it('costs about as much as verifying a real digest', async () => {
+    const digest = await hasher.hash('correct horse battery staple');
+    const time = async (work: () => Promise<unknown>): Promise<number> => {
+      const started = process.hrtime.bigint();
+      await work();
+      return Number(process.hrtime.bigint() - started) / 1e6;
+    };
+    await hasher.verifyAgainstDecoy('warm up the decoy');
+
+    const real = await time(() => hasher.verify('wrong password', digest));
+    const decoy = await time(() => hasher.verifyAgainstDecoy('wrong password'));
+
+    expect(decoy).toBeGreaterThan(real / 3);
+  });
+});

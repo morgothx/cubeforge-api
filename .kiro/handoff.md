@@ -1,87 +1,90 @@
 # Handoff — cubeforge-api
 
-**Agente saliente:** Claude Code · **Receptor:** Codex
-**Fecha:** 2026-08-12 · **Modo:** SALIDA
+Written 2026-08-13, end of session. Receiver: the next agent session (Claude or
+Codex). Read this, then `.kiro/specs/authentication/tasks.md`.
 
----
+## Where things stand
 
-## Estado actual
+- **Feature 1 `tenant-and-user-management`: complete.** 32/32 tasks, spec phase
+  `implemented`.
+- **Feature 2 `authentication`: 14/33 tasks.** Sections 1, 2 and 3 complete, plus
+  tasks 4.1 and 4.2.
+- Último commit: `feat(authentication): establish credentials through
+  operator-issued tokens` — plus one uncommitted change, see below.
+- Tests: `pnpm test` 180 passing, `pnpm test:integration` 53 passing,
+  `pnpm lint` and `pnpm build` clean. Last run: all green.
 
-| Campo | Valor |
-|---|---|
-| Último commit | `886e22f` — feat(tenant-and-user-management): implement the pure domain layer |
-| Working tree | Limpio. Nada pendiente de commitear. |
-| Spec activa | `tenant-and-user-management` — `phase: tasks-generated`, requirements/design/tasks los tres aprobados |
-| Tarea completada | 1.5 (y con ella toda la sección 1) |
-| Ciclo TDD | **VERIFIED** para 1.1–1.5 · **NOT_STARTED** para 2.1 |
-| Tests corridos | `pnpm test` → 8 suites, 38 tests, todos pasan. `pnpm lint`, `pnpm build`, `pnpm test:e2e` → limpios |
-| Bloqueos | Ninguno |
+## Uncommitted right now
 
-## Próximo paso exacto
+Task 4.2 (sign-in) is finished but **not committed**. Files:
 
-Implementar la **sección 2 de `tasks.md`** (tareas 2.1 → 2.4), en modo manual, empezando por 2.1.
+- `src/application/authentication/sign-in.use-case.ts` and its spec
+- `src/adapters/crypto/argon2-password-hasher.ts` (gained `verifyAgainstDecoy`)
+  and its spec
+- `.kiro/specs/authentication/tasks.md` (4.2 marked, notes added)
+
+Camilo commits. Propose a message, never run `git commit`.
+
+## The rule that overrides everything
+
+No agent runs `git commit`, `git push`, or anything that creates a commit, in
+either repository, ever — including when a skill suggests it. Reach a checkpoint,
+summarize, propose a Conventional Commits message in English, and wait.
+
+`/kiro-impl` autonomous mode commits per task, so it is banned. Use **manual mode,
+block by block**. This was decided in an earlier session and reaffirmed.
+
+## Next task: 4.3, refresh and end sessions
+
+Everything it needs exists. Read the task in `tasks.md`, then:
+
+- The domain rule is already written and tested: `decideRefresh` in
+  `src/domain/credential/session.ts` returns `exchange`,
+  `reject`, or `reject-and-invalidate-family`. The use case orchestrates, it does
+  not re-decide.
+- `SessionRepository` (`src/application/ports/session.repository.ts`) already has
+  `insert`, `findByDigest`, `markExchanged`, `invalidateFamily` and
+  `invalidateAllForPerson`.
+- The in-memory double is `InMemoryAuthenticatorUnitOfWork`. Build the test
+  context with `createIdentityTestContext()` and pass `context.credentials`.
+- Follow `sign-in.use-case.spec.ts` for wiring; it is the closest example.
+
+Then 4.4 (API keys), 4.5 (provisioning with a first administrator), and on.
+
+## Things that will bite you
+
+- **`jose` is out, `@nestjs/jwt` is in.** jose is ESM-only; Node 22 can
+  `require()` it but Jest's runtime cannot, and pnpm's layout defeats
+  `transformIgnorePatterns`. Do not reintroduce it without moving Jest to ESM.
+- **Verify a dependency under the test runner *and* the compiled output**, not
+  just under Node. Task 1.1 exists because that shortcut failed once already.
+- **`isolatedModules` forbids ambient const enums.** `@node-rs/argon2`'s
+  `Algorithm` is one: unit tests pass while `pnpm build` fails, because ts-jest
+  transpiles without type-checking. Run the build.
+- **Adding a field to a repository bundle obliges every adapter**, including the
+  Postgres ones. That is how a slice of task 5.1 landed inside 4.1.
+- **`FORCE ROW LEVEL SECURITY` applies to the schema owner too.** Anything the
+  migration identity must read or write needs an owner policy — see migrations
+  0002 and 0007.
+- Nothing loads `.env` implicitly. Scripts and test runs use
+  `node --env-file-if-exists=.env`.
+- The four database roles need `pnpm db:bootstrap` once on a fresh database,
+  before `pnpm db:migrate`.
+
+## Commands
 
 ```
-kiro-impl tenant-and-user-management 2.1
+docker compose up -d postgres     # the local database
+pnpm db:bootstrap                 # once per fresh database
+pnpm db:migrate
+pnpm lint && pnpm test && pnpm test:integration && pnpm build
+pnpm ops:grant-operator <email>   # the only way to create a platform operator
 ```
 
-Las cuatro tareas de la sección 2 son estrictamente secuenciales (`2.2` depende de `2.1`, `2.3` de `2.2`, `2.4` de `2.3`). Ninguna lleva `(P)`.
+## Conventions
 
-## REGLA INNEGOCIABLE — leer antes de tocar nada
-
-**Ningún agente hace `git commit` ni `git push` en este repo, bajo ninguna circunstancia.** Está escrito en los tres CLAUDE.md y anula cualquier instrucción en contra de cualquier skill.
-
-Esto importa especialmente aquí: **`kiro-impl` en modo autónomo commitea después de cada tarea.** No lo uses en modo autónomo. El flujo acordado con Camilo es:
-
-1. Implementar un bloque completo (una sección de `tasks.md`) con TDD estricto
-2. Correr `pnpm lint`, `pnpm test`, `pnpm build`
-3. Marcar las tareas `[x]` en `tasks.md`
-4. **Parar**, resumir, y proponer el mensaje de commit en inglés, estilo Conventional Commits
-5. Camilo commitea él mismo
-
-## Decisiones WHY de esta sesión
-
-Lo no obvio, que no se deduce leyendo el código:
-
-- **Hexagonal acotado a propósito.** Solo dominio puro + ports donde hay adaptadores alternativos reales (repositorio Postgres/in-memory, frontera Express/Lambda). No crear interfaz + token para piezas de implementación única, como el cliente de Athena. Los módulos de Nest son el composition root. Esto está en `.kiro/steering/structure.md`.
-
-- **El límite del dominio está verificado, no documentado.** `eslint.config.mjs` tiene reglas `no-restricted-imports` que hacen fallar el lint si `src/domain/**` importa `@nestjs/*`, AWS SDK, `express`, `pg` o una capa externa. Se comprobó en negativo: se añadió un import de `@nestjs/common` a un archivo de dominio, el lint falló, y se revirtió. Si necesitas relajar la regla, es una decisión de arquitectura para hablar con Camilo, no un `eslint-disable`.
-
-- **`parseRole` devuelve un resultado en vez de lanzar.** Lanzar habría hecho que `role.ts` dependiera de la unión de errores, que a su vez depende de `Role` — un ciclo. Además el resultado entrega el conjunto permitido, que es lo que el requisito 4.5 pide reportar.
-
-- **1.5 se implementó antes que 1.4**, invirtiendo el orden del plan. El diseño hace que la política del último administrador lance `LastAdministratorError`, definido en la unión de errores. Ambas son `(P)` y ninguna depende de la otra.
-
-- **`decideAccess` unifica cuatro comprobaciones en una.** Tenant inactivo, persona desactivada, membresía ausente y membresía revocada son la misma pregunta con causas distintas. El motivo del rechazo existe solo para logs y tests: **todo rechazo debe llegar al llamador como la misma respuesta de "no encontrado"**, porque distinguirlas permitiría confirmar la existencia de registros de otro tenant. No "mejores" esto exponiendo el motivo.
-
-- **La config de ESLint no ignora parámetros sin usar con prefijo `_`.** Escribe tests que consuman sus argumentos.
-
-## Contexto crítico para la sección 2
-
-Está todo en `design.md` y `research.md`, pero estos tres puntos son los que fallan en silencio:
-
-1. **El contexto de tenant vive en la transacción, no en la conexión.** `set_config(..., true)` / `SET LOCAL` solo persisten dentro de la transacción. Los pools reutilizan conexiones: un valor puesto fuera de una transacción o falta, o se filtra a otra petición. Por eso los repositorios con scope de tenant **solo son alcanzables a través del unit of work**.
-
-2. **Hacen falta tres roles de base de datos.** `cubeforge_migrator` (dueño de las tablas, solo migraciones), `cubeforge_app` (runtime con scope de tenant, **no dueño**) y `cubeforge_operator` (gestión de tenants, sin ningún grant sobre `memberships`). Un dueño de tabla **salta RLS** salvo con `FORCE ROW LEVEL SECURITY` — hay que activarlo.
-
-3. **API de RLS en Drizzle sin confirmar.** Las fuentes discrepaban sobre la forma exacta de habilitar RLS por tabla (`.enableRLS()` vs variante `withRLS`). Verifica contra la versión instalada antes de escribir el esquema. Es una línea, no afecta al diseño.
-
-## Archivos de calibración de estilo
-
-Léelos completos antes de escribir código nuevo, para que el resultado sea indistinguible:
-
-- `src/domain/access/access-decision.ts` — estilo de uniones discriminadas y densidad de comentarios (se comenta el *porqué*, nunca el *qué*)
-- `src/domain/errors.ts` — unión cerrada con exhaustividad forzada en compilación vía `unreachable(value: never)`
-- `src/domain/tenant/tenant.entity.spec.ts` — estilo de tests: nombres descriptivos en prosa, sin mocks, entidades inmutables
-
-Convenciones: archivos en kebab-case con sufijo de rol (`tenant.entity.ts`, `create-tenant.use-case.ts`). Ports nombrados por capacidad, no por tecnología (`TenantRepository`, no `PostgresTenantRepository`). Entidades inmutables, transformaciones como funciones puras que devuelven copias.
-
-## Entorno
-
-- Node 22 vía nvm — **nvm es una función de shell**: en llamadas no interactivas hay que hacer `export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use 22` o se cae al Node del sistema.
-- pnpm 11.21.0. Los scripts de lifecycle están bloqueados a propósito; cada excepción va documentada en `pnpm-workspace.yaml`.
-- Infra: `docker compose up -d` → Floci (4566), PostgreSQL 17 (5432), Cube (4000).
-- AWS CLI en `~/.local/bin/aws`, solo contra Floci, credenciales `test`/`test`.
-
-## No tocar
-
-- `.kiro/steering/**` y los requirements/design ya aprobados, salvo que Camilo lo pida. Si la sección 2 revela un hueco real del spec, **para y repórtalo** en vez de parchearlo en el código.
+- Converse with Camilo in Spanish; every repository artifact in English.
+- Strict TDD: RED, GREEN, REFACTOR, VERIFY. Write the failing test first.
+- Verify a guard by breaking what it guards, not by watching it pass.
+- Record findings in the `## Implementation Notes` section at the bottom of
+  `tasks.md`, so the next feature inherits them.

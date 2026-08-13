@@ -26,6 +26,7 @@ import type {
   PersonId,
   SignInId,
 } from '../../../domain/identifiers';
+import type { PersonStatus } from '../../../domain/person/person.entity';
 import { InMemoryCredentialStore } from './in-memory-credential-store';
 
 /** The API keys a test has arranged, keyed by digest for resolution. */
@@ -75,15 +76,24 @@ class InMemoryCredentialRepository implements CredentialRepository {
   constructor(private readonly store: InMemoryCredentialStore) {}
 
   findByEmail(email: EmailAddress): Promise<StoredCredential | null> {
-    const person = this.store.personByEmail(email);
+    return Promise.resolve(this.toCredential(this.store.personByEmail(email)));
+  }
+
+  findByPerson(personId: PersonId): Promise<StoredCredential | null> {
+    return Promise.resolve(this.toCredential(this.store.personById(personId)));
+  }
+
+  private toCredential(
+    person: { id: PersonId; status: PersonStatus } | null,
+  ): StoredCredential | null {
     if (person === null) {
-      return Promise.resolve(null);
+      return null;
     }
-    return Promise.resolve({
+    return {
       personId: person.id,
       personStatus: person.status,
       passwordDigest: this.store.passwords.get(person.id)?.digest ?? null,
-    });
+    };
   }
 
   establishPassword(

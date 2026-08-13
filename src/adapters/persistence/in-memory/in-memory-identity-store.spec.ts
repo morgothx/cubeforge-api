@@ -27,7 +27,7 @@ describe('in-memory identity adapters', () => {
     tenantScoped = new InMemoryTenantScopedUnitOfWork(store);
     platform = new InMemoryPlatformUnitOfWork(
       store,
-      new InMemoryCredentialStore(() => null),
+      new InMemoryCredentialStore({ byEmail: () => null, byId: () => null }),
     );
 
     await platform.runAsOperator(async ({ tenants }) => {

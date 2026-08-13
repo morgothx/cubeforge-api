@@ -9,6 +9,11 @@ import type {
 } from '../../../domain/identifiers';
 import type { PersonStatus } from '../../../domain/person/person.entity';
 
+interface Person {
+  readonly id: PersonId;
+  readonly status: PersonStatus;
+}
+
 /**
  * The credential rows, kept apart from `InMemoryIdentityStore` for the same
  * reason the tables are kept apart from `people`: nothing tenant-scoped may
@@ -50,15 +55,17 @@ export class InMemoryCredentialStore {
    * stores cannot disagree about who exists.
    */
   constructor(
-    private readonly findPerson: (email: EmailAddress) => {
-      id: PersonId;
-      status: PersonStatus;
-    } | null,
+    private readonly people: {
+      byEmail: (email: EmailAddress) => Person | null;
+      byId: (id: PersonId) => Person | null;
+    },
   ) {}
 
-  personByEmail(
-    email: EmailAddress,
-  ): { id: PersonId; status: PersonStatus } | null {
-    return this.findPerson(email);
+  personByEmail(email: EmailAddress): Person | null {
+    return this.people.byEmail(email);
+  }
+
+  personById(id: PersonId): Person | null {
+    return this.people.byId(id);
   }
 }
