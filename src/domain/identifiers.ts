@@ -11,6 +11,8 @@ export type TenantId = Branded<string, 'TenantId'>;
 export type PersonId = Branded<string, 'PersonId'>;
 export type MembershipId = Branded<string, 'MembershipId'>;
 export type EmailAddress = Branded<string, 'EmailAddress'>;
+/** Groups every refresh token descended from one sign-in, so the family can end together. */
+export type SignInId = Branded<string, 'SignInId'>;
 
 function requireNonBlank(value: string, label: string): string {
   const trimmed = value.trim();
@@ -30,6 +32,10 @@ export function personId(value: string): PersonId {
 
 export function membershipId(value: string): MembershipId {
   return requireNonBlank(value, 'membership identifier') as MembershipId;
+}
+
+export function signInId(value: string): SignInId {
+  return requireNonBlank(value, 'sign-in identifier') as SignInId;
 }
 
 /**

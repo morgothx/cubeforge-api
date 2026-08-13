@@ -22,7 +22,7 @@ they are proven before anything is built on them.
   - _Requirements: 3.1, 3.2, 3.5_
   - _Boundary: Token adapter_
 
-- [ ] 1.2 (P) Prove the password hasher under this package manager
+- [x] 1.2 (P) Prove the password hasher under this package manager
   - Add the hashing library and confirm it installs with lifecycle scripts still
     denied, so no reviewed build-script exception is needed
   - Hash and verify a password, with cost parameters read from configuration
@@ -33,7 +33,7 @@ they are proven before anything is built on them.
   - _Requirements: 1.2, 1.7, 2.1_
   - _Boundary: Password adapter_
 
-- [ ] 1.3 (P) Generate and digest opaque secrets
+- [x] 1.3 (P) Generate and digest opaque secrets
   - Produce secrets with at least 128 bits of entropy from the platform's
     cryptographic source
   - Digest them with a fast hash rather than a password hash, because random
@@ -44,7 +44,7 @@ they are proven before anything is built on them.
   - _Requirements: 1.1, 4.1, 7.1_
   - _Boundary: Secret adapter_
 
-- [ ] 1.4 (P) Express the password rule in the domain
+- [x] 1.4 (P) Express the password rule in the domain
   - Accept passwords of at least the required length and impose no composition
     rules
   - Report rejection as a validation failure naming the offending field
@@ -53,7 +53,7 @@ they are proven before anything is built on them.
   - _Requirements: 1.4_
   - _Boundary: Password policy_
 
-- [ ] 1.5 (P) Express the session rules in the domain
+- [x] 1.5 (P) Express the session rules in the domain
   - Decide, from a refresh token's recorded state and the current time, whether
     it may be exchanged, is expired, or has already been used
   - Treat re-use of an exchanged token as a signal that the whole family must end
@@ -431,6 +431,24 @@ them rather than rediscovering them.
   check ran `require()` in a plain Node process and concluded the package was
   usable. It was not. Any future ESM-only dependency needs the same two-place
   check that task 1.1 now performs: the runner and the compiled output.
+- **`@node-rs/argon2` installs with no build script**, as the design predicted:
+  `pnpm install` reports nothing ignored, so no reviewed exception was needed.
+  Its `Algorithm` enum is an ambient `const enum`, which `isolatedModules`
+  forbids reading — the unit tests passed while `pnpm build` failed, because
+  ts-jest transpiles without type-checking. The algorithm is named as a typed
+  literal instead of relying on the library's default.
+- **Measured on this machine** (hash / verify): 19456 KiB with t=2 → 46 ms / 57 ms;
+  47104 KiB with t=1 → 92 ms / 59 ms; 65536 KiB with t=3 → 269 ms / 260 ms. The
+  OWASP baseline is the default and is comfortably fast here; the parameters are
+  configuration so a slower host can lower them without a code change.
+- Opaque secrets are digested with SHA-256, not with a password hash. They carry
+  256 random bits, so there is nothing to guess, and a slow digest would only
+  make every authenticated request slower for no protection.
+- Password length is counted in characters rather than UTF-16 code units, so a
+  passphrase of emoji is not silently worth double.
+- Re-use of a refresh token is detected *before* expiry is considered. A replayed
+  token is evidence that someone else may hold a copy, and that is worth acting
+  on even when the token would have been refused anyway.
 - Access token expiry is checked against an injected instant rather than the
   library's own clock reading (`ignoreExpiration` plus an explicit comparison),
   so tests can place themselves in time and the application keeps one notion of
