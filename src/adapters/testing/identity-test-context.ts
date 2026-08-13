@@ -7,6 +7,7 @@ import {
 import { createMembership } from '../../domain/membership/membership.entity';
 import type { Role } from '../../domain/membership/role';
 import { createTenant } from '../../domain/tenant/tenant.entity';
+import { InMemoryApiKeyStore } from '../persistence/in-memory/in-memory-api-key-store';
 import { InMemoryCredentialStore } from '../persistence/in-memory/in-memory-credential-store';
 import { InMemoryIdentityStore } from '../persistence/in-memory/in-memory-identity-store';
 import { InMemoryPlatformUnitOfWork } from '../persistence/in-memory/in-memory-platform-unit-of-work';
@@ -31,7 +32,8 @@ export function createIdentityTestContext() {
     byEmail: (email) => store.findPersonByEmail(email) ?? null,
     byId: (id) => store.people.get(id) ?? null,
   });
-  const tenantScoped = new InMemoryTenantScopedUnitOfWork(store);
+  const apiKeys = new InMemoryApiKeyStore();
+  const tenantScoped = new InMemoryTenantScopedUnitOfWork(store, apiKeys);
   const platform = new InMemoryPlatformUnitOfWork(store, credentials);
   const clock = new FixedClock(TEST_MOMENT);
   const identifiers = new SequentialIdentifierGenerator();
@@ -86,6 +88,7 @@ export function createIdentityTestContext() {
   return {
     store,
     credentials,
+    apiKeys,
     tenantScoped,
     platform,
     clock,

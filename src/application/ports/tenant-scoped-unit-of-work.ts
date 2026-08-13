@@ -1,4 +1,5 @@
 import type { TenantId } from '../../domain/identifiers';
+import type { ApiKeyRepository } from './api-key.repository';
 import type { MembershipRepository } from './membership.repository';
 import type { PersonRepository } from './person.repository';
 import type { TenantReadRepository } from './tenant.repository';
@@ -9,6 +10,13 @@ export interface TenantScopedRepositories {
   readonly tenants: TenantReadRepository;
   readonly people: PersonRepository;
   readonly memberships: MembershipRepository;
+  /**
+   * Managing a tenant's API keys is tenant-owned work, under the same predicate
+   * as everything else here. Resolving one during authentication is a different
+   * question with a different contract, because at that point the tenant is
+   * what the answer will say.
+   */
+  readonly apiKeys: ApiKeyRepository;
 }
 
 /**

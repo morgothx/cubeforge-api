@@ -6,6 +6,7 @@ import type {
 } from '../../../application/ports/tenant-scoped-unit-of-work';
 import type { TenantId } from '../../../domain/identifiers';
 import { APP_DATABASE, type Database } from './drizzle.module';
+import { PostgresApiKeyRepository } from './postgres-api-key.repository';
 import { PostgresMembershipRepository } from './postgres-membership.repository';
 import { PostgresPersonRepository } from './postgres-person.repository';
 import { PostgresTenantReadRepository } from './postgres-tenant-read.repository';
@@ -58,5 +59,6 @@ export function repositoriesFor(
     tenants: new PostgresTenantReadRepository(tx, tenantId),
     people: new PostgresPersonRepository(tx, tenantId),
     memberships: new PostgresMembershipRepository(tx, tenantId),
+    apiKeys: new PostgresApiKeyRepository(tx, tenantId),
   };
 }

@@ -7,6 +7,7 @@ import {
 } from '../../../domain/identifiers';
 import { createMembership } from '../../../domain/membership/membership.entity';
 import { createTenant } from '../../../domain/tenant/tenant.entity';
+import { InMemoryApiKeyStore } from './in-memory-api-key-store';
 import { InMemoryCredentialStore } from './in-memory-credential-store';
 import { InMemoryIdentityStore } from './in-memory-identity-store';
 import { InMemoryPlatformUnitOfWork } from './in-memory-platform-unit-of-work';
@@ -24,7 +25,10 @@ describe('in-memory identity adapters', () => {
 
   beforeEach(async () => {
     store = new InMemoryIdentityStore();
-    tenantScoped = new InMemoryTenantScopedUnitOfWork(store);
+    tenantScoped = new InMemoryTenantScopedUnitOfWork(
+      store,
+      new InMemoryApiKeyStore(),
+    );
     platform = new InMemoryPlatformUnitOfWork(
       store,
       new InMemoryCredentialStore({ byEmail: () => null, byId: () => null }),

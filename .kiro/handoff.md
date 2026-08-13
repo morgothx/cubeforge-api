@@ -7,21 +7,12 @@ Codex). Read this, then `.kiro/specs/authentication/tasks.md`.
 
 - **Feature 1 `tenant-and-user-management`: complete.** 32/32 tasks, spec phase
   `implemented`.
-- **Feature 2 `authentication`: 14/33 tasks.** Sections 1, 2 and 3 complete, plus
-  tasks 4.1 and 4.2.
-- Último commit: `feat(authentication): establish credentials through
-  operator-issued tokens` — plus one uncommitted change, see below.
-- Tests: `pnpm test` 180 passing, `pnpm test:integration` 53 passing,
+- **Feature 2 `authentication`: 15/33 tasks.** Sections 1, 2 and 3 complete, plus
+  tasks 4.1, 4.2 and 4.3.
+- Último commit: `feat(authentication): refresh and end sessions`.
+- Working tree clean at handoff.
+- Tests: `pnpm test` 189 passing, `pnpm test:integration` 53 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
-
-## Uncommitted right now
-
-Task 4.2 (sign-in) is finished but **not committed**. Files:
-
-- `src/application/authentication/sign-in.use-case.ts` and its spec
-- `src/adapters/crypto/argon2-password-hasher.ts` (gained `verifyAgainstDecoy`)
-  and its spec
-- `.kiro/specs/authentication/tasks.md` (4.2 marked, notes added)
 
 Camilo commits. Propose a message, never run `git commit`.
 
@@ -34,22 +25,25 @@ summarize, propose a Conventional Commits message in English, and wait.
 `/kiro-impl` autonomous mode commits per task, so it is banned. Use **manual mode,
 block by block**. This was decided in an earlier session and reaffirmed.
 
-## Next task: 4.3, refresh and end sessions
+## Next task: 4.4, manage API keys
 
-Everything it needs exists. Read the task in `tasks.md`, then:
+**Read this before starting it.** 4.4 needs `apiKeys` on
+`TenantScopedRepositories`, and adding a field to a bundle obliges *every*
+adapter to supply it — including `PostgresTenantScopedUnitOfWork`. So a slice of
+task 5.2 lands inside 4.4, exactly as a slice of 5.1 landed inside 4.1. Plan for
+it rather than being surprised; note it in `tasks.md` when it happens.
 
-- The domain rule is already written and tested: `decideRefresh` in
-  `src/domain/credential/session.ts` returns `exchange`,
-  `reject`, or `reject-and-invalidate-family`. The use case orchestrates, it does
-  not re-decide.
-- `SessionRepository` (`src/application/ports/session.repository.ts`) already has
-  `insert`, `findByDigest`, `markExchanged`, `invalidateFamily` and
-  `invalidateAllForPerson`.
-- The in-memory double is `InMemoryAuthenticatorUnitOfWork`. Build the test
-  context with `createIdentityTestContext()` and pass `context.credentials`.
-- Follow `sign-in.use-case.spec.ts` for wiring; it is the closest example.
+What already exists:
 
-Then 4.4 (API keys), 4.5 (provisioning with a first administrator), and on.
+- `ApiKeyRepository` and `ApiKeyResolvingRepository` are declared in
+  `src/application/ports/api-key.repository.ts`.
+- `InMemoryApiKeyStore` implements both audiences and is tested.
+- The `api_keys` table, its two policies and both grants exist (migration 0006).
+- `SequentialIdentifierGenerator` and `UuidIdentifierGenerator` both provide
+  `apiKeyId()`.
+
+Follow `session-lifecycle.use-case.spec.ts` for wiring; it is the closest
+example. Then 4.5 (provisioning with a first administrator), and section 5.
 
 ## Things that will bite you
 
@@ -63,6 +57,11 @@ Then 4.4 (API keys), 4.5 (provisioning with a first administrator), and on.
   transpiles without type-checking. Run the build.
 - **Adding a field to a repository bundle obliges every adapter**, including the
   Postgres ones. That is how a slice of task 5.1 landed inside 4.1.
+- **A refusal that writes something cannot `throw` inside the transaction.** The
+  rollback discards the write. Refresh invalidates a token family and then
+  rejects; throwing undid the invalidation. Return a verdict from the
+  transaction and raise the rejection after it commits. Any use case whose
+  rejection has an effect has this shape.
 - **`FORCE ROW LEVEL SECURITY` applies to the schema owner too.** Anything the
   migration identity must read or write needs an owner policy — see migrations
   0002 and 0007.

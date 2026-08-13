@@ -192,7 +192,7 @@ which is what makes them parallel-safe.
   - _Boundary: Session lifecycle_
   - _Depends: 3.3, 1.5_
 
-- [ ] 4.4 (P) Manage API keys
+- [x] 4.4 (P) Manage API keys
   - Let a tenant administrator issue a key with a label and a permitted role,
     returning its secret exactly once
   - List a tenant's keys with label, role, creation time and last use, and never
@@ -431,6 +431,14 @@ them rather than rediscovering them.
   check ran `require()` in a plain Node process and concluded the package was
   usable. It was not. Any future ESM-only dependency needs the same two-place
   check that task 1.1 now performs: the runner and the compiled output.
+- As predicted, 4.4 pulled a slice of 5.2 with it: `apiKeys` had to join
+  `TenantScopedRepositories`, obliging `PostgresTenantScopedUnitOfWork` to supply
+  it. `PostgresApiKeyRepository` (the administrator's half) exists now; the
+  authenticator's half — resolution, last-use, inactive tenants — is still 5.2.
+- Revoking looks the key up first rather than issuing a blind update. The
+  repository ignores rows outside the tenant, so a blind revoke would succeed
+  silently and tell the caller nothing about whether anything happened.
+- Revoking twice keeps the first moment: the update matches only unrevoked rows.
 - **A refusal that has work to do cannot throw inside the transaction.** Refresh
   invalidates a family when a token is replayed, then rejects — and throwing
   rolled the invalidation back with everything else. Found by a test asserting

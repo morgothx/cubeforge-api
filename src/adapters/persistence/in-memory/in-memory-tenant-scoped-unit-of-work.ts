@@ -22,6 +22,7 @@ import type { Role } from '../../../domain/membership/role';
 import { createPerson } from '../../../domain/person/person.entity';
 import type { Person } from '../../../domain/person/person.entity';
 import type { Tenant } from '../../../domain/tenant/tenant.entity';
+import type { InMemoryApiKeyStore } from './in-memory-api-key-store';
 import { InMemoryIdentityStore } from './in-memory-identity-store';
 
 /**
@@ -34,7 +35,10 @@ import { InMemoryIdentityStore } from './in-memory-identity-store';
  * that bug through.
  */
 export class InMemoryTenantScopedUnitOfWork implements TenantScopedUnitOfWork {
-  constructor(private readonly store: InMemoryIdentityStore) {}
+  constructor(
+    private readonly store: InMemoryIdentityStore,
+    private readonly keys: InMemoryApiKeyStore,
+  ) {}
 
   async runInTenant<T>(
     tenantId: TenantId,
@@ -46,6 +50,7 @@ export class InMemoryTenantScopedUnitOfWork implements TenantScopedUnitOfWork {
         tenants: new InMemoryTenantReadRepository(this.store, tenantId),
         people: new InMemoryPersonRepository(this.store, tenantId),
         memberships: new InMemoryMembershipRepository(this.store, tenantId),
+        apiKeys: this.keys.scopedTo(tenantId),
       });
     } catch (error) {
       this.store.restore(snapshot);
