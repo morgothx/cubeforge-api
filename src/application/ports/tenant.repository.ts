@@ -17,7 +17,6 @@ export interface TenantReadRepository {
  */
 export interface TenantRepository {
   findById(id: TenantId): Promise<Tenant | null>;
-  findByName(name: string): Promise<Tenant | null>;
   list(): Promise<Tenant[]>;
 
   /**

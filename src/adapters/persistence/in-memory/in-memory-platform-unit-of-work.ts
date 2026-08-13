@@ -44,13 +44,6 @@ class InMemoryTenantRepository implements TenantRepository {
     return Promise.resolve(this.store.tenants.get(id) ?? null);
   }
 
-  findByName(name: string): Promise<Tenant | null> {
-    const found = [...this.store.tenants.values()].find(
-      (tenant) => tenant.name === name,
-    );
-    return Promise.resolve(found ?? null);
-  }
-
   list(): Promise<Tenant[]> {
     return Promise.resolve([...this.store.tenants.values()]);
   }

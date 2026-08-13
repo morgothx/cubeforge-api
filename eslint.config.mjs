@@ -68,7 +68,13 @@ export default tseslint.config(
     },
   },
   {
+    // Specs are excluded on purpose. The rule exists to keep the *shipped*
+    // application layer free of concrete infrastructure; a use-case test has to
+    // instantiate the doubles it runs against, which is the whole point of
+    // having ports. Spec files are excluded from the build output too, so
+    // nothing here can reach production.
     files: ['src/application/**/*.ts'],
+    ignores: ['src/application/**/*.spec.ts'],
     rules: {
       'no-restricted-imports': [
         'error',

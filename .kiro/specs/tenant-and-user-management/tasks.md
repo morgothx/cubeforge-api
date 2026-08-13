@@ -156,7 +156,7 @@ All of these depend on sections 1 and 3 and on nothing in section 2, so they are
 written and tested against in-memory adapters. Each occupies its own boundary,
 which is what makes them parallel-safe.
 
-- [ ] 4.1 (P) Provision and list tenants
+- [x] 4.1 (P) Provision and list tenants
   - Create an active tenant with a platform-unique name on operator request,
     rejecting missing attributes and duplicate names with the offending attribute
     named
@@ -168,7 +168,7 @@ which is what makes them parallel-safe.
   - _Boundary: Tenant provisioning_
   - _Depends: 3.2_
 
-- [ ] 4.2 (P) Deactivate a tenant
+- [x] 4.2 (P) Deactivate a tenant
   - Mark the tenant inactive while retaining it, its members and their
     memberships
   - Treat deactivating an already inactive tenant as success without change
@@ -179,7 +179,7 @@ which is what makes them parallel-safe.
   - _Boundary: Tenant deactivation_
   - _Depends: 3.2_
 
-- [ ] 4.3 (P) Create a member within a tenant
+- [x] 4.3 (P) Create a member within a tenant
   - Attach a membership with the requested role, creating the person only if the
     email is not yet known to the platform
   - Perform the same sequence of work in both cases with no early return, so the
@@ -193,7 +193,7 @@ which is what makes them parallel-safe.
   - _Boundary: Member creation_
   - _Depends: 3.2_
 
-- [ ] 4.4 (P) Change a member's role
+- [x] 4.4 (P) Change a member's role
   - Apply the new role to the membership in the acting tenant only
   - Reject a change that would remove the tenant's last active administrator
   - Done when changing a role leaves the same person's memberships in other
@@ -202,7 +202,7 @@ which is what makes them parallel-safe.
   - _Boundary: Role change_
   - _Depends: 3.2, 1.4_
 
-- [ ] 4.5 (P) Revoke a membership
+- [x] 4.5 (P) Revoke a membership
   - Mark the membership inactive, leaving the person's memberships elsewhere
     active
   - Reject a revocation that would remove the tenant's last active administrator
@@ -213,7 +213,7 @@ which is what makes them parallel-safe.
   - _Boundary: Membership revocation_
   - _Depends: 3.2, 1.4_
 
-- [ ] 4.6 (P) List members of a tenant
+- [x] 4.6 (P) List members of a tenant
   - Return only people holding a membership in the acting tenant, each with
     whether their membership is active
   - Exclude inactive memberships unless explicitly requested
@@ -225,7 +225,7 @@ which is what makes them parallel-safe.
   - _Boundary: Member listing_
   - _Depends: 3.2_
 
-- [ ] 4.7 (P) Deactivate a person platform-wide
+- [x] 4.7 (P) Deactivate a person platform-wide
   - Mark the person inactive by their platform-wide identifier while retaining
     all their memberships
   - Deny the operation to tenant administrators
@@ -412,6 +412,29 @@ formality.
 - FORCE ROW LEVEL SECURITY applies to the table owner too, so the migration role
   can no longer read or write these tables. Seed data in the integration harness
   must be inserted as the container superuser, which bypasses RLS unconditionally.
+- Every use case takes its tenant from the actor, never from the command. The
+  design showed `tenantId` on `CreateTenantMemberCommand`; carrying both invites
+  a mismatch, and with only one source "administrator of A acting on B" is
+  unrepresentable rather than merely rejected. The HTTP edge (section 6) must
+  therefore compare the path tenant to the actor's and report not-found on a
+  mismatch, since the use case will never see the path value.
+- Refusals from `authorizeInTenant` are `not-found`, never `forbidden`.
+  `forbidden` is reserved for someone who genuinely belongs to the tenant and
+  lacks the role. Requirement 9.2 wants the first case indistinguishable from an
+  absent record; the second discloses nothing a member does not already know.
+- `execute` is `async` on every use case even where nothing is awaited before the
+  first call. Without it, an authorization failure throws synchronously instead
+  of rejecting, and callers would need two error paths. Two tests caught this.
+- The uniqueness constraint on memberships is `(tenant_id, person_id)` regardless
+  of status, so adding someone whose membership here was revoked is rejected with
+  `already-a-member` rather than reactivating it. Requirement 4.4 says "active
+  membership", but reactivation is explicitly deferred, and rejecting is what the
+  database enforces. Revisit together with reactivation.
+- ESLint's application-layer boundary now exempts `*.spec.ts`. Use-case tests must
+  instantiate the doubles they run against — that is what ports are for — and spec
+  files are excluded from the build output, so nothing exempted can ship. Verified
+  the rule still rejects a `pg` import from non-spec application code.
+
 - The design named the membership lookup `findByPersonAndTenant(personId)`, which
   contradicts its own rationale — the tenant comes from the transaction, so there
   is no tenant argument to name. Implemented as `findByPerson`.
