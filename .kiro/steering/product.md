@@ -1,6 +1,6 @@
 # Product
 
-*Updated: 2026-08-12*
+*Updated: 2026-08-13*
 
 ## What this is
 
@@ -66,6 +66,32 @@ not just the outcome.
 - Analytical load cannot degrade transactional performance, because they do not
   share an engine.
 - A reviewer can answer "why is it built this way?" from the repository alone.
+
+## Disclosure rules
+
+What a caller may *learn* is part of the product, not an implementation detail.
+Two rules apply platform-wide and every feature inherits them:
+
+- **Refusal is indistinguishable from absence.** Referencing a record in a tenant
+  the caller has no active membership in returns the same response as
+  referencing an identifier that exists nowhere. Distinguishing them would let a
+  caller confirm that an identifier exists somewhere on the platform — a
+  cross-tenant leak through the error channel rather than through data.
+- **Existing elsewhere is not observable.** Adding a member whose email is
+  already registered in another tenant must be indistinguishable from adding an
+  unknown one, in status, body and the work performed. Otherwise one customer
+  learns that a named person is a customer of another.
+
+## Known gaps
+
+Neither is an oversight; both are the next feature's to close.
+
+- **A tenant's first administrator has no route.** Creating a member requires an
+  administrator to already exist, so the first membership is currently written
+  directly.
+- **The acting principal is trusted input.** It is read from request headers by
+  a middleware that refuses to be constructed in production. Nothing verifies
+  that a caller is who they claim to be yet.
 
 ## Explicit non-goals
 

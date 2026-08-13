@@ -1,7 +1,7 @@
 {
   "name": "cubeforge-api",
   "version": "0.0.1",
-  "description": "Multi-tenant SaaS analytics API \u2014 NestJS, PostgreSQL, Athena and Cube.dev",
+  "description": "Multi-tenant SaaS analytics API — NestJS, PostgreSQL, Athena and Cube.dev",
   "private": true,
   "license": "MIT",
   "packageManager": "pnpm@11.21.0",
@@ -29,6 +29,7 @@
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.0.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",

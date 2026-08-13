@@ -1,6 +1,6 @@
 # Structure
 
-*Updated: 2026-08-12*
+*Updated: 2026-08-13*
 
 ## Organizing principle
 
@@ -29,14 +29,22 @@ architecture for its own sake.
 src/
   domain/                      # entities, value objects, business rules
   application/
-    ports/                     # interfaces the domain and use cases depend on
+    ports/                     # interfaces the use cases depend on
+    <aggregate>/               # one file per use case
   adapters/
-    http/                      # controllers, DTOs, Guards
+    http/                      # controllers, DTOs, filters, middleware
     persistence/postgres/      # Drizzle schema and repository implementations
-  shared/                      # correlation IDs, logging, typed errors
-  app.module.ts                # composition root
+    persistence/in-memory/     # the same ports, for tests
+    system/                    # clock, identifier generation
+    testing/                   # deterministic adapters used only by tests
+  <feature>.module.ts          # binds this feature's ports to adapters
+  app.module.ts                # imports feature modules
   main.ts                      # Express bootstrap
 ```
+
+Adapters are grouped by the technology behind them, not by the port they
+implement, because that is the axis along which they get replaced: swapping
+PostgreSQL for something else touches one directory.
 
 ## Dependency rule
 
@@ -55,11 +63,21 @@ This is **enforced, not documented**. `eslint.config.mjs` carries
 adapter. If a rule needs relaxing, that is an architectural decision to discuss,
 not a lint annotation to add.
 
+The one exemption is `src/application/**/*.spec.ts`: a use-case test has to
+instantiate the doubles it runs against, which is what ports exist for. Spec
+files are excluded from the build output, so nothing exempted can ship.
+
 ## Composition
 
-`app.module.ts` is the composition root: the single place where ports are bound
-to concrete adapters through Nest's DI container. Feature modules are imported
-there. The domain layer never appears in it directly.
+Ports are bound to adapters **per feature module** — `identity.module.ts` is the
+first — and `app.module.ts` imports those modules. Keeping the bindings beside
+the feature means a reviewer sees the whole wiring of one capability in one
+file, and a feature can be lifted out without untangling a shared root. The
+domain layer never appears in either.
+
+Use cases are constructed by the DI container in production and by hand in
+tests. Both must stay possible: a use case that can only be built by Nest has
+acquired a dependency on the framework it was kept away from.
 
 `main.ts` and the eventual `lambda.ts` share the same `AppModule`, which is what
 keeps serverless a deployment mode rather than a parallel architecture.
@@ -79,7 +97,10 @@ Create files by hand, in the layer they belong to.
   `TenantRepository`, not `PostgresTenantRepository`. The implementation carries
   the technology name.
 - **Tokens**: `SCREAMING_SNAKE_CASE` constants colocated with the port.
-- **Tests**: `*.spec.ts` beside the unit under test; e2e in `test/`.
+- **Tests**: `*.spec.ts` beside the unit under test, run by `pnpm test` with no
+  infrastructure. `*.integration-spec.ts` under `test/integration/`, run by
+  `pnpm test:integration` against the local database, single-worker because they
+  share one and reset it by truncating.
 
 ## Beyond src
 

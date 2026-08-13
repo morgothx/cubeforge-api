@@ -1,6 +1,6 @@
 # Technology
 
-*Updated: 2026-08-12*
+*Updated: 2026-08-13*
 
 ## Stack
 
@@ -15,7 +15,8 @@
 | Semantic layer | Cube.dev |
 | Serverless compute | AWS Lambda + API Gateway |
 | Local AWS | Floci emulator on `localhost:4566` |
-| Tests | Jest (unit + e2e) |
+| Validation | class-validator + class-transformer, at the HTTP edge |
+| Tests | Jest — unit (no infrastructure) and integration (real PostgreSQL) |
 
 ## Decisions worth remembering
 
@@ -74,16 +75,57 @@ These are the baseline, not per-endpoint judgment calls:
   `.env.example` documents shape, never values.
 - **Two independent isolation layers.** Repository-level `tenant_id` scoping and
   PostgreSQL row-level security. They must not share a point of failure — RLS
-  exists precisely for the day a use case forgets to scope.
+  exists precisely for the day a use case forgets to scope. Each layer has a
+  test suite that neutralizes the other, so neither can be credited for the
+  other's work.
+- **Three database identities, and the runtime is never the owner.** A table
+  owner bypasses row-level security unless `FORCE` is set, so `cubeforge_app`
+  (tenant-scoped) and `cubeforge_operator` (platform) are deliberately not the
+  owner; `cubeforge_migrator` owns the schema and never serves a request. Their
+  passwords are set from the environment by `pnpm db:bootstrap`, never by a
+  migration, so no secret enters version control.
+- **Tenant context is transaction-local.** `set_config('app.current_tenant', …,
+  true)` inside the transaction, never a session-level `SET`. Connections are
+  pooled; a session setting would scope the next request to the previous
+  request's tenant.
+- **A capability the policies cannot express becomes a `SECURITY DEFINER`
+  function**, with a pinned `search_path`, granted to exactly one role, and
+  returning the least it can. Two exist so far: resolving a person by email
+  across the platform without granting any read, and deactivating a person the
+  operator cannot see. Note that `FORCE ROW LEVEL SECURITY` applies to the owner
+  too, so such a function still needs owner policies for every statement it runs.
+- **A column-level `UPDATE` grant cannot target a row.** `WHERE id = …` reads a
+  column, which requires `SELECT` privilege. Granting `UPDATE (status)` without
+  `SELECT` permits only unqualified updates — the opposite of what is wanted.
+  This is why operator-facing writes go through functions.
 
 ## Testing approach
 
 - Unit-test the domain layer in isolation, with no infrastructure and no DI
   container.
-- Integration-test adapters against Floci and a local PostgreSQL container.
+- Integration-test adapters against Floci and a local PostgreSQL container,
+  through the runtime identities, so policies apply exactly as in production.
+- Drive validation suites through the **assembled application**, calling the same
+  `configure()` that `main.ts` calls. A suite that builds its own pipeline can
+  pass while the real one is misassembled.
 - Cover the properties this project exists to demonstrate explicitly: tenant
   isolation across the role matrix, and idempotency under replay. Happy-path
   coverage is not sufficient.
+- **Verify a guard by breaking what it guards.** Every isolation test here was
+  confirmed to fail with row-level security disabled, with a policy missing, or
+  with a repository predicate removed. A test that has never failed has not been
+  shown to test anything.
+
+## Configuration
+
+Nothing loads `.env` implicitly. Nest reads it when `ConfigModule` is
+registered, and drizzle-kit loads it for its own config — but scripts and test
+runs must ask for it, which they do with `node --env-file-if-exists=.env`. The
+`-if-exists` form matters: CI supplies the environment directly and has no file.
+
+Connection settings are validated once at startup rather than at first query,
+reporting every missing key at once, and refuse to start if a runtime identity
+is pointed at the schema owner.
 
 ## Local environment
 
