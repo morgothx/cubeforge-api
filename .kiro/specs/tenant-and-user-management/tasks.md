@@ -126,7 +126,7 @@ database until these exist.
 
 ## 3. Contracts and test doubles
 
-- [ ] 3.1 Define the persistence and support contracts
+- [x] 3.1 Define the persistence and support contracts
   - Declare repository contracts for tenants, people and memberships whose
     tenant-scoped operations take no tenant argument, because the scope comes
     from the transaction
@@ -140,7 +140,7 @@ database until these exist.
   - _Boundary: Ports_
   - _Depends: 1.2_
 
-- [ ] 3.2 Implement in-memory adapters for the contracts
+- [x] 3.2 Implement in-memory adapters for the contracts
   - Satisfy every contract from 3.1 with in-memory storage, including tenant
     scoping semantics
   - Enforce the same uniqueness rules the database enforces, so use-case tests
@@ -412,6 +412,25 @@ formality.
 - FORCE ROW LEVEL SECURITY applies to the table owner too, so the migration role
   can no longer read or write these tables. Seed data in the integration harness
   must be inserted as the container superuser, which bypasses RLS unconditionally.
+- The design named the membership lookup `findByPersonAndTenant(personId)`, which
+  contradicts its own rationale — the tenant comes from the transaction, so there
+  is no tenant argument to name. Implemented as `findByPerson`.
+- `ActorContext` is a union of `platform-operator` and `tenant-member` rather than
+  one shape with an optional tenant, so "an operator acting inside a tenant" is
+  unrepresentable and requirement 3.2 needs no runtime check. Operators carry no
+  identity: nothing in this feature attributes an action to one.
+- `PersonRepository.findOrCreateByEmail` takes `createdAt` so the application
+  clock stays authoritative for every entity. The SQL function currently relies
+  on the column default, so the Postgres adapter (task 5.x) must add a
+  `p_created_at timestamptz` parameter in a new migration.
+- Both `insert` methods are specified to throw `DomainViolation` on a uniqueness
+  conflict rather than returning a result, because PostgreSQL raises. The
+  Postgres adapter must map SQLSTATE 23505 by constraint name to the same two
+  errors, or use-case tests will prove a safety production does not have.
+- The in-memory unit of work snapshots and restores the store when the work
+  throws. Without it a use case could reject a request and still leave rows
+  behind, and every test would pass.
+
 - RESOLVED design gap (was blocking 4.3): the `people_app_read` policy hides
   people who belong only to another tenant, but `people.email` is unique
   platform-wide. A tenant admin creating a member whose email existed only
