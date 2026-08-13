@@ -38,11 +38,15 @@ export async function authorizeInTenant(
     throw new DomainViolation({ kind: 'not-found' });
   }
 
-  const [tenant, person, membership] = await Promise.all([
-    repositories.tenants.findCurrent(),
-    repositories.people.findById(actor.personId),
-    repositories.memberships.findByPerson(actor.personId),
-  ]);
+  // Sequential, not `Promise.all`. These run inside one transaction, which is
+  // one connection, and a connection executes one statement at a time — issuing
+  // them together only queues them behind each other while `pg` warns that the
+  // client is already busy. There is no concurrency to win here.
+  const tenant = await repositories.tenants.findCurrent();
+  const person = await repositories.people.findById(actor.personId);
+  const membership = await repositories.memberships.findByPerson(
+    actor.personId,
+  );
 
   if (tenant === null || person === null) {
     throw new DomainViolation({ kind: 'not-found' });

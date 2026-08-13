@@ -237,7 +237,7 @@ which is what makes them parallel-safe.
 
 ## 5. Database adapters
 
-- [ ] 5.1 Implement the tenant-scoped transactional adapter
+- [x] 5.1 Implement the tenant-scoped transactional adapter
   - Open a transaction, publish the tenant into transaction-scoped session state,
     and expose the scoped repositories only inside it
   - Connect as the tenant-scoped runtime identity, never as the schema owner
@@ -247,7 +247,7 @@ which is what makes them parallel-safe.
   - _Boundary: Persistence adapters_
   - _Depends: 2.4, 3.1_
 
-- [ ] 5.2 Implement the database-backed repositories
+- [x] 5.2 Implement the database-backed repositories
   - Write an explicit tenant predicate in every tenant-scoped query, independent
     of the policy that will also apply
   - Implement member listing, active-administrator counting, insertion and status
@@ -258,7 +258,7 @@ which is what makes them parallel-safe.
   - _Boundary: Persistence adapters_
   - _Depends: 5.1_
 
-- [ ] 5.3 Implement the operator-scoped adapter
+- [x] 5.3 Implement the operator-scoped adapter
   - Connect as the operator identity and expose only tenant management and
     person deactivation
   - Done when the adapter offers no method capable of reading memberships, and
@@ -412,6 +412,29 @@ formality.
 - FORCE ROW LEVEL SECURITY applies to the table owner too, so the migration role
   can no longer read or write these tables. Seed data in the integration harness
   must be inserted as the container superuser, which bypasses RLS unconditionally.
+- The operator could never have deactivated a person through `GRANT UPDATE
+  (status)` alone. Targeting one row needs `WHERE id = ...`, a WHERE clause reads
+  a column, and reading a column needs SELECT privilege — which the operator
+  deliberately lacks. Verified directly: the qualified UPDATE is rejected while
+  an unqualified one is accepted. Migration 0004 replaces the grant with a
+  `deactivate_person(uuid)` function and revokes the privilege, so exactly one
+  route remains. Granting SELECT instead would have exposed every address on the
+  platform to the actor requirement 3.3 says must learn nothing.
+- Consequently `PlatformPersonRepository.updateStatus(id, status)` became
+  `deactivate(id)`. Reactivation is deferred, so the wider method advertised a
+  capability neither the database nor the requirements grant.
+- Drizzle wraps driver errors, so SQLSTATE and the constraint name sit on
+  `cause`, not on the thrown error. Constraint translation walks the cause chain;
+  reading `.code` off the top-level error silently matched nothing and two
+  integration tests caught it.
+- `authorizeInTenant` originally issued its three reads with `Promise.all`. They
+  run inside one transaction, which is one connection, so `pg` queued them and
+  warned that the client was already executing a query — a warning that becomes
+  an error in pg 9. They are sequential now; there was no concurrency to win.
+- Integration tests seed the first administrator of each tenant directly, because
+  creating a member requires an administrator to already exist. Everything after
+  that first membership goes through the use cases.
+
 - Every use case takes its tenant from the actor, never from the command. The
   design showed `tenantId` on `CreateTenantMemberCommand`; carrying both invites
   a mismatch, and with only one source "administrator of A acting on B" is

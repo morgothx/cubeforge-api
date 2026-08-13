@@ -298,7 +298,7 @@ describe('in-memory identity adapters', () => {
       });
 
       await platform.runAsOperator(({ people }) =>
-        people.updateStatus(personId(person), 'deactivated'),
+        people.deactivate(personId(person)),
       );
 
       const statusIn = async (tenant: ReturnType<typeof tenantId>) =>
@@ -313,7 +313,7 @@ describe('in-memory identity adapters', () => {
 
     it('reports success when deactivating an unknown person, disclosing nothing', async () => {
       const attempt = platform.runAsOperator(({ people }) =>
-        people.updateStatus(personId('nobody'), 'deactivated'),
+        people.deactivate(personId('nobody')),
       );
 
       await expect(attempt).resolves.toBeUndefined();

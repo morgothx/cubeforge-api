@@ -63,6 +63,15 @@ function poolFor(identity: Identity): Pool {
 }
 
 /**
+ * The pools the runtime identities connect through, for tests that exercise the
+ * real adapters rather than issuing SQL themselves. Both are closed by
+ * `closeDatabaseConnections`.
+ */
+export function runtimePool(identity: 'app' | 'operator'): Pool {
+  return poolFor(identity);
+}
+
+/**
  * Runs `work` inside one transaction, committing on success and rolling back on
  * failure. Committing matters: a test that writes and then asserts through a
  * second connection would see nothing if the harness rolled everything back.

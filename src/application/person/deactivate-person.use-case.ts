@@ -31,7 +31,7 @@ export class DeactivatePersonUseCase {
     requirePlatformOperator(command.actor);
 
     await this.platform.runAsOperator(({ people }) =>
-      people.updateStatus(command.personId, 'deactivated'),
+      people.deactivate(command.personId),
     );
   }
 }

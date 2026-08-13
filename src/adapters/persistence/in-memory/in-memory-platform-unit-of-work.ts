@@ -5,7 +5,6 @@ import type {
 import type { PlatformPersonRepository } from '../../../application/ports/person.repository';
 import type { TenantRepository } from '../../../application/ports/tenant.repository';
 import type { PersonId, TenantId } from '../../../domain/identifiers';
-import type { PersonStatus } from '../../../domain/person/person.entity';
 import type {
   Tenant,
   TenantStatus,
@@ -72,10 +71,10 @@ class InMemoryPlatformPersonRepository implements PlatformPersonRepository {
    * not-found would answer whether the person exists, which requirement 3.3
    * forbids.
    */
-  updateStatus(personId: PersonId, status: PersonStatus): Promise<void> {
+  deactivate(personId: PersonId): Promise<void> {
     const person = this.store.people.get(personId);
     if (person) {
-      this.store.people.set(personId, { ...person, status });
+      this.store.people.set(personId, { ...person, status: 'deactivated' });
     }
     return Promise.resolve();
   }

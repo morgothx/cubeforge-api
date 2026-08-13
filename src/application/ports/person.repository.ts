@@ -1,5 +1,5 @@
 import type { EmailAddress, PersonId } from '../../domain/identifiers';
-import type { Person, PersonStatus } from '../../domain/person/person.entity';
+import type { Person } from '../../domain/person/person.entity';
 
 /**
  * People, as seen from inside a tenant. The tenant in context can only reach
@@ -31,7 +31,11 @@ export interface PersonRepository {
 }
 
 /**
- * The operator's entire reach over people: flipping a status, by identifier.
+ * The operator's entire reach over people: deactivating one, by identifier.
+ *
+ * Not "set the status" — deactivation is the only transition that exists while
+ * reactivation is deferred, and a wider method would advertise a capability the
+ * database does not grant.
  *
  * There is no read method, and deactivating an unknown identifier reports
  * success rather than not-found. That is not laxity — requirement 3.3 forbids
@@ -39,5 +43,5 @@ export interface PersonRepository {
  * would answer exactly that question.
  */
 export interface PlatformPersonRepository {
-  updateStatus(personId: PersonId, status: PersonStatus): Promise<void>;
+  deactivate(personId: PersonId): Promise<void>;
 }
