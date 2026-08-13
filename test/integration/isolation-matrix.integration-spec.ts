@@ -171,7 +171,7 @@ describe('tenant isolation', () => {
       const created = await request(app.getHttpServer())
         .post('/tenants')
         .set(OPERATOR)
-        .send({ name: 'Acme' });
+        .send({ name: 'Acme', administratorEmail: 'founder@example.com' });
       expect(created.status).toBe(201);
 
       const listed = await request(app.getHttpServer())

@@ -16,6 +16,7 @@ describe('provisioning and listing tenants', () => {
     context = createIdentityTestContext();
     provision = new ProvisionTenantUseCase(
       context.platform,
+      context.tenantScoped,
       context.clock,
       context.identifiers,
     );
@@ -26,6 +27,7 @@ describe('provisioning and listing tenants', () => {
     const tenant = await provision.execute({
       actor: context.operator,
       name: 'Acme',
+      administratorEmail: 'founder@example.com',
     });
 
     expect(tenant).toMatchObject({
@@ -37,11 +39,16 @@ describe('provisioning and listing tenants', () => {
   });
 
   it('rejects a name already in use', async () => {
-    await provision.execute({ actor: context.operator, name: 'Acme' });
+    await provision.execute({
+      actor: context.operator,
+      name: 'Acme',
+      administratorEmail: 'founder@example.com',
+    });
 
     const attempt = provision.execute({
       actor: context.operator,
       name: 'Acme',
+      administratorEmail: 'founder@example.com',
     });
 
     await expect(attempt).rejects.toMatchObject({
@@ -50,7 +57,11 @@ describe('provisioning and listing tenants', () => {
   });
 
   it('rejects a blank name, naming the attribute at fault', async () => {
-    const attempt = provision.execute({ actor: context.operator, name: '   ' });
+    const attempt = provision.execute({
+      actor: context.operator,
+      name: '   ',
+      administratorEmail: 'founder@example.com',
+    });
 
     await expect(attempt).rejects.toThrow(DomainViolation);
     await expect(attempt).rejects.toMatchObject({
@@ -69,6 +80,7 @@ describe('provisioning and listing tenants', () => {
     const attempt = provision.execute({
       actor: context.actingAs(tenantId, admin),
       name: 'Globex',
+      administratorEmail: 'founder@example.com',
     });
 
     await expect(attempt).rejects.toMatchObject({
@@ -109,5 +121,109 @@ describe('provisioning and listing tenants', () => {
     await expect(
       list.execute({ actor: context.actingAs(tenantId, admin) }),
     ).rejects.toMatchObject({ error: { kind: 'forbidden' } });
+  });
+});
+
+describe('provisioning a tenant with its first administrator', () => {
+  let context: IdentityTestContext;
+  let provision: ProvisionTenantUseCase;
+
+  beforeEach(() => {
+    context = createIdentityTestContext();
+    provision = new ProvisionTenantUseCase(
+      context.platform,
+      context.tenantScoped,
+      context.clock,
+      context.identifiers,
+    );
+  });
+
+  it('grants the named person an active administrator membership', async () => {
+    const tenant = await provision.execute({
+      actor: context.operator,
+      name: 'Acme',
+      administratorEmail: 'founder@example.com',
+    });
+
+    const membership = [...context.store.memberships.values()];
+    expect(membership).toHaveLength(1);
+    expect(membership[0]).toMatchObject({
+      tenantId: tenant.id,
+      role: 'admin',
+      status: 'active',
+    });
+    const person = context.store.people.get(membership[0].personId);
+    expect(person?.email).toBe('founder@example.com');
+  });
+
+  /** Requirement 8.3, inherited from the identity feature's 4.3. */
+  it('answers identically whether or not the address was already known', async () => {
+    const existing = await provision.execute({
+      actor: context.operator,
+      name: 'Globex',
+      administratorEmail: 'shared@example.com',
+    });
+
+    const known = await provision.execute({
+      actor: context.operator,
+      name: 'Acme',
+      administratorEmail: 'shared@example.com',
+    });
+    const unknown = await provision.execute({
+      actor: context.operator,
+      name: 'Initech',
+      administratorEmail: 'brand-new@example.com',
+    });
+
+    expect(Object.keys(known).sort()).toEqual(Object.keys(unknown).sort());
+    expect(existing.id).not.toBe(known.id);
+    // The known address created no second person, and nothing in the response
+    // says so.
+    expect(context.store.people.size).toBe(2);
+  });
+
+  it('creates neither tenant nor membership when the name is taken', async () => {
+    await provision.execute({
+      actor: context.operator,
+      name: 'Acme',
+      administratorEmail: 'founder@example.com',
+    });
+    const before = context.store.memberships.size;
+
+    await expect(
+      provision.execute({
+        actor: context.operator,
+        name: 'Acme',
+        administratorEmail: 'someone-else@example.com',
+      }),
+    ).rejects.toMatchObject({ error: { kind: 'tenant-name-taken' } });
+
+    expect(context.store.tenants.size).toBe(1);
+    expect(context.store.memberships.size).toBe(before);
+  });
+
+  it('rejects a malformed administrator address before creating anything', async () => {
+    await expect(
+      provision.execute({
+        actor: context.operator,
+        name: 'Acme',
+        administratorEmail: 'not-an-address',
+      }),
+    ).rejects.toMatchObject({
+      error: { kind: 'validation', field: 'administratorEmail' },
+    });
+
+    expect(context.store.tenants.size).toBe(0);
+  });
+
+  it('establishes no credential', async () => {
+    await provision.execute({
+      actor: context.operator,
+      name: 'Acme',
+      administratorEmail: 'founder@example.com',
+    });
+
+    expect(context.credentials.passwords.size).toBe(0);
+    expect(context.credentials.setupTokens.size).toBe(0);
   });
 });

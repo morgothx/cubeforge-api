@@ -13,6 +13,14 @@ export class CreateTenantRequest {
   @MinLength(1, { message: 'name must not be blank' })
   @MaxLength(200)
   name!: string;
+
+  /**
+   * Provisioning names the first administrator, because a tenant nobody can
+   * administer cannot be used: adding a member requires an administrator to
+   * already exist.
+   */
+  @IsEmail({}, { message: 'administratorEmail must be a valid address' })
+  administratorEmail!: string;
 }
 
 export class CreateTenantMemberRequest {

@@ -10,8 +10,12 @@ import { DeactivatePersonUseCase } from '../../src/application/person/deactivate
 import { DeactivateTenantUseCase } from '../../src/application/tenant/deactivate-tenant.use-case';
 import { ProvisionTenantUseCase } from '../../src/application/tenant/provision-tenant.use-case';
 import type { ActorContext } from '../../src/application/actor-context';
-import type { PersonId, TenantId } from '../../src/domain/identifiers';
-import { asPersonInTenant, runtimePool } from './support/database';
+import {
+  personId,
+  type PersonId,
+  type TenantId,
+} from '../../src/domain/identifiers';
+import { runtimePool, seed } from './support/database';
 import { useIntegrationDatabase } from './support/fixtures';
 
 const CREATED_AT = new Date('2026-01-01T00:00:00.000Z');
@@ -47,7 +51,12 @@ describe('the identity use cases against PostgreSQL', () => {
       drizzle(runtimePool('operator')),
     );
 
-    provisionTenant = new ProvisionTenantUseCase(platform, clock, identifiers);
+    provisionTenant = new ProvisionTenantUseCase(
+      platform,
+      tenantScoped,
+      clock,
+      identifiers,
+    );
     deactivateTenant = new DeactivateTenantUseCase(platform);
     deactivatePerson = new DeactivatePersonUseCase(platform);
     createMember = new CreateTenantMemberUseCase(
@@ -68,17 +77,19 @@ describe('the identity use cases against PostgreSQL', () => {
     tenantId: TenantId;
     admin: ActorContext;
   }> {
-    const tenant = await provisionTenant.execute({ actor: operator, name });
-    const admin = identifiers.personId();
-    await asPersonInTenant(tenant.id, async (client) => {
-      await client.query(
-        'SELECT find_or_create_person($1::uuid, $2::citext, $3::timestamptz)',
-        [admin, `admin-${name}@example.com`.toLowerCase(), CREATED_AT],
+    const tenant = await provisionTenant.execute({
+      actor: operator,
+      name,
+      administratorEmail: `admin-${name}@example.com`,
+    });
+    // Read back through a privileged connection: provisioning deliberately does
+    // not disclose the administrator's identifier in its response.
+    const admin = await seed(async (client) => {
+      const { rows } = await client.query<{ person_id: string }>(
+        'SELECT person_id FROM memberships WHERE tenant_id = $1',
+        [tenant.id],
       );
-      await client.query(
-        'INSERT INTO memberships (id, tenant_id, person_id, role) VALUES ($1, $2, $3, $4)',
-        [identifiers.membershipId(), tenant.id, admin, 'admin'],
-      );
+      return personId(rows[0].person_id);
     });
     return {
       tenantId: tenant.id,
@@ -87,10 +98,18 @@ describe('the identity use cases against PostgreSQL', () => {
   }
 
   it('provisions a tenant and rejects a duplicate name at the database', async () => {
-    await provisionTenant.execute({ actor: operator, name: 'Acme' });
+    await provisionTenant.execute({
+      actor: operator,
+      name: 'Acme',
+      administratorEmail: 'founder@example.com',
+    });
 
     await expect(
-      provisionTenant.execute({ actor: operator, name: 'Acme' }),
+      provisionTenant.execute({
+        actor: operator,
+        name: 'Acme',
+        administratorEmail: 'founder@example.com',
+      }),
     ).rejects.toMatchObject({ error: { kind: 'tenant-name-taken' } });
   });
 

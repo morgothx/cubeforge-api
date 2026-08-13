@@ -5,7 +5,7 @@ import type { App } from 'supertest/types';
 import type { Response } from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { configure } from '../../src/main';
-import { asPersonInTenant } from './support/database';
+import { asPersonInTenant, seed } from './support/database';
 import { useIntegrationDatabase } from './support/fixtures';
 
 function body<T>(response: Response): T {
@@ -50,7 +50,7 @@ describe('the application, end to end', () => {
     const created = await request(app.getHttpServer())
       .post('/tenants')
       .set(operator)
-      .send({ name: 'Acme' });
+      .send({ name: 'Acme', administratorEmail: 'admin-Acme@example.com' });
 
     expect(created.status).toBe(201);
     expect(created.body).toMatchObject({ name: 'Acme', status: 'active' });
@@ -65,7 +65,11 @@ describe('the application, end to end', () => {
     const response = await request(app.getHttpServer())
       .post('/tenants')
       .set(operator)
-      .send({ name: 'Acme', status: 'active' });
+      .send({
+        name: 'Acme',
+        administratorEmail: 'a@example.com',
+        status: 'active',
+      });
 
     expect(response.status).toBe(400);
   });
@@ -74,22 +78,18 @@ describe('the application, end to end', () => {
     const created = await request(app.getHttpServer())
       .post('/tenants')
       .set(operator)
-      .send({ name: 'Acme' });
+      .send({ name: 'Acme', administratorEmail: 'admin-Acme@example.com' });
     const tenant = body<{ id: string }>(created);
 
-    // A tenant's first administrator has no route to create it: creating a
-    // member requires one to exist already. Seeding it directly is the same
-    // bootstrap gap a real deployment has, and feature 2 is where it belongs.
-    const adminId = crypto.randomUUID();
-    await asPersonInTenant(tenant.id, async (client) => {
-      await client.query(
-        'SELECT find_or_create_person($1::uuid, $2::citext, now())',
-        [adminId, 'admin@example.com'],
+    // No raw SQL any more: provisioning created the administrator. Their
+    // identifier is read back through a privileged connection because the
+    // response deliberately does not disclose it.
+    const adminId = await seed(async (client) => {
+      const { rows } = await client.query<{ person_id: string }>(
+        'SELECT person_id FROM memberships WHERE tenant_id = $1',
+        [tenant.id],
       );
-      await client.query(
-        'INSERT INTO memberships (id, tenant_id, person_id, role) VALUES ($1, $2, $3, $4)',
-        [crypto.randomUUID(), tenant.id, adminId, 'admin'],
-      );
+      return rows[0].person_id;
     });
     const asAdmin = {
       'x-actor-kind': 'tenant-member',
@@ -110,7 +110,7 @@ describe('the application, end to end', () => {
       body<{ email: string }[]>(listed)
         .map((entry) => entry.email)
         .sort(),
-    ).toEqual(['admin@example.com', 'newcomer@example.com']);
+    ).toEqual(['admin-acme@example.com', 'newcomer@example.com']);
 
     const revoked = await request(app.getHttpServer())
       .delete(
@@ -130,13 +130,13 @@ describe('the application, end to end', () => {
       await request(app.getHttpServer())
         .post('/tenants')
         .set(operator)
-        .send({ name: 'Acme' }),
+        .send({ name: 'Acme', administratorEmail: 'admin-Acme@example.com' }),
     );
     const globex = body<{ id: string }>(
-      await request(app.getHttpServer())
-        .post('/tenants')
-        .set(operator)
-        .send({ name: 'Globex' }),
+      await request(app.getHttpServer()).post('/tenants').set(operator).send({
+        name: 'Globex',
+        administratorEmail: 'admin-Globex@example.com',
+      }),
     );
 
     const intruder = crypto.randomUUID();

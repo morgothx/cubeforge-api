@@ -35,6 +35,7 @@ export class TenantsController {
     const tenant = await this.provision.execute({
       actor: actorOf(request),
       name: body.name,
+      administratorEmail: body.administratorEmail,
     });
     return toTenantResponse(tenant);
   }

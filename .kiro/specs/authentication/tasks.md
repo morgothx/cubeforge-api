@@ -208,7 +208,7 @@ which is what makes them parallel-safe.
   - _Boundary: API key management_
   - _Depends: 3.3_
 
-- [ ] 4.5 (P) Provision a tenant with its first administrator
+- [x] 4.5 (P) Provision a tenant with its first administrator
   - Accept an administrator's address alongside the tenant name, and grant that
     person an active administrator membership
   - Create nothing at all when the tenant name is already in use
@@ -316,7 +316,7 @@ which is what makes them parallel-safe.
   - _Boundary: Throttling and logging_
   - _Depends: 6.3_
 
-- [ ] 6.6 Extend the tenant provisioning route
+- [x] 6.6 Extend the tenant provisioning route
   - Accept an administrator's address alongside the tenant name, and validate it
     as an address before any use case runs
   - Return the same response shape whether or not that person was already known
@@ -431,6 +431,20 @@ them rather than rediscovering them.
   check ran `require()` in a plain Node process and concluded the package was
   usable. It was not. Any future ESM-only dependency needs the same two-place
   check that task 1.1 now performs: the runner and the compiled output.
+- **4.5 completed 6.6 as a side effect**, because changing the use case's command
+  breaks the controller that calls it. Both are marked done; the route validates
+  the administrator's address at the edge and the use case parses it again.
+- Provisioning writes the tenant on the operator connection and the person and
+  membership on the tenant-scoped one — two connections, therefore two
+  transactions, therefore not atomic. The tenant goes first so a duplicate name
+  fails before anything else runs (requirement 8.2). If the second step fails the
+  tenant is **deactivated** as a compensating action: leaving a tenant nobody can
+  administer would recreate the very gap this task closes.
+- The integration harness no longer inserts a first membership with raw SQL —
+  provisioning creates it. The administrator's identifier is read back through a
+  privileged connection because the response deliberately does not disclose it.
+  That is a piece of task 7.1 landing early, and a good sign: the bootstrap gap
+  is closed where the tests used to work around it.
 - As predicted, 4.4 pulled a slice of 5.2 with it: `apiKeys` had to join
   `TenantScopedRepositories`, obliging `PostgresTenantScopedUnitOfWork` to supply
   it. `PostgresApiKeyRepository` (the administrator's half) exists now; the

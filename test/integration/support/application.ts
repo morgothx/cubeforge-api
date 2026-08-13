@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import type { App } from 'supertest/types';
@@ -6,7 +5,7 @@ import type { Response } from 'supertest';
 import request from 'supertest';
 import { AppModule } from '../../../src/app.module';
 import { configure } from '../../../src/main';
-import { asPersonInTenant } from './database';
+import { seed } from './database';
 
 export type Role = 'admin' | 'editor' | 'viewer';
 
@@ -59,11 +58,12 @@ export interface SeededTenant {
 }
 
 /**
- * A tenant plus its first administrator.
+ * A tenant plus its first administrator, both created by the route.
  *
- * The membership is written directly because there is no route that could
- * create it: adding a member requires an administrator to already exist. That
- * bootstrap gap is real and belongs to feature 2, not to these tests.
+ * This used to insert the membership with raw SQL, because no route could
+ * create it. Task 4.5 closed that gap: provisioning names the administrator.
+ * The identifier is read back through a privileged connection only because the
+ * response deliberately does not disclose it.
  */
 export async function seedTenantWithAdministrator(
   app: INestApplication<App>,
@@ -72,19 +72,20 @@ export async function seedTenantWithAdministrator(
   const created = await request(app.getHttpServer())
     .post('/tenants')
     .set(OPERATOR)
-    .send({ name });
+    .send({ name, administratorEmail: `admin-${name}@example.com` });
+  if (created.status !== 201) {
+    throw new Error(
+      `provisioning failed with ${created.status}: ${JSON.stringify(created.body)}`,
+    );
+  }
   const { id } = body<{ id: string }>(created);
 
-  const administrator = randomUUID();
-  await asPersonInTenant(id, async (client) => {
-    await client.query(
-      'SELECT find_or_create_person($1::uuid, $2::citext, now())',
-      [administrator, `admin-${id}@example.com`],
+  const administrator = await seed(async (client) => {
+    const { rows } = await client.query<{ person_id: string }>(
+      'SELECT person_id FROM memberships WHERE tenant_id = $1',
+      [id],
     );
-    await client.query(
-      'INSERT INTO memberships (id, tenant_id, person_id, role) VALUES ($1, $2, $3, $4)',
-      [randomUUID(), id, administrator, 'admin'],
-    );
+    return rows[0].person_id;
   });
 
   return { id, administrator, headers: memberHeaders(id, administrator) };

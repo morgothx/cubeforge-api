@@ -67,6 +67,7 @@ describe('the HTTP edge', () => {
           provide: ProvisionTenantUseCase,
           useValue: new ProvisionTenantUseCase(
             context.platform,
+            context.tenantScoped,
             context.clock,
             context.identifiers,
           ),
@@ -132,7 +133,7 @@ describe('the HTTP edge', () => {
       const response = await request(app.getHttpServer())
         .post('/tenants')
         .set(operator)
-        .send({ name: '' });
+        .send({ name: '', administratorEmail: 'founder@example.com' });
 
       expect(response.status).toBe(400);
       expect(context.store.tenants.size).toBe(0);
@@ -233,12 +234,12 @@ describe('the HTTP edge', () => {
       await request(app.getHttpServer())
         .post('/tenants')
         .set(operator)
-        .send({ name: 'Acme' });
+        .send({ name: 'Acme', administratorEmail: 'founder@example.com' });
 
       const response = await request(app.getHttpServer())
         .post('/tenants')
         .set(operator)
-        .send({ name: 'Acme' });
+        .send({ name: 'Acme', administratorEmail: 'founder@example.com' });
 
       expect(response.status).toBe(409);
       expect(body<{ field: string }>(response).field).toBe('name');
@@ -266,7 +267,7 @@ describe('the HTTP edge', () => {
       const created = await request(app.getHttpServer())
         .post('/tenants')
         .set(operator)
-        .send({ name: 'Acme' });
+        .send({ name: 'Acme', administratorEmail: 'founder@example.com' });
       expect(created.status).toBe(201);
       expect(created.body).toMatchObject({ name: 'Acme', status: 'active' });
       const tenant = body<{ id: string }>(created);
@@ -378,7 +379,7 @@ describe('the HTTP edge', () => {
       const memberOutside = await request(app.getHttpServer())
         .post('/tenants')
         .set(asMember(tenantId, admin))
-        .send({ name: 'Globex' });
+        .send({ name: 'Globex', administratorEmail: 'founder@example.com' });
 
       expect(operatorInside.status).toBe(404);
       expect(memberOutside.status).toBe(404);
