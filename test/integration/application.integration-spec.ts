@@ -26,6 +26,21 @@ function body<T>(response: Response): T {
 describe('the application, end to end', () => {
   useIntegrationDatabase();
 
+  /**
+   * Provisioning names an administrator but answers with the tenant, so the
+   * only way to learn their identifier without a route is to read the row the
+   * same way the tenant itself would.
+   */
+  async function administratorOf(tenantId: string): Promise<string> {
+    return asPersonInTenant(tenantId, async (client) => {
+      const { rows } = await client.query<{ person_id: string }>(
+        'SELECT person_id FROM memberships WHERE tenant_id = $1',
+        [tenantId],
+      );
+      return rows[0].person_id;
+    });
+  }
+
   let app: INestApplication<App>;
 
   beforeAll(async () => {
@@ -151,6 +166,89 @@ describe('the application, end to end', () => {
       .set(await bearerFor(intruder));
 
     expect(response.status).toBe(404);
+  });
+
+  /**
+   * The whole credential story on the real stack: an operator hands out a setup
+   * token, the holder turns it into a password, signs in with it, and the
+   * access token that comes back is enough to act as an administrator — who
+   * then issues an API key that authenticates in its own right.
+   *
+   * Nothing here is planted in the database. Every step goes through a route,
+   * which is the only way to show that they connect.
+   */
+  it('carries a person from a setup token to a session, and a tenant to an API key', async () => {
+    const tenant = body<{ id: string }>(
+      await request(app.getHttpServer())
+        .post('/tenants')
+        .set(await operatorHeaders())
+        .send({ name: 'Acme', administratorEmail: 'admin-Acme@example.com' }),
+    );
+    const [admin] = body<{ personId: string }[]>(
+      await request(app.getHttpServer())
+        .get(`/tenants/${tenant.id}/members`)
+        .set(await bearerFor(await administratorOf(tenant.id))),
+    );
+
+    const issued = await request(app.getHttpServer())
+      .post(`/platform/people/${admin.personId}/setup-tokens`)
+      .set(await operatorHeaders());
+    expect(issued.status).toBe(201);
+
+    const redeemed = await request(app.getHttpServer())
+      .post('/auth/credentials')
+      .send({
+        token: body<{ setupToken: string }>(issued).setupToken,
+        password: 'correct horse battery staple',
+      });
+    expect(redeemed.status).toBe(204);
+
+    const signedIn = await request(app.getHttpServer())
+      .post('/auth/sign-in')
+      .send({
+        email: 'admin-acme@example.com',
+        password: 'correct horse battery staple',
+      });
+    expect(signedIn.status).toBe(200);
+    const session = body<{ accessToken: string; refreshToken: string }>(
+      signedIn,
+    );
+    const asAdmin = { authorization: `Bearer ${session.accessToken}` };
+
+    const key = await request(app.getHttpServer())
+      .post(`/tenants/${tenant.id}/api-keys`)
+      .set(asAdmin)
+      .send({ label: 'inventory sync', role: 'editor' });
+    expect(key.status).toBe(201);
+    const secret = body<{ secret: string }>(key).secret;
+
+    // Used once as a machine credential — refused, because a machine is not a
+    // member — and the listing shows that it nonetheless resolved.
+    const asMachine = await request(app.getHttpServer())
+      .get(`/tenants/${tenant.id}/members`)
+      .set({ 'x-api-key': secret });
+    expect(asMachine.status).toBe(404);
+
+    const listed = await request(app.getHttpServer())
+      .get(`/tenants/${tenant.id}/api-keys`)
+      .set(asAdmin);
+    const summaries = body<{ lastUsedAt: string | null }[]>(listed);
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0].lastUsedAt).not.toBeNull();
+    expect(JSON.stringify(summaries)).not.toContain(secret);
+
+    // A refresh token from the same session still works, and signing out ends it.
+    const refreshed = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: session.refreshToken });
+    expect(refreshed.status).toBe(200);
+
+    const signedOut = await request(app.getHttpServer())
+      .post('/auth/sign-out')
+      .send({
+        refreshToken: body<{ refreshToken: string }>(refreshed).refreshToken,
+      });
+    expect(signedOut.status).toBe(204);
   });
 
   it('refuses a request with no actor', async () => {

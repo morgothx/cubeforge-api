@@ -279,7 +279,7 @@ which is what makes them parallel-safe.
   - _Boundary: Inbound principal_
   - _Depends: 6.1_
 
-- [ ] 6.3 Expose the authentication and credential operations
+- [x] 6.3 Expose the authentication and credential operations
   - Route signing in, refreshing, signing out, issuing a setup token and
     redeeming one
   - Validate every payload before it reaches business logic
@@ -290,7 +290,7 @@ which is what makes them parallel-safe.
   - _Boundary: Authentication routes_
   - _Depends: 6.2_
 
-- [ ] 6.4 Expose tenant API key management
+- [x] 6.4 Expose tenant API key management
   - Route issuing, listing and revoking within a tenant
   - Reconcile the tenant in the path with the acting principal's, as the member
     routes already do
@@ -583,3 +583,24 @@ them rather than rediscovering them.
   so tests can place themselves in time and the application keeps one notion of
   now. The signing algorithm is pinned in the verifier and never read from the
   token header.
+- **The edge no longer reconciles the path tenant against the actor, because it
+  cannot disagree.** `actingIn` compared the two while the provisional
+  middleware read the tenant from a caller-supplied header; since task 6.2 the
+  middleware *derives* the tenant principal from the path segment, so the
+  comparison could never fail. Deleting the guard changed no test — which is how
+  it was found: breaking it deliberately and watching everything stay green.
+  What actually refuses a member who addresses a tenant they do not belong to is
+  `authorizeInTenant`, from stored records, inside the tenant transaction.
+- Sign-in's request DTO deliberately omits `@IsEmail` and any minimum password
+  length. The use case goes as far as verifying a decoy so that even the timing
+  of a failure discloses nothing; a 400 at the edge for a malformed address
+  would undo that, since it tells the caller their guess was never going to
+  match. Shape is still bounded — 320 characters for an address, 1024 for
+  anything that gets hashed — because Argon2's cost is real and an unbounded
+  field is a way to buy server time.
+- The two units of work that are not authentication's own moved to
+  `PersistenceModule`. Authentication needs both — issuing a setup token runs as
+  an operator, issuing an API key runs inside a tenant — and binding them a
+  second time inside `AuthenticationModule` would have worked and then drifted.
+- Sign-in, refresh and sign-out answer 200/200/204 rather than 201: a session is
+  a pair of secrets the caller keeps, with no URL to point at.

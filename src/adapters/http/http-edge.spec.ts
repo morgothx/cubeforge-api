@@ -9,6 +9,14 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import type { Response } from 'supertest';
+import { IssueApiKeyUseCase } from '../../application/api-key/issue-api-key.use-case';
+import { ListApiKeysUseCase } from '../../application/api-key/list-api-keys.use-case';
+import { RevokeApiKeyUseCase } from '../../application/api-key/revoke-api-key.use-case';
+import { RefreshSessionUseCase } from '../../application/authentication/refresh-session.use-case';
+import { SignInUseCase } from '../../application/authentication/sign-in.use-case';
+import { SignOutUseCase } from '../../application/authentication/sign-out.use-case';
+import { IssueSetupTokenUseCase } from '../../application/credential/issue-setup-token.use-case';
+import { RedeemSetupTokenUseCase } from '../../application/credential/redeem-setup-token.use-case';
 import { ChangeMemberRoleUseCase } from '../../application/membership/change-member-role.use-case';
 import { CreateTenantMemberUseCase } from '../../application/membership/create-tenant-member.use-case';
 import { ListTenantMembersUseCase } from '../../application/membership/list-tenant-members.use-case';
@@ -20,13 +28,16 @@ import { ProvisionTenantUseCase } from '../../application/tenant/provision-tenan
 import { tenantId } from '../../domain/identifiers';
 import { createIdentityTestContext } from '../testing/identity-test-context';
 import type { IdentityTestContext } from '../testing/identity-test-context';
+import { Argon2PasswordHasher } from '../crypto/argon2-password-hasher';
 import { JwtAccessTokenIssuer } from '../crypto/access-token-issuer';
 import { RandomSecretGenerator } from '../crypto/random-secret-generator';
-import { InMemoryApiKeyStore } from '../persistence/in-memory/in-memory-api-key-store';
 import { InMemoryAuthenticatorUnitOfWork } from '../persistence/in-memory/in-memory-authenticator-unit-of-work';
 import { PrincipalResolver } from '../../application/principal-resolver';
 import { personId as toPersonId } from '../../domain/identifiers';
 import { PrincipalMiddleware } from './principal.middleware';
+import { ApiKeysController } from './api-keys.controller';
+import { AuthenticationController } from './authentication.controller';
+import { CredentialSetupController } from './credential-setup.controller';
 import { DomainErrorFilter } from './domain-error.filter';
 import { PlatformPeopleController } from './platform-people.controller';
 import { TenantMembersController } from './tenant-members.controller';
@@ -49,6 +60,13 @@ describe('the HTTP edge', () => {
     secret: 'a-signing-secret-long-enough-for-the-rule',
     accessTokenLifetimeSeconds: 900,
   });
+  /** Argon2 at its cheapest: these tests are about routing, not about cost. */
+  const hasher = new Argon2PasswordHasher({
+    memoryCostKiB: 8192,
+    timeCost: 1,
+    parallelism: 1,
+  });
+  const secrets = new RandomSecretGenerator();
   const OPERATOR_PERSON = '018f2c00-0000-7000-8000-0000000000aa';
   let operator: Record<string, string>;
 
@@ -59,7 +77,7 @@ describe('the HTTP edge', () => {
    */
   async function bearer(personId: string): Promise<Record<string, string>> {
     return {
-      authorization: `Bearer ${await tokens.issue(toPersonId(personId), new Date())}`,
+      authorization: `Bearer ${await tokens.issue(toPersonId(personId), context.clock.now())}`,
     };
   }
 
@@ -71,12 +89,19 @@ describe('the HTTP edge', () => {
     context = createIdentityTestContext();
     context.credentials.operators.add(toPersonId(OPERATOR_PERSON));
     operator = await bearer(OPERATOR_PERSON);
+    const authenticator = new InMemoryAuthenticatorUnitOfWork(
+      context.credentials,
+      context.apiKeys,
+    );
 
     @Module({
       controllers: [
         TenantsController,
         TenantMembersController,
         PlatformPeopleController,
+        AuthenticationController,
+        CredentialSetupController,
+        ApiKeysController,
       ],
       providers: [
         {
@@ -121,15 +146,77 @@ describe('the HTTP edge', () => {
           useValue: new RevokeMembershipUseCase(context.tenantScoped),
         },
         {
+          provide: SignInUseCase,
+          useValue: new SignInUseCase(
+            authenticator,
+            hasher,
+            tokens,
+            secrets,
+            context.clock,
+            context.identifiers,
+          ),
+        },
+        {
+          provide: RefreshSessionUseCase,
+          useValue: new RefreshSessionUseCase(
+            authenticator,
+            tokens,
+            secrets,
+            context.clock,
+            context.identifiers,
+          ),
+        },
+        {
+          provide: SignOutUseCase,
+          useValue: new SignOutUseCase(authenticator, secrets, context.clock),
+        },
+        {
+          provide: IssueSetupTokenUseCase,
+          useValue: new IssueSetupTokenUseCase(
+            context.platform,
+            secrets,
+            context.clock,
+            context.identifiers,
+          ),
+        },
+        {
+          provide: RedeemSetupTokenUseCase,
+          useValue: new RedeemSetupTokenUseCase(
+            authenticator,
+            hasher,
+            context.clock,
+            secrets,
+          ),
+        },
+        {
+          provide: IssueApiKeyUseCase,
+          useValue: new IssueApiKeyUseCase(
+            context.tenantScoped,
+            secrets,
+            context.clock,
+            context.identifiers,
+          ),
+        },
+        {
+          provide: ListApiKeysUseCase,
+          useValue: new ListApiKeysUseCase(context.tenantScoped),
+        },
+        {
+          provide: RevokeApiKeyUseCase,
+          useValue: new RevokeApiKeyUseCase(
+            context.tenantScoped,
+            context.clock,
+          ),
+        },
+        {
           provide: PrincipalResolver,
+          // The same key store the tenant-scoped unit of work writes to, so a
+          // key issued through the route is a key that can then authenticate.
           useValue: new PrincipalResolver(
             tokens,
-            new InMemoryAuthenticatorUnitOfWork(
-              context.credentials,
-              new InMemoryApiKeyStore(),
-            ),
-            new RandomSecretGenerator(),
-            { now: () => new Date() },
+            authenticator,
+            secrets,
+            context.clock,
           ),
         },
         PrincipalMiddleware,
@@ -416,6 +503,299 @@ describe('the HTTP edge', () => {
 
     it('refuses a request with no actor at all', async () => {
       const response = await request(app.getHttpServer()).get('/tenants');
+
+      expect(response.status).toBe(404);
+    });
+  });
+
+  describe('the authentication routes', () => {
+    const PASSWORD = 'correct horse battery staple';
+
+    /**
+     * Through the routes and nothing else: an operator issues a setup token,
+     * the holder redeems it, and only then is there a password to sign in with.
+     * A test that reached into the credential store to plant one would prove
+     * the routes reachable without proving them connected.
+     */
+    async function aPersonWithAPassword(email: string): Promise<{
+      tenantId: string;
+      personId: string;
+    }> {
+      const tenantId = await context.seedTenant('Acme');
+      const personId = await context.seedMember({
+        tenantId,
+        email,
+        role: 'admin',
+      });
+
+      const issued = await request(app.getHttpServer())
+        .post(`/platform/people/${personId}/setup-tokens`)
+        .set(operator);
+      expect(issued.status).toBe(201);
+
+      const redeemed = await request(app.getHttpServer())
+        .post('/auth/credentials')
+        .send({
+          token: body<{ setupToken: string }>(issued).setupToken,
+          password: PASSWORD,
+        });
+      expect(redeemed.status).toBe(204);
+
+      return { tenantId, personId };
+    }
+
+    it('carries a person from a setup token to a working session', async () => {
+      const { tenantId, personId } =
+        await aPersonWithAPassword('admin@example.com');
+
+      const signedIn = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .send({ email: 'admin@example.com', password: PASSWORD });
+
+      expect(signedIn.status).toBe(200);
+      const session = body<{
+        accessToken: string;
+        refreshToken: string;
+        sessionExpiresAt: string;
+      }>(signedIn);
+      expect(Object.keys(session).sort()).toEqual([
+        'accessToken',
+        'refreshToken',
+        'sessionExpiresAt',
+      ]);
+
+      // The token the route just issued is a credential the platform accepts.
+      const acting = await request(app.getHttpServer())
+        .get(`/tenants/${tenantId}/members`)
+        .set({ authorization: `Bearer ${session.accessToken}` });
+      expect(acting.status).toBe(200);
+      expect(body<{ personId: string }[]>(acting)[0].personId).toBe(personId);
+    });
+
+    it('rotates a refresh token and refuses the one it replaced', async () => {
+      await aPersonWithAPassword('admin@example.com');
+      const signedIn = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .send({ email: 'admin@example.com', password: PASSWORD });
+      const first = body<{ refreshToken: string }>(signedIn).refreshToken;
+
+      const refreshed = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refreshToken: first });
+      expect(refreshed.status).toBe(200);
+      expect(body<{ refreshToken: string }>(refreshed).refreshToken).not.toBe(
+        first,
+      );
+
+      const replayed = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refreshToken: first });
+      expect(replayed.status).toBe(404);
+    });
+
+    it('ends a session, after which its refresh token buys nothing', async () => {
+      await aPersonWithAPassword('admin@example.com');
+      const signedIn = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .send({ email: 'admin@example.com', password: PASSWORD });
+      const refreshToken = body<{ refreshToken: string }>(
+        signedIn,
+      ).refreshToken;
+
+      const signedOut = await request(app.getHttpServer())
+        .post('/auth/sign-out')
+        .send({ refreshToken });
+      expect(signedOut.status).toBe(204);
+
+      const afterwards = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refreshToken });
+      expect(afterwards.status).toBe(404);
+    });
+
+    /**
+     * Requirement 9.2 at the edge. A 400 for a malformed address would be a
+     * reliable oracle — it says the guess was never going to match — so the
+     * shape rules here stop short of judging the address.
+     */
+    it('answers a malformed address exactly as it answers an unknown one', async () => {
+      const malformed = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .send({ email: 'not-an-address', password: PASSWORD });
+      const unknown = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .send({ email: 'stranger@example.com', password: PASSWORD });
+
+      expect(malformed.status).toBe(404);
+      expect(malformed.body).toEqual(unknown.body);
+    });
+
+    it("reports a password below the policy, which is the holder's to fix", async () => {
+      const tenantId = await context.seedTenant('Acme');
+      const personId = await context.seedMember({
+        tenantId,
+        email: 'admin@example.com',
+        role: 'admin',
+      });
+      const issued = await request(app.getHttpServer())
+        .post(`/platform/people/${personId}/setup-tokens`)
+        .set(operator);
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/credentials')
+        .send({
+          token: body<{ setupToken: string }>(issued).setupToken,
+          password: 'short',
+        });
+
+      expect(response.status).toBe(400);
+      // The token survives a mistyped password: nothing was redeemed.
+      expect(
+        [...context.credentials.setupTokens.values()][0].redeemedAt,
+      ).toBeNull();
+    });
+
+    it('refuses a setup token to anyone who is not an operator', async () => {
+      const tenantId = await context.seedTenant('Acme');
+      const admin = await context.seedMember({
+        tenantId,
+        email: 'admin@example.com',
+        role: 'admin',
+      });
+
+      const response = await request(app.getHttpServer())
+        .post(`/platform/people/${admin}/setup-tokens`)
+        .set(await asMember(tenantId, admin));
+
+      expect(response.status).toBe(404);
+      expect(context.credentials.setupTokens.size).toBe(0);
+    });
+
+    it('rejects a malformed payload before any use case runs', async () => {
+      const missing = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .send({ email: 'admin@example.com' });
+      const extra = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refreshToken: 'a-token', everywhere: true });
+      const blank = await request(app.getHttpServer())
+        .post('/auth/sign-out')
+        .send({ refreshToken: '   ' });
+
+      expect([missing.status, extra.status, blank.status]).toEqual([
+        400, 400, 400,
+      ]);
+      expect(context.credentials.refreshTokens.size).toBe(0);
+    });
+  });
+
+  describe('the API key routes', () => {
+    async function anAdministrator(): Promise<{
+      tenantId: string;
+      headers: Record<string, string>;
+    }> {
+      const tenantId = await context.seedTenant('Acme');
+      const admin = await context.seedMember({
+        tenantId,
+        email: 'admin@example.com',
+        role: 'admin',
+      });
+      return { tenantId, headers: await asMember(tenantId, admin) };
+    }
+
+    it('shows a secret once, at issuance, and never again', async () => {
+      const { tenantId, headers } = await anAdministrator();
+
+      const issued = await request(app.getHttpServer())
+        .post(`/tenants/${tenantId}/api-keys`)
+        .set(headers)
+        .send({ label: 'inventory sync', role: 'editor' });
+      expect(issued.status).toBe(201);
+      const key = body<{ id: string; secret: string }>(issued);
+      expect(Object.keys(key).sort()).toEqual(['id', 'secret']);
+
+      const listed = await request(app.getHttpServer())
+        .get(`/tenants/${tenantId}/api-keys`)
+        .set(headers);
+      expect(listed.status).toBe(200);
+      const summaries = body<Record<string, unknown>[]>(listed);
+      expect(summaries).toHaveLength(1);
+      expect(summaries[0]).toMatchObject({
+        id: key.id,
+        label: 'inventory sync',
+        role: 'editor',
+        lastUsedAt: null,
+        revokedAt: null,
+      });
+      expect(JSON.stringify(summaries)).not.toContain(key.secret);
+    });
+
+    it('issues a key that then acts for its tenant, and stops when revoked', async () => {
+      const { tenantId, headers } = await anAdministrator();
+      const issued = await request(app.getHttpServer())
+        .post(`/tenants/${tenantId}/api-keys`)
+        .set(headers)
+        .send({ label: 'inventory sync', role: 'editor' });
+      const key = body<{ id: string; secret: string }>(issued);
+
+      // A machine principal is not a member, so both the member routes and
+      // these ones refuse it — while the key still resolved, which the recorded
+      // moment of use proves.
+      const asMachine = await request(app.getHttpServer())
+        .get(`/tenants/${tenantId}/members`)
+        .set({ 'x-api-key': key.secret });
+      const managingKeys = await request(app.getHttpServer())
+        .get(`/tenants/${tenantId}/api-keys`)
+        .set({ 'x-api-key': key.secret });
+      expect([asMachine.status, managingKeys.status]).toEqual([404, 404]);
+      const afterUse = await request(app.getHttpServer())
+        .get(`/tenants/${tenantId}/api-keys`)
+        .set(headers);
+      expect(
+        body<{ lastUsedAt: string | null }[]>(afterUse)[0].lastUsedAt,
+      ).not.toBeNull();
+
+      const revoked = await request(app.getHttpServer())
+        .delete(`/tenants/${tenantId}/api-keys/${key.id}`)
+        .set(headers);
+      expect(revoked.status).toBe(204);
+
+      const afterRevocation = await request(app.getHttpServer())
+        .get(`/tenants/${tenantId}/api-keys`)
+        .set(headers);
+      expect(
+        body<{ revokedAt: string | null }[]>(afterRevocation)[0].revokedAt,
+      ).not.toBeNull();
+    });
+
+    it("refuses an administrator who addresses another tenant's keys", async () => {
+      const { headers } = await anAdministrator();
+      const globex = await context.seedTenant('Globex');
+
+      const response = await request(app.getHttpServer())
+        .post(`/tenants/${globex}/api-keys`)
+        .set(headers)
+        .send({ label: 'theirs', role: 'viewer' });
+
+      expect(response.status).toBe(404);
+    });
+
+    it('refuses a member who is not an administrator', async () => {
+      const tenantId = await context.seedTenant('Acme');
+      await context.seedMember({
+        tenantId,
+        email: 'admin@example.com',
+        role: 'admin',
+      });
+      const viewer = await context.seedMember({
+        tenantId,
+        email: 'viewer@example.com',
+        role: 'viewer',
+      });
+
+      const response = await request(app.getHttpServer())
+        .get(`/tenants/${tenantId}/api-keys`)
+        .set(await asMember(tenantId, viewer));
 
       expect(response.status).toBe(404);
     });
