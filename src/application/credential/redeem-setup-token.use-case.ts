@@ -50,12 +50,23 @@ export class RedeemSetupTokenUseCase {
         const token = await credentials.findSetupToken(
           this.secrets.digest(command.token),
         );
-        const usable =
-          token !== null &&
-          token.redeemedAt === null &&
-          token.expiresAt.getTime() > now.getTime();
-        if (!usable) {
-          throw new DomainViolation({ kind: 'not-found' });
+        if (token === null) {
+          throw new DomainViolation(
+            { kind: 'not-found' },
+            'no setup token matches the one presented',
+          );
+        }
+        if (token.redeemedAt !== null) {
+          throw new DomainViolation(
+            { kind: 'not-found' },
+            'this setup token was already redeemed',
+          );
+        }
+        if (token.expiresAt.getTime() <= now.getTime()) {
+          throw new DomainViolation(
+            { kind: 'not-found' },
+            'this setup token has expired',
+          );
         }
 
         await credentials.markSetupTokenRedeemed(token.id, now);

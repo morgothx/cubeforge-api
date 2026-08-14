@@ -23,7 +23,23 @@ export type DomainError =
   | { readonly kind: 'forbidden' };
 
 export class DomainViolation extends Error {
-  constructor(readonly error: DomainError) {
+  /**
+   * `reason` is for the log and for nothing else.
+   *
+   * Requirement 12.2 wants the cause of an authentication failure recorded
+   * while the response discloses neither the cause nor the correlation
+   * identifier — and requirement 9.2 wants every one of those failures to look
+   * identical to a caller. Both hold only if the diagnosis travels beside the
+   * error rather than inside it: `error` decides the response, `reason` decides
+   * what an operator reading logs gets to know.
+   *
+   * It is deliberately a fixed phrase at every call site. Interpolating the
+   * value that failed is how a password or a token ends up in a log line.
+   */
+  constructor(
+    readonly error: DomainError,
+    readonly reason?: string,
+  ) {
     super(describeDomainError(error));
     this.name = 'DomainViolation';
   }

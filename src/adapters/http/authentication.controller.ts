@@ -1,9 +1,23 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { RefreshSessionUseCase } from '../../application/authentication/refresh-session.use-case';
 import { SignInUseCase } from '../../application/authentication/sign-in.use-case';
 import { SignOutUseCase } from '../../application/authentication/sign-out.use-case';
 import { RedeemSetupTokenUseCase } from '../../application/credential/redeem-setup-token.use-case';
 import { opaqueSecret } from '../../domain/credential/secrets';
+import {
+  CredentialThrottlerGuard,
+  REDEMPTION_BY_ORIGIN,
+  SIGN_IN_BY_ADDRESS,
+  SIGN_IN_BY_ORIGIN,
+} from './credential-throttling';
 import {
   RedeemSetupTokenRequest,
   RefreshSessionRequest,
@@ -30,7 +44,21 @@ export class AuthenticationController {
     private readonly redeem: RedeemSetupTokenUseCase,
   ) {}
 
+  /**
+   * Counted twice — per address and per origin — and refused with 429 once
+   * either count is exhausted. That is the only authentication outcome a caller
+   * can tell apart from another, and deliberately so: someone who has to wait
+   * needs to know it. What they still cannot learn is whether the address they
+   * were guessing exists, because the refusal happens before any use case runs
+   * and therefore before anything is looked up (9.4).
+   *
+   * No count ever disables an account (9.2). Doing so would turn a known
+   * address into a weapon against its owner, and the disabling itself would
+   * confirm the address exists.
+   */
   @Post('sign-in')
+  @UseGuards(CredentialThrottlerGuard)
+  @SkipThrottle({ [REDEMPTION_BY_ORIGIN]: true })
   @HttpCode(HttpStatus.OK)
   async store(@Body() body: SignInRequest): Promise<SessionResponse> {
     return toSessionResponse(
@@ -63,6 +91,10 @@ export class AuthenticationController {
    * yet and must sign in with what they chose.
    */
   @Post('credentials')
+  @UseGuards(CredentialThrottlerGuard)
+  // Counted by origin only: a setup token names nobody until it is looked up,
+  // so there is no address to count by.
+  @SkipThrottle({ [SIGN_IN_BY_ORIGIN]: true, [SIGN_IN_BY_ADDRESS]: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   async establish(@Body() body: RedeemSetupTokenRequest): Promise<void> {
     await this.redeem.execute({

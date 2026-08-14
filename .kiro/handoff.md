@@ -7,11 +7,11 @@ this, then `.kiro/specs/authentication/tasks.md`.
 
 - **Feature 1 `tenant-and-user-management`: complete.** 32/32 tasks, spec phase
   `implemented`.
-- **Feature 2 `authentication`: 25/33 tasks.** Sections 1 to 5 complete, plus
-  tasks 6.1, 6.2, 6.3, 6.4 and 6.6.
-- Último commit: `feat(authentication): resolve principals from verified
-  credentials`. The section 6.3/6.4 routes are in the working tree, uncommitted.
-- Tests: `pnpm test` 216 passing, `pnpm test:integration` 69 passing,
+- **Feature 2 `authentication`: 26/33 tasks.** Sections 1 to 6 complete.
+- Último commit: `feat(authentication): expose the authentication, credential
+  and API key routes`. Task 6.5 (throttling, correlation, failure logging) is in
+  the working tree, uncommitted.
+- Tests: `pnpm test` 226 passing, `pnpm test:integration` 69 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
 
 Camilo commits. Propose a message, never run `git commit`.
@@ -25,20 +25,13 @@ summarize, propose a Conventional Commits message in English, and wait.
 `/kiro-impl` autonomous mode commits per task, so it is banned. Use **manual mode,
 block by block**. This was decided in an earlier session and reaffirmed.
 
-## Next task: 6.5, throttling and failure logging
+## Next task: 7.1, then section 8
 
-It adds `@nestjs/throttler`. Its default storage is per process, which is fine
-for one instance and wrong the moment there are two — the task says to record
-that rather than to solve it. Limit sign-in per address and per origin, and
-setup-token redemption per origin; never disable an account as a consequence.
-Exceeding the limit must be *distinguishable* (429) while the underlying failure
-stays indistinguishable, and no log line may carry a password, a token or a key
-secret.
-
-Then 7.1 — mostly done already: `AuthenticationModule` binds the crypto ports,
-`PersistenceModule` binds the two units of work, and the controllers are
-registered. What remains is whatever 7.1 asks for beyond that. Then section 8,
-the validation suites.
+7.1 is mostly done already: `AuthenticationModule` binds the crypto ports and
+the throttler, `PersistenceModule` binds the two units of work, the controllers
+are registered, and `SystemModule` carries the correlation middleware. What remains
+is whatever 7.1 asks for beyond that. Then section 8, the validation suites —
+five of its six tasks are marked `(P)` and can run in parallel.
 
 The routes that now exist:
 
@@ -73,6 +66,12 @@ DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
 - **`FORCE ROW LEVEL SECURITY` applies to the schema owner too.** Anything the
   migration identity must read or write needs an owner policy — see migrations
   0002 and 0007.
+- **Throttling counters live in process memory** (`@nestjs/throttler` 6.5). With
+  two instances the effective limit doubles; a shared `ThrottlerStorage` is the
+  fix, and it is a change to `AuthenticationModule` alone.
+- **`DomainViolation` takes an optional second argument**, a fixed phrase logged
+  with the correlation identifier and never returned. Use it for every
+  authentication refusal; never interpolate the value that failed.
 - **The edge cannot reconcile the path tenant against the actor.** The principal
   is *built* from the path segment, so the comparison the old `actingIn` made
   could never fail. Do not add it back; membership is settled by

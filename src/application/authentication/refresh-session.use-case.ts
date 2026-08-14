@@ -52,7 +52,8 @@ export class RefreshSessionUseCase {
      * The refusals here have work to do — ending a family, ending a person's
      * sessions — and throwing inside the transaction would roll that work back
      * along with everything else. So the transaction reports its verdict and
-     * the rejection is raised after it has committed.
+     * the rejection is raised after it has committed. A refusal reports itself
+     * as the phrase to be logged; a success reports the session.
      */
     const outcome = await this.authenticator.runAuthenticating(
       async ({ credentials, sessions }) => {
@@ -60,7 +61,7 @@ export class RefreshSessionUseCase {
           this.secrets.digest(command.refreshToken),
         );
         if (presented === null) {
-          return null;
+          return 'no session holds this refresh token';
         }
 
         const decision = decideRefresh(presented, now);
@@ -68,10 +69,10 @@ export class RefreshSessionUseCase {
           // A token presented twice means someone else may hold a copy. The
           // legitimate holder and a thief cannot both continue, so neither does.
           await sessions.invalidateFamily(presented.signInId, now);
-          return null;
+          return 'this refresh token was presented twice; the family is now invalid';
         }
         if (decision.outcome === 'reject') {
-          return null;
+          return 'this refresh token is expired or already invalidated';
         }
 
         // Requirement 6.1. Checked here rather than only at sign-in, because a
@@ -79,7 +80,7 @@ export class RefreshSessionUseCase {
         const person = await credentials.findByPerson(presented.personId);
         if (person === null || person.personStatus !== 'active') {
           await sessions.invalidateAllForPerson(presented.personId, now);
-          return null;
+          return 'this person is no longer active; their sessions have ended';
         }
 
         await sessions.markExchanged(presented.id, now);
@@ -103,8 +104,8 @@ export class RefreshSessionUseCase {
       },
     );
 
-    if (outcome === null) {
-      throw new DomainViolation({ kind: 'not-found' });
+    if (typeof outcome === 'string') {
+      throw new DomainViolation({ kind: 'not-found' }, outcome);
     }
     return outcome;
   }

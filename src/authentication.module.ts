@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { ThrottlerModule } from '@nestjs/throttler';
 import {
   JwtAccessTokenIssuer,
   loadTokenConfig,
@@ -11,7 +12,12 @@ import { RandomSecretGenerator } from './adapters/crypto/random-secret-generator
 import { ApiKeysController } from './adapters/http/api-keys.controller';
 import { AuthenticationController } from './adapters/http/authentication.controller';
 import { CredentialSetupController } from './adapters/http/credential-setup.controller';
+import {
+  CredentialThrottlerGuard,
+  throttlerOptions,
+} from './adapters/http/credential-throttling';
 import { PrincipalMiddleware } from './adapters/http/principal.middleware';
+import { loadThrottlingConfig } from './adapters/http/throttling.config';
 import { DrizzleModule } from './adapters/persistence/postgres/drizzle.module';
 import { PostgresAuthenticatorUnitOfWork } from './adapters/persistence/postgres/postgres-authenticator-unit-of-work';
 import { IssueApiKeyUseCase } from './application/api-key/issue-api-key.use-case';
@@ -39,7 +45,16 @@ import { PersistenceModule } from './persistence.module';
  */
 @Global()
 @Module({
-  imports: [DrizzleModule, PersistenceModule],
+  imports: [
+    DrizzleModule,
+    PersistenceModule,
+    // Registered here rather than globally: only the credential endpoints are
+    // throttled, because the guard is applied per handler. Rate limiting every
+    // route is a platform-wide concern the design leaves to a later feature.
+    ThrottlerModule.forRoot(
+      throttlerOptions(loadThrottlingConfig(process.env)),
+    ),
+  ],
   controllers: [
     AuthenticationController,
     CredentialSetupController,
@@ -62,6 +77,7 @@ import { PersistenceModule } from './persistence.module';
     },
     PrincipalResolver,
     PrincipalMiddleware,
+    CredentialThrottlerGuard,
 
     SignInUseCase,
     RefreshSessionUseCase,

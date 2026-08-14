@@ -1,10 +1,12 @@
 import {
+  Logger,
   MiddlewareConsumer,
   Module,
   NestModule,
   ValidationPipe,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ThrottlerModule } from '@nestjs/throttler';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -34,6 +36,11 @@ import { RandomSecretGenerator } from '../crypto/random-secret-generator';
 import { InMemoryAuthenticatorUnitOfWork } from '../persistence/in-memory/in-memory-authenticator-unit-of-work';
 import { PrincipalResolver } from '../../application/principal-resolver';
 import { personId as toPersonId } from '../../domain/identifiers';
+import { CorrelationMiddleware } from './correlation.middleware';
+import {
+  CredentialThrottlerGuard,
+  throttlerOptions,
+} from './credential-throttling';
 import { PrincipalMiddleware } from './principal.middleware';
 import { ApiKeysController } from './api-keys.controller';
 import { AuthenticationController } from './authentication.controller';
@@ -67,6 +74,17 @@ describe('the HTTP edge', () => {
     parallelism: 1,
   });
   const secrets = new RandomSecretGenerator();
+  /**
+   * Small enough that a test can exhaust a bucket in a few requests, and still
+   * large enough that the tests which merely sign in once are unaffected.
+   */
+  const THROTTLING = {
+    windowSeconds: 60,
+    cooldownSeconds: 60,
+    signInAttemptsPerAddress: 3,
+    signInAttemptsPerOrigin: 8,
+    redemptionsPerOrigin: 3,
+  };
   const OPERATOR_PERSON = '018f2c00-0000-7000-8000-0000000000aa';
   let operator: Record<string, string>;
 
@@ -95,6 +113,7 @@ describe('the HTTP edge', () => {
     );
 
     @Module({
+      imports: [ThrottlerModule.forRoot(throttlerOptions(THROTTLING))],
       controllers: [
         TenantsController,
         TenantMembersController,
@@ -220,11 +239,15 @@ describe('the HTTP edge', () => {
           ),
         },
         PrincipalMiddleware,
+        CorrelationMiddleware,
+        CredentialThrottlerGuard,
       ],
     })
     class EdgeTestModule implements NestModule {
       configure(consumer: MiddlewareConsumer): void {
-        consumer.apply(PrincipalMiddleware).forRoutes('*path');
+        consumer
+          .apply(CorrelationMiddleware, PrincipalMiddleware)
+          .forRoutes('*path');
       }
     }
 
@@ -798,6 +821,246 @@ describe('the HTTP edge', () => {
         .set(await asMember(tenantId, viewer));
 
       expect(response.status).toBe(404);
+    });
+  });
+
+  describe('resistance to guessing', () => {
+    const PASSWORD = 'correct horse battery staple';
+
+    async function attemptSignIn(email: string) {
+      return request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .send({ email, password: 'not the password' });
+    }
+
+    async function exhaust(email: string): Promise<Response> {
+      let last!: Response;
+      for (
+        let attempt = 0;
+        attempt <= THROTTLING.signInAttemptsPerAddress;
+        attempt += 1
+      ) {
+        last = await attemptSignIn(email);
+      }
+      return last;
+    }
+
+    it('refuses further attempts once an address has been guessed at enough', async () => {
+      for (
+        let attempt = 0;
+        attempt < THROTTLING.signInAttemptsPerAddress;
+        attempt += 1
+      ) {
+        expect((await attemptSignIn('member@example.com')).status).toBe(404);
+      }
+
+      const throttled = await attemptSignIn('member@example.com');
+      expect(throttled.status).toBe(429);
+    });
+
+    /**
+     * The two buckets are what make this survivable: without a per-address
+     * count, one guesser exhausts the origin and everyone behind that address
+     * is locked out; without a per-origin count, spraying one password across
+     * many addresses is never counted at all.
+     */
+    it('counts each address separately, so guessing one does not lock out another', async () => {
+      await exhaust('victim@example.com');
+
+      const other = await attemptSignIn('bystander@example.com');
+
+      expect(other.status).toBe(404);
+    });
+
+    it('counts the origin too, so spraying many addresses is still bounded', async () => {
+      for (
+        let attempt = 0;
+        attempt < THROTTLING.signInAttemptsPerOrigin;
+        attempt += 1
+      ) {
+        // A different address every time, so no address bucket comes close.
+        const response = await attemptSignIn(`person-${attempt}@example.com`);
+        expect(response.status).toBe(404);
+      }
+
+      const sprayed = await attemptSignIn('one-more@example.com');
+      expect(sprayed.status).toBe(429);
+    });
+
+    /**
+     * Requirement 9.4. Being throttled is the one thing a caller may learn, and
+     * it must not become a way to learn a second thing — so the refusal for an
+     * address that exists and one that does not has to be the same refusal.
+     */
+    it('answers a throttled known address exactly as a throttled unknown one', async () => {
+      const tenantId = await context.seedTenant('Acme');
+      const person = await context.seedMember({
+        tenantId,
+        email: 'known@example.com',
+        role: 'admin',
+      });
+      context.credentials.passwords.set(person, {
+        digest: await hasher.hash(PASSWORD),
+        updatedAt: context.clock.now(),
+      });
+
+      const known = await exhaust('known@example.com');
+      const unknown = await exhaust('unknown@example.com');
+
+      expect(known.status).toBe(429);
+      expect(known.status).toBe(unknown.status);
+      expect(known.body).toEqual(unknown.body);
+    });
+
+    /** Requirement 9.2: the count costs the caller time, never the account. */
+    it('leaves the account alone, and the password with it', async () => {
+      const tenantId = await context.seedTenant('Acme');
+      const person = await context.seedMember({
+        tenantId,
+        email: 'known@example.com',
+        role: 'admin',
+      });
+      const digest = await hasher.hash(PASSWORD);
+      context.credentials.passwords.set(person, {
+        digest,
+        updatedAt: context.clock.now(),
+      });
+
+      await exhaust('known@example.com');
+
+      expect(context.store.people.get(person)?.status).toBe('active');
+      expect(context.credentials.passwords.get(person)?.digest).toBe(digest);
+    });
+
+    it('counts redemptions by origin, since a setup token names nobody', async () => {
+      for (
+        let attempt = 0;
+        attempt < THROTTLING.redemptionsPerOrigin;
+        attempt += 1
+      ) {
+        const response = await request(app.getHttpServer())
+          .post('/auth/credentials')
+          .send({ token: 'an-invented-token', password: PASSWORD });
+        expect(response.status).toBe(404);
+      }
+
+      const throttled = await request(app.getHttpServer())
+        .post('/auth/credentials')
+        .send({ token: 'an-invented-token', password: PASSWORD });
+      expect(throttled.status).toBe(429);
+    });
+
+    /**
+     * The buckets are separate, so exhausting one operation does not lock a
+     * caller out of the other — which is why redemption has its own name rather
+     * than sharing the sign-in origin count.
+     */
+    it('does not let exhausted redemptions close the sign-in route', async () => {
+      for (
+        let attempt = 0;
+        attempt <= THROTTLING.redemptionsPerOrigin;
+        attempt += 1
+      ) {
+        await request(app.getHttpServer())
+          .post('/auth/credentials')
+          .send({ token: 'an-invented-token', password: PASSWORD });
+      }
+
+      const signIn = await attemptSignIn('member@example.com');
+      expect(signIn.status).toBe(404);
+    });
+  });
+
+  describe('what is recorded, and what is not', () => {
+    let logged: string[];
+
+    beforeEach(() => {
+      logged = [];
+      jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation((message: unknown) => {
+          logged.push(String(message));
+        });
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('echoes a correlation identifier and logs the cause against it', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .send({ email: 'stranger@example.com', password: 'not the password' });
+
+      const correlationId = response.headers['x-correlation-id'];
+      expect(correlationId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(logged.some((line) => line.startsWith(correlationId))).toBe(true);
+      // The cause is in the log and in nothing else (12.2).
+      expect(logged.join('\n')).toContain('no credential for this address');
+      expect(JSON.stringify(response.body)).not.toContain('credential');
+      expect(JSON.stringify(response.body)).not.toContain(correlationId);
+    });
+
+    it('continues a trace the caller started, and refuses an unusable one', async () => {
+      const continued = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .set({ 'x-correlation-id': 'trace-0123456789' })
+        .send({ email: 'stranger@example.com', password: 'x' });
+      const rejected = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .set({ 'x-correlation-id': 'a bad\tone' })
+        .send({ email: 'stranger@example.com', password: 'x' });
+
+      expect(continued.headers['x-correlation-id']).toBe('trace-0123456789');
+      expect(rejected.headers['x-correlation-id']).toMatch(/^[0-9a-f-]{36}$/);
+    });
+
+    /** Requirement 12.1, asserted over everything the request caused to be written. */
+    it('writes no password, token or key secret to the log', async () => {
+      const tenantId = await context.seedTenant('Acme');
+      const admin = await context.seedMember({
+        tenantId,
+        email: 'admin@example.com',
+        role: 'admin',
+      });
+      const headers = await asMember(tenantId, admin);
+      const password = 'a-password-that-would-be-obvious-in-a-log';
+
+      const personId = await context.seedMember({
+        tenantId,
+        email: 'newcomer@example.com',
+        role: 'viewer',
+      });
+      const issued = await request(app.getHttpServer())
+        .post(`/platform/people/${personId}/setup-tokens`)
+        .set(operator);
+      const setupToken = body<{ setupToken: string }>(issued).setupToken;
+
+      await request(app.getHttpServer())
+        .post('/auth/credentials')
+        .send({ token: setupToken, password });
+      await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .send({ email: 'newcomer@example.com', password });
+      const key = await request(app.getHttpServer())
+        .post(`/tenants/${tenantId}/api-keys`)
+        .set(headers)
+        .send({ label: 'inventory sync', role: 'editor' });
+      const secret = body<{ secret: string }>(key).secret;
+
+      // A failure of each kind, so the log has something to say.
+      await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .send({ email: 'newcomer@example.com', password: 'wrong' });
+      await request(app.getHttpServer())
+        .post('/auth/credentials')
+        .send({ token: setupToken, password });
+
+      const everything = logged.join('\n');
+      expect(everything.length).toBeGreaterThan(0);
+      for (const secretValue of [password, setupToken, secret]) {
+        expect(everything).not.toContain(secretValue);
+      }
     });
   });
 

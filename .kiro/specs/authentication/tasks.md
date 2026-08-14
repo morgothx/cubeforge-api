@@ -300,7 +300,7 @@ which is what makes them parallel-safe.
   - _Boundary: API key routes_
   - _Depends: 6.2_
 
-- [ ] 6.5 Throttle the credential endpoints and record outcomes
+- [x] 6.5 Throttle the credential endpoints and record outcomes
   - Add the throttling library, noting that its default storage is per process
     and would need a shared store once more than one instance serves requests
   - Limit sign-in attempts per address and per origin, and setup-token
@@ -604,3 +604,40 @@ them rather than rediscovering them.
   second time inside `AuthenticationModule` would have worked and then drifted.
 - Sign-in, refresh and sign-out answer 200/200/204 rather than 201: a session is
   a pair of secrets the caller keeps, with no URL to point at.
+- **`@nestjs/throttler` 6.5 stores counters in process memory.** One instance is
+  fine; two are not — each would enforce the limit separately, so the effective
+  limit becomes the limit times the number of instances, and a Lambda deployment
+  would enforce almost nothing. Moving to a shared store (`ThrottlerStorage`
+  backed by Redis or DynamoDB) is the change to make before running more than
+  one, and it is a change to `AuthenticationModule` alone.
+- Three named buckets rather than two: signing in is counted per address and per
+  origin, and redeeming a setup token per origin under its own name. Either
+  sign-in count alone is avoidable — per origin does nothing against a botnet,
+  per address does nothing against one password sprayed across many addresses —
+  and a shared origin bucket would let a burst of redemptions close the sign-in
+  route.
+- The per-address tracker hashes the address, because the tracker becomes a
+  storage key and an address is the one piece of personal data this feature
+  handles. It also folds case, so `Ann@` and `ann@` share a bucket, and falls
+  back to the origin when no address was sent — an absent field must not be a
+  way out of the count.
+- **Guards run before pipes**, so the throttler sees an unvalidated body. That is
+  what makes the 429 satisfy requirement 9.4: the refusal happens before
+  anything is looked up, so it cannot differ between an address that exists and
+  one that does not. It is also why the tracker checks the body's shape instead
+  of casting it.
+- `request.ip` is the socket address unless Express is told to trust a proxy.
+  Behind API Gateway that has to be configured deliberately — trusting
+  `X-Forwarded-For` blind lets a caller prepend any origin and empty their own
+  bucket. Nothing is configured here; the deployment feature owns it.
+- **`DomainViolation` gained a log-only `reason`.** Requirements 12.2 and 9.2
+  pull in opposite directions — record the cause, disclose nothing — and they
+  only both hold if the diagnosis travels beside the error rather than inside
+  it. Every call site passes a fixed phrase; interpolating the value that failed
+  is how a password reaches a log. The filter logs it with the correlation
+  identifier and the response body is unchanged, which a test proves by leaking
+  it deliberately.
+- The correlation middleware honours an inbound `x-correlation-id` only if it
+  matches `[A-Za-z0-9._-]{8,128}`. The value goes into log lines, so a caller
+  must not be able to write newlines or a megabyte into them; an unusable one is
+  replaced rather than refused, because the request itself was fine.

@@ -93,7 +93,10 @@ function header(request: Request, name: string): string | undefined {
 export function actorOf(request: Request): ActorContext {
   const actor = (request as RequestWithActor)[ACTOR];
   if (!actor) {
-    throw new DomainViolation({ kind: 'not-found' });
+    throw new DomainViolation(
+      { kind: 'not-found' },
+      'no credential was presented, or none that resolved to a principal',
+    );
   }
   return actor;
 }

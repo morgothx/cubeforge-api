@@ -19,6 +19,7 @@ import {
   IDENTIFIER_GENERATOR,
   type IdentifierGenerator,
 } from '../ports/identifier-generator';
+import type { StoredCredential } from '../ports/credential.repository';
 import { PASSWORD_HASHER, type PasswordHasher } from '../ports/password-hasher';
 import {
   SECRET_GENERATOR,
@@ -75,7 +76,11 @@ export class SignInUseCase {
             : await this.hasher.verifyAgainstDecoy(command.password);
 
         if (!authenticated || found === null) {
-          throw new DomainViolation({ kind: 'not-found' });
+          // The response says one thing; the log says which of the four
+          // possibilities actually happened (12.2). The distinction never
+          // reaches the caller, and never reaches the timing either — it is
+          // drawn after the verification that equalized it.
+          throw new DomainViolation({ kind: 'not-found' }, causeOf(found));
         }
 
         const signInId = this.identifiers.signInId();
@@ -109,7 +114,24 @@ export class SignInUseCase {
     try {
       return emailAddress(value);
     } catch {
-      throw new DomainViolation({ kind: 'not-found' });
+      throw new DomainViolation(
+        { kind: 'not-found' },
+        'the address presented is not a valid address',
+      );
     }
   }
+}
+
+/** Fixed phrases, never the address or the password: requirement 12.1. */
+function causeOf(found: StoredCredential | null): string {
+  if (found === null) {
+    return 'no credential for this address';
+  }
+  if (found.passwordDigest === null) {
+    return 'this person has no password yet';
+  }
+  if (found.personStatus !== 'active') {
+    return 'this person is not active';
+  }
+  return 'the password did not match';
 }

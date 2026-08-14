@@ -5,12 +5,13 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   DomainViolation,
   describeDomainError,
   type DomainError,
 } from '../../domain/errors';
+import { correlationOf } from './correlation.middleware';
 
 interface MappedResponse {
   readonly status: number;
@@ -32,12 +33,20 @@ export class DomainErrorFilter implements ExceptionFilter<DomainViolation> {
 
   catch(exception: DomainViolation, host: ArgumentsHost): void {
     const mapped = map(exception.error);
+    const http = host.switchToHttp();
 
+    // The cause and the correlation identifier are recorded here and appear in
+    // no response (12.2). `reason` is the diagnosis the use case attached; the
+    // kind alone would say `not-found` for an unknown address, a wrong password
+    // and an expired setup token alike, which is useful to a caller and useless
+    // to whoever has to explain what happened.
     this.logger.warn(
-      `${exception.error.kind}: ${describeDomainError(exception.error)}`,
+      `${correlationOf(http.getRequest<Request>())} ${exception.error.kind}: ${
+        exception.reason ?? describeDomainError(exception.error)
+      }`,
     );
 
-    host.switchToHttp().getResponse<Response>().status(mapped.status).json({
+    http.getResponse<Response>().status(mapped.status).json({
       statusCode: mapped.status,
       message: mapped.body.message,
       field: mapped.body.field,
