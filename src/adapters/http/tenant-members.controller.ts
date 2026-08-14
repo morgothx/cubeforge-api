@@ -19,7 +19,7 @@ import { ListTenantMembersUseCase } from '../../application/membership/list-tena
 import { RevokeMembershipUseCase } from '../../application/membership/revoke-membership.use-case';
 import { DomainViolation } from '../../domain/errors';
 import { membershipId } from '../../domain/identifiers';
-import { actorOf } from './actor-context.middleware';
+import { actorOf } from './principal.middleware';
 import {
   ChangeMemberRoleRequest,
   CreateTenantMemberRequest,

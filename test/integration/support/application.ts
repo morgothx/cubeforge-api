@@ -3,21 +3,53 @@ import type { INestApplication } from '@nestjs/common';
 import type { App } from 'supertest/types';
 import type { Response } from 'supertest';
 import request from 'supertest';
+import {
+  JwtAccessTokenIssuer,
+  loadTokenConfig,
+} from '../../../src/adapters/crypto/access-token-issuer';
+import { personId as toPersonId } from '../../../src/domain/identifiers';
 import { AppModule } from '../../../src/app.module';
 import { configure } from '../../../src/main';
 import { seed } from './database';
 
 export type Role = 'admin' | 'editor' | 'viewer';
 
+const OPERATOR_PERSON = '018f2c00-0000-7000-8000-0000000000aa';
+
 /**
- * The provisional principal of an operator. The identifier is arbitrary until
- * authentication verifies operator status; feature 2's later tasks replace
- * these headers with a real credential.
+ * A real bearer token for a person recorded as an operator.
+ *
+ * Headers used to be enough: the provisional middleware believed whatever a
+ * request claimed. They are not any more, which is the point of task 6.2 — so
+ * the harness has to arrange a credential like everyone else.
  */
-export const OPERATOR = {
-  'x-actor-kind': 'platform-operator',
-  'x-person-id': '018f2c00-0000-7000-8000-0000000000aa',
-};
+export async function operatorHeaders(): Promise<Record<string, string>> {
+  await seed((client) =>
+    client.query(
+      `INSERT INTO people (id, email) VALUES ($1, 'operator@example.com')
+       ON CONFLICT (id) DO NOTHING`,
+      [OPERATOR_PERSON],
+    ),
+  );
+  await seed((client) =>
+    client.query(
+      `INSERT INTO platform_operators (person_id) VALUES ($1)
+       ON CONFLICT (person_id) DO NOTHING`,
+      [OPERATOR_PERSON],
+    ),
+  );
+  return bearerFor(OPERATOR_PERSON);
+}
+
+/** Signs a token with the same configuration the running application uses. */
+export async function bearerFor(
+  personId: string,
+): Promise<Record<string, string>> {
+  const issuer = new JwtAccessTokenIssuer(loadTokenConfig(process.env));
+  return {
+    authorization: `Bearer ${await issuer.issue(toPersonId(personId), new Date())}`,
+  };
+}
 
 /** Supertest types `body` as `any`; naming the shape keeps assertions honest. */
 export function body<T>(response: Response): T {
@@ -40,15 +72,16 @@ export async function createApplication(): Promise<INestApplication<App>> {
   return app;
 }
 
-export function memberHeaders(
-  tenantId: string,
+/**
+ * The tenant is no longer part of the credential: a token names a person, and
+ * the tenant comes from the path. The parameter is kept so call sites still
+ * read as "acting in this tenant as this person".
+ */
+export async function memberHeaders(
+  _tenantId: string,
   personId: string,
-): Record<string, string> {
-  return {
-    'x-actor-kind': 'tenant-member',
-    'x-tenant-id': tenantId,
-    'x-person-id': personId,
-  };
+): Promise<Record<string, string>> {
+  return bearerFor(personId);
 }
 
 export interface SeededTenant {
@@ -71,7 +104,7 @@ export async function seedTenantWithAdministrator(
 ): Promise<SeededTenant> {
   const created = await request(app.getHttpServer())
     .post('/tenants')
-    .set(OPERATOR)
+    .set(await operatorHeaders())
     .send({ name, administratorEmail: `admin-${name}@example.com` });
   if (created.status !== 201) {
     throw new Error(
@@ -88,7 +121,11 @@ export async function seedTenantWithAdministrator(
     return rows[0].person_id;
   });
 
-  return { id, administrator, headers: memberHeaders(id, administrator) };
+  return {
+    id,
+    administrator,
+    headers: await memberHeaders(id, administrator),
+  };
 }
 
 /** Adds a member through the API, the way an administrator would. */

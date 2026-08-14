@@ -5,15 +5,11 @@ import { TenantsController } from './adapters/http/tenants.controller';
 import { DrizzleModule } from './adapters/persistence/postgres/drizzle.module';
 import { PostgresPlatformUnitOfWork } from './adapters/persistence/postgres/postgres-platform-unit-of-work';
 import { PostgresTenantScopedUnitOfWork } from './adapters/persistence/postgres/postgres-tenant-scoped-unit-of-work';
-import { SystemClock } from './adapters/system/system-clock';
-import { UuidIdentifierGenerator } from './adapters/system/uuid-identifier-generator';
 import { ChangeMemberRoleUseCase } from './application/membership/change-member-role.use-case';
 import { CreateTenantMemberUseCase } from './application/membership/create-tenant-member.use-case';
 import { ListTenantMembersUseCase } from './application/membership/list-tenant-members.use-case';
 import { RevokeMembershipUseCase } from './application/membership/revoke-membership.use-case';
 import { DeactivatePersonUseCase } from './application/person/deactivate-person.use-case';
-import { CLOCK } from './application/ports/clock';
-import { IDENTIFIER_GENERATOR } from './application/ports/identifier-generator';
 import { PLATFORM_UNIT_OF_WORK } from './application/ports/platform-unit-of-work';
 import { TENANT_SCOPED_UNIT_OF_WORK } from './application/ports/tenant-scoped-unit-of-work';
 import { DeactivateTenantUseCase } from './application/tenant/deactivate-tenant.use-case';
@@ -36,8 +32,6 @@ import { ProvisionTenantUseCase } from './application/tenant/provision-tenant.us
     PlatformPeopleController,
   ],
   providers: [
-    { provide: CLOCK, useClass: SystemClock },
-    { provide: IDENTIFIER_GENERATOR, useClass: UuidIdentifierGenerator },
     {
       provide: TENANT_SCOPED_UNIT_OF_WORK,
       useClass: PostgresTenantScopedUnitOfWork,

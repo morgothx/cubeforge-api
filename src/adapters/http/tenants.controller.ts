@@ -14,7 +14,7 @@ import { DeactivateTenantUseCase } from '../../application/tenant/deactivate-ten
 import { ListTenantsUseCase } from '../../application/tenant/list-tenants.use-case';
 import { ProvisionTenantUseCase } from '../../application/tenant/provision-tenant.use-case';
 import { tenantId } from '../../domain/identifiers';
-import { actorOf } from './actor-context.middleware';
+import { actorOf } from './principal.middleware';
 import { CreateTenantRequest } from './dto/requests';
 import { toTenantResponse, type TenantResponse } from './dto/responses';
 

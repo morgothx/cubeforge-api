@@ -9,7 +9,7 @@ import {
 import type { Request } from 'express';
 import { DeactivatePersonUseCase } from '../../application/person/deactivate-person.use-case';
 import { personId } from '../../domain/identifiers';
-import { actorOf } from './actor-context.middleware';
+import { actorOf } from './principal.middleware';
 
 /**
  * Operator-facing, and deliberately the only route that names a person by their

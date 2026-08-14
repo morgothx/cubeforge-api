@@ -3,7 +3,9 @@ import {
   type MiddlewareConsumer,
   type NestModule,
 } from '@nestjs/common';
-import { createActorContextMiddleware } from './adapters/http/actor-context.middleware';
+import { PrincipalMiddleware } from './adapters/http/principal.middleware';
+import { AuthenticationModule } from './authentication.module';
+import { SystemModule } from './system.module';
 import { IdentityModule } from './identity.module';
 
 /**
@@ -12,18 +14,14 @@ import { IdentityModule } from './identity.module';
  * in this file.
  */
 @Module({
-  imports: [IdentityModule],
+  imports: [SystemModule, AuthenticationModule, IdentityModule],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    // Registered only outside production. The middleware itself refuses to be
-    // built there, so a mistake in this condition fails at startup rather than
-    // silently accepting forged actors.
-    if (process.env.NODE_ENV === 'production') {
-      return;
-    }
-    consumer
-      .apply(createActorContextMiddleware(process.env.NODE_ENV))
-      .forRoutes('*path');
+    // Registered everywhere, including production. Its predecessor could not be:
+    // it read the principal from headers and believed it, so it existed behind
+    // an environment check. There is nothing to guard against here — this one
+    // verifies a credential before it means anything.
+    consumer.apply(PrincipalMiddleware).forRoutes('*path');
   }
 }

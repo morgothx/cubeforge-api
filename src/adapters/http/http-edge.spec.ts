@@ -20,7 +20,13 @@ import { ProvisionTenantUseCase } from '../../application/tenant/provision-tenan
 import { tenantId } from '../../domain/identifiers';
 import { createIdentityTestContext } from '../testing/identity-test-context';
 import type { IdentityTestContext } from '../testing/identity-test-context';
-import { createActorContextMiddleware } from './actor-context.middleware';
+import { JwtAccessTokenIssuer } from '../crypto/access-token-issuer';
+import { RandomSecretGenerator } from '../crypto/random-secret-generator';
+import { InMemoryApiKeyStore } from '../persistence/in-memory/in-memory-api-key-store';
+import { InMemoryAuthenticatorUnitOfWork } from '../persistence/in-memory/in-memory-authenticator-unit-of-work';
+import { PrincipalResolver } from '../../application/principal-resolver';
+import { personId as toPersonId } from '../../domain/identifiers';
+import { PrincipalMiddleware } from './principal.middleware';
 import { DomainErrorFilter } from './domain-error.filter';
 import { PlatformPeopleController } from './platform-people.controller';
 import { TenantMembersController } from './tenant-members.controller';
@@ -39,22 +45,32 @@ describe('the HTTP edge', () => {
   let app: INestApplication<App>;
   let context: IdentityTestContext;
 
-  // An operator is a person now, so the provisional headers must name one.
-  const operator = {
-    'x-actor-kind': 'platform-operator',
-    'x-person-id': '018f2c00-0000-7000-8000-0000000000aa',
-  };
+  const tokens = new JwtAccessTokenIssuer({
+    secret: 'a-signing-secret-long-enough-for-the-rule',
+    accessTokenLifetimeSeconds: 900,
+  });
+  const OPERATOR_PERSON = '018f2c00-0000-7000-8000-0000000000aa';
+  let operator: Record<string, string>;
 
-  function asMember(tenantId: string, personId: string) {
+  /**
+   * Real credentials, not asserted headers. The tenant still comes from the
+   * path — a token names a person and never a tenant — so `asMember` needs only
+   * the person.
+   */
+  async function bearer(personId: string): Promise<Record<string, string>> {
     return {
-      'x-actor-kind': 'tenant-member',
-      'x-tenant-id': tenantId,
-      'x-person-id': personId,
+      authorization: `Bearer ${await tokens.issue(toPersonId(personId), new Date())}`,
     };
+  }
+
+  function asMember(_tenantId: string, personId: string) {
+    return bearer(personId);
   }
 
   beforeEach(async () => {
     context = createIdentityTestContext();
+    context.credentials.operators.add(toPersonId(OPERATOR_PERSON));
+    operator = await bearer(OPERATOR_PERSON);
 
     @Module({
       controllers: [
@@ -104,11 +120,24 @@ describe('the HTTP edge', () => {
           provide: RevokeMembershipUseCase,
           useValue: new RevokeMembershipUseCase(context.tenantScoped),
         },
+        {
+          provide: PrincipalResolver,
+          useValue: new PrincipalResolver(
+            tokens,
+            new InMemoryAuthenticatorUnitOfWork(
+              context.credentials,
+              new InMemoryApiKeyStore(),
+            ),
+            new RandomSecretGenerator(),
+            { now: () => new Date() },
+          ),
+        },
+        PrincipalMiddleware,
       ],
     })
     class EdgeTestModule implements NestModule {
       configure(consumer: MiddlewareConsumer): void {
-        consumer.apply(createActorContextMiddleware('test')).forRoutes('*path');
+        consumer.apply(PrincipalMiddleware).forRoutes('*path');
       }
     }
 
@@ -149,7 +178,7 @@ describe('the HTTP edge', () => {
 
       const response = await request(app.getHttpServer())
         .post(`/tenants/${tenantId}/members`)
-        .set(asMember(tenantId, admin))
+        .set(await asMember(tenantId, admin))
         .send({ email: 'newcomer@example.com', role: 'superuser' });
 
       expect(response.status).toBe(400);
@@ -167,7 +196,7 @@ describe('the HTTP edge', () => {
 
       const response = await request(app.getHttpServer())
         .post(`/tenants/${tenantId}/members`)
-        .set(asMember(tenantId, admin))
+        .set(await asMember(tenantId, admin))
         .send({ email: 'not-an-address', role: 'viewer' });
 
       expect(response.status).toBe(400);
@@ -196,10 +225,10 @@ describe('the HTTP edge', () => {
 
       const elsewhere = await request(app.getHttpServer())
         .delete(`/tenants/${acme}/members/${foreign!.id}`)
-        .set(asMember(acme, acmeAdmin));
+        .set(await asMember(acme, acmeAdmin));
       const nowhere = await request(app.getHttpServer())
         .delete(`/tenants/${acme}/members/does-not-exist-anywhere`)
-        .set(asMember(acme, acmeAdmin));
+        .set(await asMember(acme, acmeAdmin));
 
       expect(elsewhere.status).toBe(404);
       expect(elsewhere.status).toBe(nowhere.status);
@@ -221,10 +250,10 @@ describe('the HTTP edge', () => {
 
       const denied = await request(app.getHttpServer())
         .get(`/tenants/${tenantId}/members`)
-        .set(asMember(tenantId, viewer));
+        .set(await asMember(tenantId, viewer));
       const absent = await request(app.getHttpServer())
         .get('/tenants/no-such-tenant/members')
-        .set(asMember('no-such-tenant', viewer));
+        .set(await asMember('no-such-tenant', viewer));
 
       expect(denied.status).toBe(404);
       expect(denied.body).toEqual(absent.body);
@@ -256,7 +285,7 @@ describe('the HTTP edge', () => {
 
       const response = await request(app.getHttpServer())
         .delete(`/tenants/${tenantId}/members/${membership.id}`)
-        .set(asMember(tenantId, admin));
+        .set(await asMember(tenantId, admin));
 
       expect(response.status).toBe(409);
     });
@@ -293,7 +322,7 @@ describe('the HTTP edge', () => {
         email: 'admin@example.com',
         role: 'admin',
       });
-      const headers = asMember(tenantId, admin);
+      const headers = await asMember(tenantId, admin);
 
       const created = await request(app.getHttpServer())
         .post(`/tenants/${tenantId}/members`)
@@ -358,7 +387,7 @@ describe('the HTTP edge', () => {
 
       const response = await request(app.getHttpServer())
         .post(`/tenants/${globex}/members`)
-        .set(asMember(acme, acmeAdmin))
+        .set(await asMember(acme, acmeAdmin))
         .send({ email: 'newcomer@example.com', role: 'viewer' });
 
       expect(response.status).toBe(404);
@@ -378,7 +407,7 @@ describe('the HTTP edge', () => {
         .set(operator);
       const memberOutside = await request(app.getHttpServer())
         .post('/tenants')
-        .set(asMember(tenantId, admin))
+        .set(await asMember(tenantId, admin))
         .send({ name: 'Globex', administratorEmail: 'founder@example.com' });
 
       expect(operatorInside.status).toBe(404);
@@ -392,11 +421,45 @@ describe('the HTTP edge', () => {
     });
   });
 
-  describe('the provisional actor middleware', () => {
-    it('refuses to be built in production', () => {
-      expect(() => createActorContextMiddleware('production')).toThrow(
-        /never be registered in production/,
-      );
+  describe('no request may assert its own principal', () => {
+    it('ignores the headers the provisional middleware used to trust', async () => {
+      const tenantId = await context.seedTenant('Acme');
+      const admin = await context.seedMember({
+        tenantId,
+        email: 'admin@example.com',
+        role: 'admin',
+      });
+
+      const response = await request(app.getHttpServer())
+        .get(`/tenants/${tenantId}/members`)
+        .set({
+          'x-actor-kind': 'tenant-member',
+          'x-tenant-id': tenantId,
+          'x-person-id': admin,
+        });
+
+      expect(response.status).toBe(404);
+    });
+
+    it('refuses a token this platform did not sign', async () => {
+      const forged = new JwtAccessTokenIssuer({
+        secret: 'a-completely-different-secret-of-sufficient-size',
+        accessTokenLifetimeSeconds: 900,
+      });
+      const tenantId = await context.seedTenant('Acme');
+      const admin = await context.seedMember({
+        tenantId,
+        email: 'admin@example.com',
+        role: 'admin',
+      });
+
+      const response = await request(app.getHttpServer())
+        .get(`/tenants/${tenantId}/members`)
+        .set({
+          authorization: `Bearer ${await forged.issue(toPersonId(admin), new Date())}`,
+        });
+
+      expect(response.status).toBe(404);
     });
   });
 });

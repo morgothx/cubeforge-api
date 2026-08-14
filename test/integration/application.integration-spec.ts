@@ -6,6 +6,7 @@ import type { Response } from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { configure } from '../../src/main';
 import { asPersonInTenant, seed } from './support/database';
+import { bearerFor, operatorHeaders } from './support/application';
 import { useIntegrationDatabase } from './support/fixtures';
 
 function body<T>(response: Response): T {
@@ -27,11 +28,6 @@ describe('the application, end to end', () => {
 
   let app: INestApplication<App>;
 
-  const operator = {
-    'x-actor-kind': 'platform-operator',
-    'x-person-id': '018f2c00-0000-7000-8000-0000000000aa',
-  };
-
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -49,7 +45,7 @@ describe('the application, end to end', () => {
   it('provisions a tenant and lists it back', async () => {
     const created = await request(app.getHttpServer())
       .post('/tenants')
-      .set(operator)
+      .set(await operatorHeaders())
       .send({ name: 'Acme', administratorEmail: 'admin-Acme@example.com' });
 
     expect(created.status).toBe(201);
@@ -57,14 +53,14 @@ describe('the application, end to end', () => {
 
     const listed = await request(app.getHttpServer())
       .get('/tenants')
-      .set(operator);
+      .set(await operatorHeaders());
     expect(body<unknown[]>(listed)).toHaveLength(1);
   });
 
   it('rejects an unknown field instead of quietly ignoring it', async () => {
     const response = await request(app.getHttpServer())
       .post('/tenants')
-      .set(operator)
+      .set(await operatorHeaders())
       .send({
         name: 'Acme',
         administratorEmail: 'a@example.com',
@@ -77,7 +73,7 @@ describe('the application, end to end', () => {
   it('carries a member through creation, listing and revocation', async () => {
     const created = await request(app.getHttpServer())
       .post('/tenants')
-      .set(operator)
+      .set(await operatorHeaders())
       .send({ name: 'Acme', administratorEmail: 'admin-Acme@example.com' });
     const tenant = body<{ id: string }>(created);
 
@@ -91,11 +87,7 @@ describe('the application, end to end', () => {
       );
       return rows[0].person_id;
     });
-    const asAdmin = {
-      'x-actor-kind': 'tenant-member',
-      'x-tenant-id': tenant.id,
-      'x-person-id': adminId,
-    };
+    const asAdmin = await bearerFor(adminId);
 
     const member = await request(app.getHttpServer())
       .post(`/tenants/${tenant.id}/members`)
@@ -129,14 +121,17 @@ describe('the application, end to end', () => {
     const acme = body<{ id: string }>(
       await request(app.getHttpServer())
         .post('/tenants')
-        .set(operator)
+        .set(await operatorHeaders())
         .send({ name: 'Acme', administratorEmail: 'admin-Acme@example.com' }),
     );
     const globex = body<{ id: string }>(
-      await request(app.getHttpServer()).post('/tenants').set(operator).send({
-        name: 'Globex',
-        administratorEmail: 'admin-Globex@example.com',
-      }),
+      await request(app.getHttpServer())
+        .post('/tenants')
+        .set(await operatorHeaders())
+        .send({
+          name: 'Globex',
+          administratorEmail: 'admin-Globex@example.com',
+        }),
     );
 
     const intruder = crypto.randomUUID();
@@ -153,11 +148,7 @@ describe('the application, end to end', () => {
 
     const response = await request(app.getHttpServer())
       .get(`/tenants/${globex.id}/members`)
-      .set({
-        'x-actor-kind': 'tenant-member',
-        'x-tenant-id': globex.id,
-        'x-person-id': intruder,
-      });
+      .set(await bearerFor(intruder));
 
     expect(response.status).toBe(404);
   });

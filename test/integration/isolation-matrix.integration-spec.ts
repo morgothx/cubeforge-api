@@ -7,7 +7,7 @@ import {
   body,
   createApplication,
   memberHeaders,
-  OPERATOR,
+  operatorHeaders,
   seedTenantWithAdministrator,
   type Role,
 } from './support/application';
@@ -56,27 +56,33 @@ describe('tenant isolation', () => {
           'target@globex.example.com',
           'viewer',
         );
-        const headers = memberHeaders(globex.id, intruder.personId);
+        const headers = await memberHeaders(globex.id, intruder.personId);
 
-        const attempts = await Promise.all([
-          request(app.getHttpServer())
-            .get(`/tenants/${globex.id}/members`)
-            .set(headers),
-          request(app.getHttpServer())
-            .post(`/tenants/${globex.id}/members`)
-            .set(headers)
-            .send({ email: 'newcomer@example.com', role: 'viewer' }),
-          request(app.getHttpServer())
-            .patch(`/tenants/${globex.id}/members/${target.membershipId}`)
-            .set(headers)
-            .send({ role: 'admin' }),
-          request(app.getHttpServer())
-            .delete(`/tenants/${globex.id}/members/${target.membershipId}`)
-            .set(headers),
-        ]);
+        // Sequential on purpose: each request now resolves its principal
+        // against the database, and firing them together only tests the pool.
+        const attempts = [
+          () =>
+            request(app.getHttpServer())
+              .get(`/tenants/${globex.id}/members`)
+              .set(headers),
+          () =>
+            request(app.getHttpServer())
+              .post(`/tenants/${globex.id}/members`)
+              .set(headers)
+              .send({ email: 'newcomer@example.com', role: 'viewer' }),
+          () =>
+            request(app.getHttpServer())
+              .patch(`/tenants/${globex.id}/members/${target.membershipId}`)
+              .set(headers)
+              .send({ role: 'admin' }),
+          () =>
+            request(app.getHttpServer())
+              .delete(`/tenants/${globex.id}/members/${target.membershipId}`)
+              .set(headers),
+        ];
 
         for (const attempt of attempts) {
-          expect(attempt.status).toBe(404);
+          expect((await attempt()).status).toBe(404);
         }
         // Nothing was written on the way to being refused.
         const members = await request(app.getHttpServer())
@@ -103,7 +109,7 @@ describe('tenant isolation', () => {
           'target@globex.example.com',
           'viewer',
         );
-        const headers = memberHeaders(acme.id, intruder.personId);
+        const headers = await memberHeaders(acme.id, intruder.personId);
 
         const foreign = await request(app.getHttpServer())
           .delete(`/tenants/${acme.id}/members/${target.membershipId}`)
@@ -132,8 +138,8 @@ describe('tenant isolation', () => {
         .set(globex.headers)
         .send({ email: 'shared@example.com', role: 'viewer' });
 
-      const asAcmeAdmin = memberHeaders(acme.id, person.personId);
-      const asGlobexViewer = memberHeaders(globex.id, person.personId);
+      const asAcmeAdmin = await memberHeaders(acme.id, person.personId);
+      const asGlobexViewer = await memberHeaders(globex.id, person.personId);
 
       // Administrator in Acme: permitted.
       const inAcme = await request(app.getHttpServer())
@@ -170,18 +176,18 @@ describe('tenant isolation', () => {
     it('lets an operator create, list and deactivate tenants', async () => {
       const created = await request(app.getHttpServer())
         .post('/tenants')
-        .set(OPERATOR)
+        .set(await operatorHeaders())
         .send({ name: 'Acme', administratorEmail: 'founder@example.com' });
       expect(created.status).toBe(201);
 
       const listed = await request(app.getHttpServer())
         .get('/tenants')
-        .set(OPERATOR);
+        .set(await operatorHeaders());
       expect(body<unknown[]>(listed)).toHaveLength(1);
 
       const deactivated = await request(app.getHttpServer())
         .delete(`/tenants/${body<{ id: string }>(created).id}`)
-        .set(OPERATOR);
+        .set(await operatorHeaders());
       expect(deactivated.status).toBe(204);
     });
 
@@ -189,21 +195,25 @@ describe('tenant isolation', () => {
       const acme = await seedTenantWithAdministrator(app, 'Acme');
       const member = await addMember(app, acme, 'member@example.com', 'viewer');
 
-      const attempts = await Promise.all([
-        request(app.getHttpServer())
-          .get(`/tenants/${acme.id}/members`)
-          .set(OPERATOR),
-        request(app.getHttpServer())
-          .post(`/tenants/${acme.id}/members`)
-          .set(OPERATOR)
-          .send({ email: 'newcomer@example.com', role: 'viewer' }),
-        request(app.getHttpServer())
-          .delete(`/tenants/${acme.id}/members/${member.membershipId}`)
-          .set(OPERATOR),
-      ]);
+      const operator = await operatorHeaders();
+      const attempts = [
+        () =>
+          request(app.getHttpServer())
+            .get(`/tenants/${acme.id}/members`)
+            .set(operator),
+        () =>
+          request(app.getHttpServer())
+            .post(`/tenants/${acme.id}/members`)
+            .set(operator)
+            .send({ email: 'newcomer@example.com', role: 'viewer' }),
+        () =>
+          request(app.getHttpServer())
+            .delete(`/tenants/${acme.id}/members/${member.membershipId}`)
+            .set(operator),
+      ];
 
       for (const attempt of attempts) {
-        expect(attempt.status).toBe(404);
+        expect((await attempt()).status).toBe(404);
       }
     });
 
@@ -214,7 +224,7 @@ describe('tenant isolation', () => {
 
       const listed = await request(app.getHttpServer())
         .get('/tenants')
-        .set(OPERATOR);
+        .set(await operatorHeaders());
 
       const disclosed = JSON.stringify(listed.body);
       expect(disclosed).not.toContain('member@example.com');
@@ -231,7 +241,7 @@ describe('tenant isolation', () => {
 
       await request(app.getHttpServer())
         .delete(`/tenants/${acme.id}`)
-        .set(OPERATOR);
+        .set(await operatorHeaders());
 
       for (const personId of [
         acme.administrator,
@@ -240,7 +250,7 @@ describe('tenant isolation', () => {
       ]) {
         const attempt = await request(app.getHttpServer())
           .get(`/tenants/${acme.id}/members`)
-          .set(memberHeaders(acme.id, personId));
+          .set(await memberHeaders(acme.id, personId));
         expect(attempt.status).toBe(404);
       }
 
@@ -268,18 +278,18 @@ describe('tenant isolation', () => {
       for (const tenantId of [acme.id, globex.id]) {
         const before = await request(app.getHttpServer())
           .get(`/tenants/${tenantId}/members`)
-          .set(memberHeaders(tenantId, person.personId));
+          .set(await memberHeaders(tenantId, person.personId));
         expect(before.status).toBe(200);
       }
 
       await request(app.getHttpServer())
         .delete(`/platform/people/${person.personId}`)
-        .set(OPERATOR);
+        .set(await operatorHeaders());
 
       for (const tenantId of [acme.id, globex.id]) {
         const after = await request(app.getHttpServer())
           .get(`/tenants/${tenantId}/members`)
-          .set(memberHeaders(tenantId, person.personId));
+          .set(await memberHeaders(tenantId, person.personId));
         expect(after.status).toBe(404);
       }
 

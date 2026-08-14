@@ -254,7 +254,7 @@ which is what makes them parallel-safe.
 
 ## 6. Inbound edge
 
-- [ ] 6.1 Resolve a principal from a presented credential
+- [x] 6.1 Resolve a principal from a presented credential
   - Turn a bearer token into a person, and an API key into a machine principal
     carrying its tenant and role
   - Take the tenant of a person's request from the path, never from the token
@@ -267,7 +267,7 @@ which is what makes them parallel-safe.
   - _Boundary: Principal resolution_
   - _Depends: 5.2, 5.3_
 
-- [ ] 6.2 Replace the provisional actor middleware
+- [x] 6.2 Replace the provisional actor middleware
   - Attach the resolved principal to every request
   - Delete the header-reading middleware rather than disabling it, so no
     configuration can bring it back
@@ -431,6 +431,25 @@ them rather than rediscovering them.
   check ran `require()` in a plain Node process and concluded the package was
   usable. It was not. Any future ESM-only dependency needs the same two-place
   check that task 1.1 now performs: the runner and the compiled output.
+- **`/tenants/{id}` and `/tenants/{id}/members` mean different things.** The first
+  names a tenant an operator administers; the second names the tenant someone is
+  acting inside. The middleware's path match now requires the trailing segment,
+  or an operator deactivating a tenant is resolved as a member of it and refused.
+  Found by a test that had been passing under the header middleware.
+- A request that names a tenant is resolved as a tenant member **even when the
+  person is also an operator**, so someone who administers the platform and
+  belongs to a customer can act in both. Operator status only decides how a
+  request that names no tenant is read.
+- `SystemModule` now owns the clock and the identifier generator. They lived in
+  `IdentityModule` until authentication needed them; duplicating the providers
+  would have worked, since both are stateless, but two modules quietly answering
+  the same question is how they drift.
+- Replacing the middleware forced most of task 7.1's harness work: the
+  integration suites now mint real bearer tokens and record operator status in
+  the database instead of asserting headers. Two tests that fired four requests
+  with `Promise.all` were made sequential — each request now resolves its
+  principal against the database, and firing them together tested the pool
+  rather than the isolation.
 - The design's grant table was incomplete: the authenticating identity also
   needs `SELECT` on `people` (sign-in starts from an address, refresh must see a
   deactivation) and on `tenants` (requirement 6.3 rejects a key of an inactive
