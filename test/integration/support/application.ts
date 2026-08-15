@@ -94,9 +94,9 @@ export interface SeededTenant {
  * A tenant plus its first administrator, both created by the route.
  *
  * This used to insert the membership with raw SQL, because no route could
- * create it. Task 4.5 closed that gap: provisioning names the administrator.
- * The identifier is read back through a privileged connection only because the
- * response deliberately does not disclose it.
+ * create it. Task 4.5 closed that gap: provisioning names the administrator,
+ * and task 8.6 made it report who that turned out to be — without which an
+ * operator has no way to issue them a setup token.
  */
 export async function seedTenantWithAdministrator(
   app: INestApplication<App>,
@@ -111,15 +111,10 @@ export async function seedTenantWithAdministrator(
       `provisioning failed with ${created.status}: ${JSON.stringify(created.body)}`,
     );
   }
-  const { id } = body<{ id: string }>(created);
-
-  const administrator = await seed(async (client) => {
-    const { rows } = await client.query<{ person_id: string }>(
-      'SELECT person_id FROM memberships WHERE tenant_id = $1',
-      [id],
-    );
-    return rows[0].person_id;
-  });
+  const { id, administratorPersonId: administrator } = body<{
+    id: string;
+    administratorPersonId: string;
+  }>(created);
 
   return {
     id,

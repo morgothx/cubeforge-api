@@ -398,7 +398,7 @@ These are the tests that make the feature defensible rather than merely working.
   - _Boundary: Operator boundary tests_
   - _Depends: 7.1_
 
-- [ ] 8.6 Prove the bootstrap gap is closed and the bypass is gone
+- [x] 8.6 Prove the bootstrap gap is closed and the bypass is gone
   - Walk the whole path with no direct database writes: provision a tenant with
     its administrator, issue a setup token, redeem it, sign in, add a member,
     refresh, sign out
@@ -708,3 +708,25 @@ them rather than rediscovering them.
 - The in-memory harness now seeds an operator as a person (`seedOperator`),
   because a bare identifier in the operator set no longer resolves to anybody.
   That is the fixture matching reality rather than a concession to the test.
+- **8.6 closed the bootstrap gap with a second command, not a wider one.**
+  `ops:bootstrap-operator <email>` creates the person if absent, records them as
+  an operator and issues the first setup token, printed once. `grant-operator`
+  is untouched and still refuses an address it cannot find — that guard is task
+  2.3's and a flag on it would have removed the only protection against a typo
+  creating a stray operator. Decided with Camilo on 2026-08-15.
+- The bootstrap act needed migration `0010`: FORCE ROW LEVEL SECURITY applies to
+  the owner, so the migration identity could insert people and operator records
+  (0002, 0007) but not a setup token. The new policy is INSERT only — that
+  identity may set a credential in motion and can never read one back.
+- Provisioning now answers with `administratorPersonId`. Without it the operator
+  who just named an administrator has no way to issue them a setup token: no
+  route discloses a person's identifier, and members are only listed to members.
+  It discloses nothing, since the operator supplied the address themselves. The
+  listing route does not carry it — browsing the platform is not that errand.
+  Two integration harnesses dropped their privileged read-back as a result.
+- `SETUP_TOKEN_VALIDITY_HOURS` moved into the domain, because the script and the
+  use case both decide how long a token lives and two answers would be one too
+  many.
+- The 8.6 walk calls `bootstrapOperator` directly rather than shelling out, so
+  it exercises the function the script's `main` calls. Verified by removing the
+  operator-recording step: four of the five tests fail.

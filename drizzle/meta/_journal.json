@@ -71,6 +71,13 @@
       "when": 1786665074352,
       "tag": "0009_authenticator_tenant_status",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786814949879,
+      "tag": "0010_migrator_setup_token_bootstrap",
+      "breakpoints": true
     }
   ]
 }

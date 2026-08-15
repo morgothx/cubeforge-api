@@ -24,7 +24,7 @@ describe('provisioning and listing tenants', () => {
   });
 
   it('creates an active tenant and records when it was created', async () => {
-    const tenant = await provision.execute({
+    const { tenant, administratorPersonId } = await provision.execute({
       actor: context.operator,
       name: 'Acme',
       administratorEmail: 'founder@example.com',
@@ -36,6 +36,11 @@ describe('provisioning and listing tenants', () => {
       createdAt: TEST_MOMENT,
     });
     expect(tenant.id).toBeDefined();
+    // Returned so the operator can issue this administrator a setup token.
+    // Without it a freshly provisioned tenant has nobody able to sign in to it.
+    expect(context.store.people.get(administratorPersonId)?.email).toBe(
+      'founder@example.com',
+    );
   });
 
   it('rejects a name already in use', async () => {
@@ -139,7 +144,7 @@ describe('provisioning a tenant with its first administrator', () => {
   });
 
   it('grants the named person an active administrator membership', async () => {
-    const tenant = await provision.execute({
+    const { tenant } = await provision.execute({
       actor: context.operator,
       name: 'Acme',
       administratorEmail: 'founder@example.com',
@@ -175,8 +180,12 @@ describe('provisioning a tenant with its first administrator', () => {
       administratorEmail: 'brand-new@example.com',
     });
 
+    // The shape, not the values: the administrator's identifier necessarily
+    // differs between a person who already existed and one just created, and
+    // the operator typed both addresses themselves, so it tells them nothing
+    // the request did not already say.
     expect(Object.keys(known).sort()).toEqual(Object.keys(unknown).sort());
-    expect(existing.id).not.toBe(known.id);
+    expect(existing.tenant.id).not.toBe(known.tenant.id);
     // The known address created no second person, and nothing in the response
     // says so.
     expect(context.store.people.size).toBe(2);

@@ -7,12 +7,11 @@ this, then `.kiro/specs/authentication/tasks.md`.
 
 - **Feature 1 `tenant-and-user-management`: complete.** 32/32 tasks, spec phase
   `implemented`.
-- **Feature 2 `authentication`: 32/33 tasks.** Sections 1 to 7 complete, and
-  8.1 to 8.5 with them. Only 8.6 remains.
-- Último commit: `refactor(authentication): compose the application once and
-  test what runs` (task 7.1). Tasks 8.1 to 8.5 are in the working tree,
-  uncommitted.
-- Tests: `pnpm test` 227 passing, `pnpm test:integration` 103 passing,
+- **Feature 2 `authentication`: complete.** 33/33 tasks, spec phase
+  `implemented`.
+- Último commit: `test(authentication): prove the boundaries this feature exists
+  to draw` (tasks 8.1 to 8.5). Task 8.6 is in the working tree, uncommitted.
+- Tests: `pnpm test` 227 passing, `pnpm test:integration` 108 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
 
 Camilo commits. Propose a message, never run `git commit`.
@@ -26,23 +25,27 @@ summarize, propose a Conventional Commits message in English, and wait.
 `/kiro-impl` autonomous mode commits per task, so it is banned. Use **manual mode,
 block by block**. This was decided in an earlier session and reaffirmed.
 
-## Next task: 8.6, the last one
+## Next: feature 2 is finished
 
-8.1 to 8.5 are done — five new integration suites, listed at the bottom of
-`tasks.md` along with what each one had to be broken against to be believed.
-8.6 is the one with real work left in it, because **the bootstrap gap is still
-open**:
+All 33 tasks are done and `spec.json` reads `implemented`. Nothing in the
+`authentication` spec is outstanding.
 
-- `ops:grant-operator` refuses an address it cannot find, and no route creates a
-  person without an operator — so the first person has to be inserted by the
-  migration identity.
-- That first operator can then never obtain a password: issuing a setup token
-  requires an operator bearer token, and nothing else issues one.
-- The 7.1 smoke walk only completed because a token was minted out of band with
-  the application's signing key. 8.6 must close this; the likely shape is
-  `grant-operator` creating the person when absent and issuing the first setup
-  token, since it already holds the root of trust. Confirm the shape with Camilo
-  before building it — it changes an operational script, not just a test.
+The platform now has an entrance:
+
+```
+pnpm ops:bootstrap-operator founder@example.com
+  → creates the person if absent, records them as an operator,
+    prints one setup token
+POST /auth/credentials {"token": "…", "password": "…"}
+POST /auth/sign-in
+```
+
+`ops:grant-operator` is unchanged and still refuses an address it cannot find —
+that guard is task 2.3's, and widening it would have removed the only protection
+against a typo creating a stray operator. The two commands are deliberately
+separate: one creates, the other does not.
+
+The next feature is Camilo's call; the roadmap has step 3 after this one.
 
 Composition itself is done: `AuthenticationModule` binds the crypto ports and
 the throttler, `PersistenceModule` the two units of work, `SystemModule` the
@@ -53,6 +56,7 @@ fails a test.
 The routes that now exist:
 
 ```
+POST   /tenants                                   201 {id, name, status, createdAt, administratorPersonId}
 POST   /auth/sign-in                              200 {accessToken, refreshToken, sessionExpiresAt}
 POST   /auth/refresh                              200 same shape
 POST   /auth/sign-out                             204
@@ -109,7 +113,8 @@ docker compose up -d postgres     # the local database
 pnpm db:bootstrap                 # once per fresh database
 pnpm db:migrate
 pnpm lint && pnpm test && pnpm test:integration && pnpm build
-pnpm ops:grant-operator <email>   # the only way to create a platform operator
+pnpm ops:bootstrap-operator <email>  # the first way in: creates, records, issues a token
+pnpm ops:grant-operator <email>      # promotes an existing person; refuses an unknown one
 ```
 
 ## Conventions

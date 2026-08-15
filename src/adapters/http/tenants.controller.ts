@@ -16,7 +16,12 @@ import { ProvisionTenantUseCase } from '../../application/tenant/provision-tenan
 import { tenantId } from '../../domain/identifiers';
 import { actorOf } from './principal.middleware';
 import { CreateTenantRequest } from './dto/requests';
-import { toTenantResponse, type TenantResponse } from './dto/responses';
+import {
+  toProvisionedTenantResponse,
+  toTenantResponse,
+  type ProvisionedTenantResponse,
+  type TenantResponse,
+} from './dto/responses';
 
 /** Operator-facing. Every method here refuses a tenant member. */
 @Controller('tenants')
@@ -31,13 +36,14 @@ export class TenantsController {
   async create(
     @Req() request: Request,
     @Body() body: CreateTenantRequest,
-  ): Promise<TenantResponse> {
-    const tenant = await this.provision.execute({
-      actor: actorOf(request),
-      name: body.name,
-      administratorEmail: body.administratorEmail,
-    });
-    return toTenantResponse(tenant);
+  ): Promise<ProvisionedTenantResponse> {
+    return toProvisionedTenantResponse(
+      await this.provision.execute({
+        actor: actorOf(request),
+        name: body.name,
+        administratorEmail: body.administratorEmail,
+      }),
+    );
   }
 
   @Get()

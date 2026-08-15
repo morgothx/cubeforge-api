@@ -3,6 +3,7 @@ import type { IssuedSession } from '../../../application/authentication/sign-in.
 import type { CreateTenantMemberResult } from '../../../application/membership/create-tenant-member.use-case';
 import type { ApiKeySummary } from '../../../application/ports/api-key.repository';
 import type { MembershipWithPerson } from '../../../application/ports/membership.repository';
+import type { ProvisionedTenant } from '../../../application/tenant/provision-tenant.use-case';
 import type { OpaqueSecret } from '../../../domain/credential/secrets';
 import type { Tenant } from '../../../domain/tenant/tenant.entity';
 
@@ -24,6 +25,24 @@ export function toTenantResponse(tenant: Tenant): TenantResponse {
     name: tenant.name,
     status: tenant.status,
     createdAt: tenant.createdAt.toISOString(),
+  };
+}
+
+/**
+ * What provisioning answers, which is a tenant plus the one fact the operator
+ * needs next: who they just made its administrator. Listing tenants does not
+ * carry it — an operator browsing the platform has no such errand.
+ */
+export interface ProvisionedTenantResponse extends TenantResponse {
+  readonly administratorPersonId: string;
+}
+
+export function toProvisionedTenantResponse(
+  provisioned: ProvisionedTenant,
+): ProvisionedTenantResponse {
+  return {
+    ...toTenantResponse(provisioned.tenant),
+    administratorPersonId: provisioned.administratorPersonId,
   };
 }
 

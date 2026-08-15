@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { OpaqueSecret } from '../../domain/credential/secrets';
+import { setupTokenDeadline } from '../../domain/credential/setup-token';
 import type { PersonId } from '../../domain/identifiers';
 import type { ActorContext } from '../actor-context';
 import { CLOCK, type Clock } from '../ports/clock';
@@ -21,9 +22,6 @@ export interface IssueSetupTokenCommand {
   readonly actor: ActorContext;
   readonly personId: PersonId;
 }
-
-/** Twenty-four hours: long enough to hand over, short enough to matter if lost. */
-const VALIDITY_HOURS = 24;
 
 /**
  * Only a platform operator may set a credential in motion.
@@ -52,9 +50,7 @@ export class IssueSetupTokenUseCase {
     requirePlatformOperator(command.actor);
 
     const token = this.secrets.generate();
-    const expiresAt = new Date(
-      this.clock.now().getTime() + VALIDITY_HOURS * 3_600_000,
-    );
+    const expiresAt = setupTokenDeadline(this.clock.now());
 
     await this.platform.runAsOperator(({ setupTokens }) =>
       setupTokens.insert({

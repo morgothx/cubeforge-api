@@ -375,6 +375,8 @@ check, the family invalidation, or the decoy verification must each fail a test.
 | `src/adapters/http/principal.middleware.ts` | Replaces the provisional middleware |
 | `src/authentication.module.ts` | Binds this feature's ports |
 | `scripts/grant-operator.ts` | The bootstrap act of 11.5, outside the API |
+| `scripts/bootstrap-operator.ts` | The first way in: creates the person, records the operator, issues the first setup token |
+| `src/adapters/http/operator-action.interceptor.ts` | Records which operator did what (11.6) |
 | `drizzle/0005_*.sql` … | Tables, the fourth role, grants and policies |
 
 ### Modified
@@ -406,7 +408,7 @@ check, the family invalidation, or the decoy verification must each fail a test.
 | 8 Tenant bootstrap | 8.1–8.4 | `provision-tenant.use-case`, `tenants.controller` |
 | 9 Guessing resistance | 9.1–9.4 | `@nestjs/throttler`, decoy verification |
 | 10 Verified principals | 10.1–10.3 | `principal.middleware`, deletion of `actor-context.middleware` |
-| 11 Operators are people | 11.1–11.6 | `platform_operators`, `principal-resolver`, `scripts/grant-operator.ts` |
+| 11 Operators are people | 11.1–11.6 | `platform_operators`, `principal-resolver`, `scripts/grant-operator.ts`, `scripts/bootstrap-operator.ts`, `operator-action.interceptor` |
 | 12 What is recorded | 12.1, 12.2 | `domain-error.filter`, logging in the resolver |
 
 ---

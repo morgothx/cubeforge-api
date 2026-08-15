@@ -228,10 +228,22 @@ describe('the HTTP edge', () => {
       expect(created.body).toMatchObject({ name: 'Acme', status: 'active' });
       const tenant = body<{ id: string }>(created);
 
+      // The administrator's identifier comes back with the tenant, because the
+      // operator's next act is to issue them a setup token and no route would
+      // otherwise tell them who to issue it to.
+      expect(
+        body<{ administratorPersonId: string }>(created).administratorPersonId,
+      ).toEqual(expect.any(String));
+
       const listed = await request(app.getHttpServer())
         .get('/tenants')
         .set(operator);
       expect(body<unknown[]>(listed)).toHaveLength(1);
+      // Only provisioning carries it. Browsing the platform is not an errand
+      // that needs anybody's identifier.
+      expect(body<Record<string, unknown>[]>(listed)[0]).not.toHaveProperty(
+        'administratorPersonId',
+      );
 
       const deactivated = await request(app.getHttpServer())
         .delete(`/tenants/${tenant.id}`)

@@ -10,12 +10,8 @@ import { DeactivatePersonUseCase } from '../../src/application/person/deactivate
 import { DeactivateTenantUseCase } from '../../src/application/tenant/deactivate-tenant.use-case';
 import { ProvisionTenantUseCase } from '../../src/application/tenant/provision-tenant.use-case';
 import type { ActorContext } from '../../src/application/actor-context';
-import {
-  personId,
-  type PersonId,
-  type TenantId,
-} from '../../src/domain/identifiers';
-import { runtimePool, seed } from './support/database';
+import { type PersonId, type TenantId } from '../../src/domain/identifiers';
+import { runtimePool } from './support/database';
 import { useIntegrationDatabase } from './support/fixtures';
 
 const CREATED_AT = new Date('2026-01-01T00:00:00.000Z');
@@ -70,30 +66,25 @@ describe('the identity use cases against PostgreSQL', () => {
 
   /**
    * Bootstrapping a tenant needs its first administrator, and creating a member
-   * requires an administrator to already exist. Seeding that one membership
-   * directly is the only way in; every later step goes through the use cases.
+   * requires an administrator to already exist. Provisioning names them and
+   * reports who they are, so every step here goes through the use cases.
    */
   async function tenantWithAdministrator(name: string): Promise<{
     tenantId: TenantId;
     admin: ActorContext;
   }> {
-    const tenant = await provisionTenant.execute({
+    const { tenant, administratorPersonId } = await provisionTenant.execute({
       actor: operator,
       name,
       administratorEmail: `admin-${name}@example.com`,
     });
-    // Read back through a privileged connection: provisioning deliberately does
-    // not disclose the administrator's identifier in its response.
-    const admin = await seed(async (client) => {
-      const { rows } = await client.query<{ person_id: string }>(
-        'SELECT person_id FROM memberships WHERE tenant_id = $1',
-        [tenant.id],
-      );
-      return personId(rows[0].person_id);
-    });
     return {
       tenantId: tenant.id,
-      admin: { kind: 'tenant-member', personId: admin, tenantId: tenant.id },
+      admin: {
+        kind: 'tenant-member',
+        personId: administratorPersonId,
+        tenantId: tenant.id,
+      },
     };
   }
 

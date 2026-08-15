@@ -24,7 +24,8 @@
     "db:bootstrap": "node --env-file-if-exists=.env -r ts-node/register scripts/bootstrap-roles.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "ops:grant-operator": "node --env-file-if-exists=.env -r ts-node/register scripts/grant-operator.ts"
+    "ops:grant-operator": "node --env-file-if-exists=.env -r ts-node/register scripts/grant-operator.ts",
+    "ops:bootstrap-operator": "node --env-file-if-exists=.env -r ts-node/register scripts/bootstrap-operator.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
