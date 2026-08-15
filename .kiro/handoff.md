@@ -7,10 +7,10 @@ this, then `.kiro/specs/authentication/tasks.md`.
 
 - **Feature 1 `tenant-and-user-management`: complete.** 32/32 tasks, spec phase
   `implemented`.
-- **Feature 2 `authentication`: 26/33 tasks.** Sections 1 to 6 complete.
-- Último commit: `feat(authentication): expose the authentication, credential
-  and API key routes`. Task 6.5 (throttling, correlation, failure logging) is in
-  the working tree, uncommitted.
+- **Feature 2 `authentication`: 27/33 tasks.** Sections 1 to 7 complete; only
+  section 8, the validation suites, remains.
+- Último commit: `feat(authentication): throttle the credential endpoints and
+  record failures`. Task 7.1 (composition) is in the working tree, uncommitted.
 - Tests: `pnpm test` 226 passing, `pnpm test:integration` 69 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
 
@@ -25,13 +25,27 @@ summarize, propose a Conventional Commits message in English, and wait.
 `/kiro-impl` autonomous mode commits per task, so it is banned. Use **manual mode,
 block by block**. This was decided in an earlier session and reaffirmed.
 
-## Next task: 7.1, then section 8
+## Next task: section 8, the validation suites
 
-7.1 is mostly done already: `AuthenticationModule` binds the crypto ports and
-the throttler, `PersistenceModule` binds the two units of work, the controllers
-are registered, and `SystemModule` carries the correlation middleware. What remains
-is whatever 7.1 asks for beyond that. Then section 8, the validation suites —
-five of its six tasks are marked `(P)` and can run in parallel.
+8.1 to 8.5 are marked `(P)` and can run in parallel. 8.6 is the one with real
+work left in it, because **the bootstrap gap is still open**:
+
+- `ops:grant-operator` refuses an address it cannot find, and no route creates a
+  person without an operator — so the first person has to be inserted by the
+  migration identity.
+- That first operator can then never obtain a password: issuing a setup token
+  requires an operator bearer token, and nothing else issues one.
+- The 7.1 smoke walk only completed because a token was minted out of band with
+  the application's signing key. 8.6 must close this; the likely shape is
+  `grant-operator` creating the person when absent and issuing the first setup
+  token, since it already holds the root of trust. Confirm the shape with Camilo
+  before building it — it changes an operational script, not just a test.
+
+Composition itself is done: `AuthenticationModule` binds the crypto ports and
+the throttler, `PersistenceModule` the two units of work, `SystemModule` the
+clock, identifiers and correlation middleware. The unit suite boots the real
+`AppModule` through `createInMemoryApplication`, so a missing registration now
+fails a test.
 
 The routes that now exist:
 

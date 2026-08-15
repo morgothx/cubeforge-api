@@ -1,54 +1,15 @@
-import {
-  Logger,
-  MiddlewareConsumer,
-  Module,
-  NestModule,
-  ValidationPipe,
-} from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { Logger } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import type { Response } from 'supertest';
-import { IssueApiKeyUseCase } from '../../application/api-key/issue-api-key.use-case';
-import { ListApiKeysUseCase } from '../../application/api-key/list-api-keys.use-case';
-import { RevokeApiKeyUseCase } from '../../application/api-key/revoke-api-key.use-case';
-import { RefreshSessionUseCase } from '../../application/authentication/refresh-session.use-case';
-import { SignInUseCase } from '../../application/authentication/sign-in.use-case';
-import { SignOutUseCase } from '../../application/authentication/sign-out.use-case';
-import { IssueSetupTokenUseCase } from '../../application/credential/issue-setup-token.use-case';
-import { RedeemSetupTokenUseCase } from '../../application/credential/redeem-setup-token.use-case';
-import { ChangeMemberRoleUseCase } from '../../application/membership/change-member-role.use-case';
-import { CreateTenantMemberUseCase } from '../../application/membership/create-tenant-member.use-case';
-import { ListTenantMembersUseCase } from '../../application/membership/list-tenant-members.use-case';
-import { RevokeMembershipUseCase } from '../../application/membership/revoke-membership.use-case';
-import { DeactivatePersonUseCase } from '../../application/person/deactivate-person.use-case';
-import { DeactivateTenantUseCase } from '../../application/tenant/deactivate-tenant.use-case';
-import { ListTenantsUseCase } from '../../application/tenant/list-tenants.use-case';
-import { ProvisionTenantUseCase } from '../../application/tenant/provision-tenant.use-case';
 import { tenantId } from '../../domain/identifiers';
 import { createIdentityTestContext } from '../testing/identity-test-context';
+import { createInMemoryApplication } from '../testing/in-memory-application';
 import type { IdentityTestContext } from '../testing/identity-test-context';
 import { Argon2PasswordHasher } from '../crypto/argon2-password-hasher';
 import { JwtAccessTokenIssuer } from '../crypto/access-token-issuer';
-import { RandomSecretGenerator } from '../crypto/random-secret-generator';
-import { InMemoryAuthenticatorUnitOfWork } from '../persistence/in-memory/in-memory-authenticator-unit-of-work';
-import { PrincipalResolver } from '../../application/principal-resolver';
 import { personId as toPersonId } from '../../domain/identifiers';
-import { CorrelationMiddleware } from './correlation.middleware';
-import {
-  CredentialThrottlerGuard,
-  throttlerOptions,
-} from './credential-throttling';
-import { PrincipalMiddleware } from './principal.middleware';
-import { ApiKeysController } from './api-keys.controller';
-import { AuthenticationController } from './authentication.controller';
-import { CredentialSetupController } from './credential-setup.controller';
-import { DomainErrorFilter } from './domain-error.filter';
-import { PlatformPeopleController } from './platform-people.controller';
-import { TenantMembersController } from './tenant-members.controller';
-import { TenantsController } from './tenants.controller';
 
 /**
  * Supertest types `body` as `any`, which the strict rules reject. Naming the
@@ -73,7 +34,6 @@ describe('the HTTP edge', () => {
     timeCost: 1,
     parallelism: 1,
   });
-  const secrets = new RandomSecretGenerator();
   /**
    * Small enough that a test can exhaust a bucket in a few requests, and still
    * large enough that the tests which merely sign in once are unaffected.
@@ -107,160 +67,13 @@ describe('the HTTP edge', () => {
     context = createIdentityTestContext();
     context.credentials.operators.add(toPersonId(OPERATOR_PERSON));
     operator = await bearer(OPERATOR_PERSON);
-    const authenticator = new InMemoryAuthenticatorUnitOfWork(
-      context.credentials,
-      context.apiKeys,
-    );
 
-    @Module({
-      imports: [ThrottlerModule.forRoot(throttlerOptions(THROTTLING))],
-      controllers: [
-        TenantsController,
-        TenantMembersController,
-        PlatformPeopleController,
-        AuthenticationController,
-        CredentialSetupController,
-        ApiKeysController,
-      ],
-      providers: [
-        {
-          provide: ProvisionTenantUseCase,
-          useValue: new ProvisionTenantUseCase(
-            context.platform,
-            context.tenantScoped,
-            context.clock,
-            context.identifiers,
-          ),
-        },
-        {
-          provide: ListTenantsUseCase,
-          useValue: new ListTenantsUseCase(context.platform),
-        },
-        {
-          provide: DeactivateTenantUseCase,
-          useValue: new DeactivateTenantUseCase(context.platform),
-        },
-        {
-          provide: DeactivatePersonUseCase,
-          useValue: new DeactivatePersonUseCase(context.platform),
-        },
-        {
-          provide: CreateTenantMemberUseCase,
-          useValue: new CreateTenantMemberUseCase(
-            context.tenantScoped,
-            context.clock,
-            context.identifiers,
-          ),
-        },
-        {
-          provide: ListTenantMembersUseCase,
-          useValue: new ListTenantMembersUseCase(context.tenantScoped),
-        },
-        {
-          provide: ChangeMemberRoleUseCase,
-          useValue: new ChangeMemberRoleUseCase(context.tenantScoped),
-        },
-        {
-          provide: RevokeMembershipUseCase,
-          useValue: new RevokeMembershipUseCase(context.tenantScoped),
-        },
-        {
-          provide: SignInUseCase,
-          useValue: new SignInUseCase(
-            authenticator,
-            hasher,
-            tokens,
-            secrets,
-            context.clock,
-            context.identifiers,
-          ),
-        },
-        {
-          provide: RefreshSessionUseCase,
-          useValue: new RefreshSessionUseCase(
-            authenticator,
-            tokens,
-            secrets,
-            context.clock,
-            context.identifiers,
-          ),
-        },
-        {
-          provide: SignOutUseCase,
-          useValue: new SignOutUseCase(authenticator, secrets, context.clock),
-        },
-        {
-          provide: IssueSetupTokenUseCase,
-          useValue: new IssueSetupTokenUseCase(
-            context.platform,
-            secrets,
-            context.clock,
-            context.identifiers,
-          ),
-        },
-        {
-          provide: RedeemSetupTokenUseCase,
-          useValue: new RedeemSetupTokenUseCase(
-            authenticator,
-            hasher,
-            context.clock,
-            secrets,
-          ),
-        },
-        {
-          provide: IssueApiKeyUseCase,
-          useValue: new IssueApiKeyUseCase(
-            context.tenantScoped,
-            secrets,
-            context.clock,
-            context.identifiers,
-          ),
-        },
-        {
-          provide: ListApiKeysUseCase,
-          useValue: new ListApiKeysUseCase(context.tenantScoped),
-        },
-        {
-          provide: RevokeApiKeyUseCase,
-          useValue: new RevokeApiKeyUseCase(
-            context.tenantScoped,
-            context.clock,
-          ),
-        },
-        {
-          provide: PrincipalResolver,
-          // The same key store the tenant-scoped unit of work writes to, so a
-          // key issued through the route is a key that can then authenticate.
-          useValue: new PrincipalResolver(
-            tokens,
-            authenticator,
-            secrets,
-            context.clock,
-          ),
-        },
-        PrincipalMiddleware,
-        CorrelationMiddleware,
-        CredentialThrottlerGuard,
-      ],
-    })
-    class EdgeTestModule implements NestModule {
-      configure(consumer: MiddlewareConsumer): void {
-        consumer
-          .apply(CorrelationMiddleware, PrincipalMiddleware)
-          .forRoutes('*path');
-      }
-    }
-
-    const moduleRef = await Test.createTestingModule({
-      imports: [EdgeTestModule],
-    }).compile();
-
-    app = moduleRef.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }),
-    );
-    app.useGlobalFilters(new DomainErrorFilter());
-    await app.init();
+    app = await createInMemoryApplication({
+      context,
+      hasher,
+      tokens,
+      throttling: THROTTLING,
+    });
   });
 
   afterEach(async () => {

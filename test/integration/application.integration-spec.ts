@@ -6,7 +6,11 @@ import type { Response } from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { configure } from '../../src/main';
 import { asPersonInTenant, seed } from './support/database';
-import { bearerFor, operatorHeaders } from './support/application';
+import {
+  bearerFor,
+  operatorHeaders,
+  signInThrough,
+} from './support/application';
 import { useIntegrationDatabase } from './support/fixtures';
 
 function body<T>(response: Response): T {
@@ -149,17 +153,10 @@ describe('the application, end to end', () => {
         }),
     );
 
-    const intruder = crypto.randomUUID();
-    await asPersonInTenant(acme.id, async (client) => {
-      await client.query(
-        'SELECT find_or_create_person($1::uuid, $2::citext, now())',
-        [intruder, 'admin@acme.example.com'],
-      );
-      await client.query(
-        'INSERT INTO memberships (id, tenant_id, person_id, role) VALUES ($1, $2, $3, $4)',
-        [crypto.randomUUID(), acme.id, intruder, 'admin'],
-      );
-    });
+    // Acme's own administrator, created by provisioning rather than by an
+    // insert: a principal a test arranged by hand is a principal the system
+    // might never produce, and this test is about what a real one may reach.
+    const intruder = await administratorOf(acme.id);
 
     const response = await request(app.getHttpServer())
       .get(`/tenants/${globex.id}/members`)
@@ -190,30 +187,13 @@ describe('the application, end to end', () => {
         .set(await bearerFor(await administratorOf(tenant.id))),
     );
 
-    const issued = await request(app.getHttpServer())
-      .post(`/platform/people/${admin.personId}/setup-tokens`)
-      .set(await operatorHeaders());
-    expect(issued.status).toBe(201);
-
-    const redeemed = await request(app.getHttpServer())
-      .post('/auth/credentials')
-      .send({
-        token: body<{ setupToken: string }>(issued).setupToken,
-        password: 'correct horse battery staple',
-      });
-    expect(redeemed.status).toBe(204);
-
-    const signedIn = await request(app.getHttpServer())
-      .post('/auth/sign-in')
-      .send({
-        email: 'admin-acme@example.com',
-        password: 'correct horse battery staple',
-      });
-    expect(signedIn.status).toBe(200);
-    const session = body<{ accessToken: string; refreshToken: string }>(
-      signedIn,
+    const session = await signInThrough(
+      app,
+      admin.personId,
+      'admin-acme@example.com',
+      'correct horse battery staple',
     );
-    const asAdmin = { authorization: `Bearer ${session.accessToken}` };
+    const asAdmin = session.headers;
 
     const key = await request(app.getHttpServer())
       .post(`/tenants/${tenant.id}/api-keys`)

@@ -329,7 +329,7 @@ which is what makes them parallel-safe.
 
 ## 7. Integration
 
-- [ ] 7.1 Compose authentication into the application
+- [x] 7.1 Compose authentication into the application
   - Bind every contract to its adapter in one module and import it into the root
   - Keep the same bindings swappable for in-memory adapters under test
   - Update the existing integration and end-to-end suites to arrange principals
@@ -641,3 +641,33 @@ them rather than rediscovering them.
   matches `[A-Za-z0-9._-]{8,128}`. The value goes into log lines, so a caller
   must not be able to write newlines or a megabyte into them; an unusable one is
   replaced rather than refused, because the request itself was fine.
+- **The edge suite now boots the real `AppModule`** with the database swapped
+  for memory (`createInMemoryApplication`), instead of listing the same
+  controllers and providers in a test module of its own. The hand-built module
+  passed just as happily when the real composition root was missing something:
+  unregistering `ApiKeysController` failed three tests only after the change,
+  and none before. `configure` is imported from `main.ts` rather than repeated,
+  so the pipe and the filter under test are the ones that run.
+- Overriding `DrizzleModule` with a stub is what keeps that suite free of a
+  database. Overriding only the units of work is not enough — the module's
+  providers call `loadDatabaseConfig` at construction, which would demand a full
+  set of connection variables from a suite that has no database to connect to.
+- The throttling limits are read from the environment when the module is
+  *defined*, which a test cannot influence. The resolved options are replaced
+  instead, through `getOptionsToken()`.
+- **The bootstrap gap is not closed yet, and task 8.6 will have to close it.**
+  Verified by hand against the running application: `ops:grant-operator` refuses
+  an address it cannot find, and no route creates a person without an operator,
+  so the first person must be inserted by the migration identity. Worse, that
+  first operator can never obtain a password — issuing a setup token requires an
+  operator bearer token, and there is no other way to get one. The smoke walk
+  below only completed because a token was minted out of band with the
+  application's own signing key. Whatever 8.6 does, the likely shape is
+  `grant-operator` creating the person when absent and issuing the first setup
+  token, since it already holds the root of trust.
+- **Smoke-tested against `node dist/main.js` and the local database**: provision
+  a tenant, issue a setup token, redeem it, sign in, list members with the token
+  that came back, issue an API key, present it (refused on a member route, and
+  recorded as used), list keys with no secret in the listing, refresh, replay the
+  retired token (404), sign out. Every response carried `x-correlation-id`, the
+  log lines carried the cause against it, and no log line contained the password.

@@ -128,6 +128,58 @@ export async function seedTenantWithAdministrator(
   };
 }
 
+export interface EstablishedSession {
+  readonly headers: Record<string, string>;
+  readonly refreshToken: string;
+}
+
+/**
+ * A session obtained the way a person actually obtains one: an operator issues
+ * a setup token, the holder redeems it into a password, and that password buys
+ * a session.
+ *
+ * `bearerFor` mints a token directly, which is a genuine credential — the
+ * resolver verifies its signature like any other — and is what most suites use,
+ * because arranging a password costs two Argon2 hashes per principal and proves
+ * nothing they are testing. This is for the suites where the credential path
+ * *is* the subject.
+ */
+export async function signInThrough(
+  app: INestApplication<App>,
+  personId: string,
+  email: string,
+  password: string,
+): Promise<EstablishedSession> {
+  const issued = await request(app.getHttpServer())
+    .post(`/platform/people/${personId}/setup-tokens`)
+    .set(await operatorHeaders());
+  expectStatus(issued, 201, 'issuing a setup token');
+
+  const redeemed = await request(app.getHttpServer())
+    .post('/auth/credentials')
+    .send({ token: body<{ setupToken: string }>(issued).setupToken, password });
+  expectStatus(redeemed, 204, 'redeeming a setup token');
+
+  const signedIn = await request(app.getHttpServer())
+    .post('/auth/sign-in')
+    .send({ email, password });
+  expectStatus(signedIn, 200, 'signing in');
+
+  const session = body<{ accessToken: string; refreshToken: string }>(signedIn);
+  return {
+    headers: { authorization: `Bearer ${session.accessToken}` },
+    refreshToken: session.refreshToken,
+  };
+}
+
+function expectStatus(response: Response, status: number, step: string): void {
+  if (response.status !== status) {
+    throw new Error(
+      `${step} failed with ${response.status}: ${JSON.stringify(response.body)}`,
+    );
+  }
+}
+
 /** Adds a member through the API, the way an administrator would. */
 export async function addMember(
   app: INestApplication<App>,
