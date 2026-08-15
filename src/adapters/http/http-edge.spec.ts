@@ -65,7 +65,7 @@ describe('the HTTP edge', () => {
 
   beforeEach(async () => {
     context = createIdentityTestContext();
-    context.credentials.operators.add(toPersonId(OPERATOR_PERSON));
+    context.seedOperator(toPersonId(OPERATOR_PERSON), 'operator@example.com');
     operator = await bearer(OPERATOR_PERSON);
 
     app = await createInMemoryApplication({
@@ -117,13 +117,17 @@ describe('the HTTP edge', () => {
         role: 'admin',
       });
 
+      const before = context.store.people.size;
+
       const response = await request(app.getHttpServer())
         .post(`/tenants/${tenantId}/members`)
         .set(await asMember(tenantId, admin))
         .send({ email: 'not-an-address', role: 'viewer' });
 
       expect(response.status).toBe(400);
-      expect(context.store.people.size).toBe(1);
+      // Counted as a delta rather than an absolute: the operator is a person
+      // too, and this test is about nobody new being created.
+      expect(context.store.people.size).toBe(before);
     });
   });
 

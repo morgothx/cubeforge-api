@@ -6,6 +6,7 @@ import {
 } from '../../domain/identifiers';
 import { createMembership } from '../../domain/membership/membership.entity';
 import type { Role } from '../../domain/membership/role';
+import { createPerson } from '../../domain/person/person.entity';
 import { createTenant } from '../../domain/tenant/tenant.entity';
 import { InMemoryApiKeyStore } from '../persistence/in-memory/in-memory-api-key-store';
 import { InMemoryCredentialStore } from '../persistence/in-memory/in-memory-credential-store';
@@ -73,6 +74,24 @@ export function createIdentityTestContext() {
     );
   }
 
+  /**
+   * An operator who is also a person, which is now the only kind there is:
+   * operator status is only honoured while the person behind it is active, so
+   * a bare identifier in the operator set resolves to nobody.
+   */
+  function seedOperator(id: PersonId, email: string): PersonId {
+    store.people.set(
+      id,
+      createPerson({
+        id,
+        email: emailAddress(email),
+        createdAt: clock.now(),
+      }),
+    );
+    credentials.operators.add(id);
+    return id;
+  }
+
   function actingAs(tenantId: TenantId, personId: PersonId): ActorContext {
     return { kind: 'tenant-member', personId, tenantId };
   }
@@ -95,6 +114,7 @@ export function createIdentityTestContext() {
     identifiers,
     seedTenant,
     seedMember,
+    seedOperator,
     actingAs,
     operator,
   };

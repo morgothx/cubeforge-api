@@ -281,6 +281,25 @@ describe('the in-memory authenticating adapters', () => {
 
       expect(answers).toEqual([true, false]);
     });
+
+    it('reports nobody who has been deactivated, however they are recorded', async () => {
+      const deactivated = { id: person, status: 'deactivated' as const };
+      const store = new InMemoryCredentialStore({
+        byEmail: () => deactivated,
+        byId: () => deactivated,
+      });
+      // Left in the operator set on purpose. Deactivating a person does not
+      // remove the record, so if the record alone decided, deactivating a
+      // compromised operator would be the one act that changed nothing.
+      store.operators.add(person);
+
+      const answer = await new InMemoryAuthenticatorUnitOfWork(
+        store,
+        keys,
+      ).runAuthenticating(({ operators }) => operators.isOperator(person));
+
+      expect(answer).toBe(false);
+    });
   });
 
   it('never exposes an unused secret to a caller holding only a digest', () => {

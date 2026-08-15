@@ -85,13 +85,21 @@ function header(request: Request, name: string): string | undefined {
 }
 
 /**
+ * The principal if one resolved, for the callers that have something to do
+ * either way. Everything that needs an actor to proceed uses `actorOf`.
+ */
+export function resolvedActor(request: Request): ActorContext | null {
+  return (request as RequestWithActor)[ACTOR] ?? null;
+}
+
+/**
  * An unresolved actor is reported as absence, not as a challenge. There is no
  * credential to challenge for that would tell the caller anything they are
  * entitled to know, and requirement 9.2 already wants every unauthorized
  * outcome to look the same.
  */
 export function actorOf(request: Request): ActorContext {
-  const actor = (request as RequestWithActor)[ACTOR];
+  const actor = resolvedActor(request);
   if (!actor) {
     throw new DomainViolation(
       { kind: 'not-found' },

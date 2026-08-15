@@ -1,6 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DomainErrorFilter } from './adapters/http/domain-error.filter';
+import { OperatorActionInterceptor } from './adapters/http/operator-action.interceptor';
 import { AppModule } from './app.module';
 
 /**
@@ -21,6 +22,7 @@ async function bootstrap(): Promise<void> {
 export function configure(app: {
   useGlobalPipes: (pipe: ValidationPipe) => unknown;
   useGlobalFilters: (filter: DomainErrorFilter) => unknown;
+  useGlobalInterceptors: (interceptor: OperatorActionInterceptor) => unknown;
 }): void {
   app.useGlobalPipes(
     new ValidationPipe({
@@ -32,6 +34,7 @@ export function configure(app: {
     }),
   );
   app.useGlobalFilters(new DomainErrorFilter());
+  app.useGlobalInterceptors(new OperatorActionInterceptor());
 }
 
 if (require.main === module) {

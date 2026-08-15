@@ -282,12 +282,24 @@ class PostgresOperatorStatusRepository implements OperatorStatusRepository {
   /**
    * Read on every request rather than carried in a token, so withdrawing
    * operator status takes effect immediately (requirement 11.4).
+   *
+   * The join is not decoration. Deactivating a person platform-wide already
+   * ends their access as a member, because membership resolution reads their
+   * status; without this it would not end their access as an operator, and
+   * deactivating a compromised operator would be the one case where the act
+   * does the least.
    */
   async isOperator(personId: PersonId): Promise<boolean> {
     const rows = await this.tx
       .select({ present: sql<number>`1` })
       .from(platformOperators)
-      .where(eq(platformOperators.personId, personId))
+      .innerJoin(people, eq(people.id, platformOperators.personId))
+      .where(
+        and(
+          eq(platformOperators.personId, personId),
+          eq(people.status, 'active'),
+        ),
+      )
       .limit(1);
 
     return rows.length > 0;

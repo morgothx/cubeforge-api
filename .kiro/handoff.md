@@ -7,11 +7,12 @@ this, then `.kiro/specs/authentication/tasks.md`.
 
 - **Feature 1 `tenant-and-user-management`: complete.** 32/32 tasks, spec phase
   `implemented`.
-- **Feature 2 `authentication`: 27/33 tasks.** Sections 1 to 7 complete; only
-  section 8, the validation suites, remains.
-- Último commit: `feat(authentication): throttle the credential endpoints and
-  record failures`. Task 7.1 (composition) is in the working tree, uncommitted.
-- Tests: `pnpm test` 226 passing, `pnpm test:integration` 69 passing,
+- **Feature 2 `authentication`: 32/33 tasks.** Sections 1 to 7 complete, and
+  8.1 to 8.5 with them. Only 8.6 remains.
+- Último commit: `refactor(authentication): compose the application once and
+  test what runs` (task 7.1). Tasks 8.1 to 8.5 are in the working tree,
+  uncommitted.
+- Tests: `pnpm test` 227 passing, `pnpm test:integration` 103 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
 
 Camilo commits. Propose a message, never run `git commit`.
@@ -25,10 +26,12 @@ summarize, propose a Conventional Commits message in English, and wait.
 `/kiro-impl` autonomous mode commits per task, so it is banned. Use **manual mode,
 block by block**. This was decided in an earlier session and reaffirmed.
 
-## Next task: section 8, the validation suites
+## Next task: 8.6, the last one
 
-8.1 to 8.5 are marked `(P)` and can run in parallel. 8.6 is the one with real
-work left in it, because **the bootstrap gap is still open**:
+8.1 to 8.5 are done — five new integration suites, listed at the bottom of
+`tasks.md` along with what each one had to be broken against to be believed.
+8.6 is the one with real work left in it, because **the bootstrap gap is still
+open**:
 
 - `ops:grant-operator` refuses an address it cannot find, and no route creates a
   person without an operator — so the first person has to be inserted by the

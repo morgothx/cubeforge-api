@@ -205,8 +205,12 @@ class InMemoryApiKeyResolvingRepository implements ApiKeyResolvingRepository {
 class InMemoryOperatorStatusRepository implements OperatorStatusRepository {
   constructor(private readonly store: InMemoryCredentialStore) {}
 
+  /** Recorded *and* still an active person; see the Postgres implementation. */
   isOperator(personId: PersonId): Promise<boolean> {
-    return Promise.resolve(this.store.operators.has(personId));
+    return Promise.resolve(
+      this.store.operators.has(personId) &&
+        this.store.personById(personId)?.status === 'active',
+    );
   }
 }
 

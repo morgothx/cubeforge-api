@@ -345,7 +345,7 @@ which is what makes them parallel-safe.
 
 These are the tests that make the feature defensible rather than merely working.
 
-- [ ] 8.1 Prove that credentials are unreachable from the tenant-scoped identity
+- [x] 8.1 Prove that credentials are unreachable from the tenant-scoped identity
   - Assert the tenant-scoped identity is refused on credentials, refresh tokens
     and operator status as a permission error rather than an empty result
   - Assert an administrator listing their members cannot obtain any digest
@@ -354,7 +354,7 @@ These are the tests that make the feature defensible rather than merely working.
   - _Boundary: Credential isolation tests_
   - _Depends: 7.1_
 
-- [ ] 8.2 (P) Prove authentication discloses nothing
+- [x] 8.2 (P) Prove authentication discloses nothing
   - Assert an unknown address, an address without a credential and a wrong
     password produce identical responses
   - Assert the same for a redeemed, expired and invented setup token
@@ -365,7 +365,7 @@ These are the tests that make the feature defensible rather than merely working.
   - _Boundary: Non-disclosure tests_
   - _Depends: 7.1_
 
-- [ ] 8.3 (P) Prove session revocation behaves as specified
+- [x] 8.3 (P) Prove session revocation behaves as specified
   - Assert re-using an exchanged refresh token ends the whole family
   - Assert signing out everywhere leaves no refresh token accepted
   - Assert an already-issued access token remains usable until it expires, which
@@ -376,7 +376,7 @@ These are the tests that make the feature defensible rather than merely working.
   - _Boundary: Session revocation tests_
   - _Depends: 7.1_
 
-- [ ] 8.4 (P) Prove API keys are confined to their tenant
+- [x] 8.4 (P) Prove API keys are confined to their tenant
   - Assert a key presented against another tenant's route is answered as an
     absence
   - Assert a revoked key is refused, and a key of an inactive tenant is refused
@@ -386,7 +386,7 @@ These are the tests that make the feature defensible rather than merely working.
   - _Boundary: API key isolation tests_
   - _Depends: 7.1_
 
-- [ ] 8.5 (P) Prove the operator boundary depends on recorded status
+- [x] 8.5 (P) Prove the operator boundary depends on recorded status
   - Assert a person not recorded as an operator cannot act as one, whatever the
     request contains
   - Assert withdrawing operator status takes effect on the next request without
@@ -671,3 +671,40 @@ them rather than rediscovering them.
   recorded as used), list keys with no secret in the listing, refresh, replay the
   retired token (404), sign out. Every response carried `x-correlation-id`, the
   log lines carried the cause against it, and no log line contained the password.
+- Task 8.1 asks the grant question of the catalogue as well as of statements.
+  Four statements per table catch a grant widened for writes while reads stay
+  refused, but an unusual privilege — TRUNCATE, REFERENCES — would pass all four
+  and still be a grant nobody meant to give, so `role_table_grants` is asserted
+  empty for `cubeforge_app` on every secret table.
+- A denial suite can pass by proving nothing is there. Every refusal in 8.1 is
+  paired with the same query as `cubeforge_authenticator`, which must succeed:
+  renaming or dropping a credential table would otherwise turn the whole file
+  green. The digest comparison is guarded the same way — `not.toContain('')`
+  holds for every response ever written, so the fixture asserts it read a real
+  `$argon2` digest before comparing against it.
+- Task 8.3 pins the seam rather than hiding it: an access token already issued
+  stays usable after signing out everywhere, until it expires. That is the cost
+  of verifying tokens by signature alone, which is what keeps ordinary requests
+  off the credential tables. A test asserts it, so closing the seam later has to
+  be a decision rather than a discovery.
+- Task 8.4 needed the policy-bypassing pool. Every route-level confinement test
+  passes with the API key repository's tenant predicate deleted, because
+  row-level security covers for it — which is what the second layer is for, and
+  why it cannot be the only witness. Two tests drive the repository through a
+  superuser connection, and those are the ones that fail when the predicate goes.
+- **Found in 8.5 and fixed: a deactivated person kept their operator powers.**
+  `isOperator` asked only whether the person was recorded as an operator, and
+  deactivating a person does not remove that record. Membership resolution reads
+  person status, so deactivation ended a member's access at once and an
+  operator's not at all — the one case where the act did the least. Both adapters
+  now require the person to be active as well as recorded.
+- **Requirement 11.6 was structural only.** The operator principal carried a
+  `personId` and nothing wrote it anywhere, so no operator action was actually
+  recorded. Added `OperatorActionInterceptor`, registered in `configure()`:
+  one interceptor covers every operator route including the ones added next,
+  which a rule applied per controller does not. It logs the correlation
+  identifier, the operator's id, the request and whether it succeeded — the
+  identifier and never the address, since 12.1 applies to staff too.
+- The in-memory harness now seeds an operator as a person (`seedOperator`),
+  because a bare identifier in the operator set no longer resolves to anybody.
+  That is the fixture matching reality rather than a concession to the test.
