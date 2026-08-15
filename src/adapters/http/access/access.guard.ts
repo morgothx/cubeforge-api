@@ -40,10 +40,23 @@ export class AccessGuard implements CanActivate {
       throw refusal('this route needs a principal and none was resolved');
     }
 
+    if ('operator' in declaration) {
+      // Read from the actor every time, never remembered between requests:
+      // operator status lives in storage and the resolver consults it per
+      // request, so withdrawing it takes effect at once rather than when a
+      // token happens to expire.
+      if (actor.kind !== 'platform-operator') {
+        throw refusal(
+          `this route is for operators; this caller is a ${actor.kind}`,
+        );
+      }
+      return true;
+    }
+
     // Everything the guard has not yet learned to judge is refused rather than
-    // admitted. Passes still to come teach it the operator and role cases; a
-    // half-built guard that let through what it could not evaluate would be
-    // worse than no guard, because it would look like one.
+    // admitted. The pass still to come teaches it tenant roles; a half-built
+    // guard that let through what it could not evaluate would be worse than no
+    // guard, because it would look like one.
     throw refusal(
       `this declaration is not yet enforced: ${JSON.stringify(declaration)}`,
     );

@@ -23,6 +23,12 @@ import { AccessGuard } from './access.guard';
 /** Records whether the route behind the guard was ever reached. */
 const entered = new Set<string>();
 
+/**
+ * Principals whose standing has been withdrawn since their credential was
+ * issued. The header stays the same; what it resolves to does not.
+ */
+const withdrawn = new Set<string>();
+
 @Controller('undeclared')
 class UndeclaredController {
   @Get()
@@ -72,7 +78,11 @@ class OperatorController {
 class ActorFromHeader implements NestMiddleware {
   use(req: Request, _res: Response, next: NextFunction): void {
     const claimed = req.headers['x-test-actor'];
-    if (typeof claimed === 'string' && claimed in ACTORS) {
+    if (
+      typeof claimed === 'string' &&
+      claimed in ACTORS &&
+      !withdrawn.has(claimed)
+    ) {
       attachActor(req, ACTORS[claimed]);
     }
     next();
@@ -113,15 +123,14 @@ class GuardedModule implements NestModule {
 }
 
 /**
- * The guard's first pass: what it refuses before it knows anything about
- * memberships.
+ * What the guard refuses, and the little it admits so far.
  *
- * Everything except a route that declares itself public is refused here,
- * including routes whose declaration the guard cannot yet evaluate. Failing
- * closed is what lets this be built in passes at all — a half-built guard that
- * admitted what it had not learned to judge would be worse than none.
+ * Anything whose declaration it has not yet learned to evaluate is refused
+ * rather than admitted. Failing closed is what lets this be built in passes at
+ * all — a half-built guard that let through what it could not judge would be
+ * worse than none, because it would look like protection.
  */
-describe('the access guard, before it resolves anything', () => {
+describe('the access guard', () => {
   let app: INestApplication<App>;
 
   const ABSENCE = {
@@ -144,6 +153,7 @@ describe('the access guard, before it resolves anything', () => {
 
   beforeEach(() => {
     entered.clear();
+    withdrawn.clear();
   });
 
   describe('a route that declares nothing', () => {
@@ -193,6 +203,91 @@ describe('the access guard, before it resolves anything', () => {
 
       expect(response.status).toBe(200);
       expect(entered.has('open')).toBe(true);
+    });
+  });
+
+  describe('a route that declares an operator', () => {
+    it('admits a platform operator', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/operators')
+        .set({ 'x-test-actor': 'operator' });
+
+      expect(response.status).toBe(200);
+      expect(entered.has('operators')).toBe(true);
+    });
+
+    it.each(['member', 'machine'])(
+      'refuses a %s as an absence',
+      async (actor) => {
+        const response = await request(app.getHttpServer())
+          .get('/operators')
+          .set({ 'x-test-actor': actor });
+
+        expect(response.status).toBe(404);
+        expect(response.body).toEqual(ABSENCE);
+        expect(entered.size).toBe(0);
+      },
+    );
+
+    it('refuses the same caller the moment their standing is withdrawn', async () => {
+      const asOperator = () =>
+        request(app.getHttpServer())
+          .get('/operators')
+          .set({ 'x-test-actor': 'operator' });
+
+      expect((await asOperator()).status).toBe(200);
+
+      // Nothing about the request changes; what it resolves to does. Operator
+      // status lives in storage and the resolver reads it per request, so a
+      // withdrawal takes effect on the next call rather than when a token
+      // expires. Whether the *resolver* re-reads is feature 2's claim and is
+      // proven end to end in `operator-boundary.integration-spec.ts`; what this
+      // asserts is that the guard adds no memory of its own in front of it.
+      withdrawn.add('operator');
+
+      expect((await asOperator()).status).toBe(404);
+    });
+
+    it('judges each caller on its own, having just admitted another', async () => {
+      const admitted = await request(app.getHttpServer())
+        .get('/operators')
+        .set({ 'x-test-actor': 'operator' });
+      expect(admitted.status).toBe(200);
+
+      // The discriminating pair, in one test rather than across two that happen
+      // to run in this order: a guard that cached the route's first verdict
+      // would answer 200 here, and the withdrawal test above would not catch it
+      // because a withdrawn operator resolves to no principal at all.
+      const refused = await request(app.getHttpServer())
+        .get('/operators')
+        .set({ 'x-test-actor': 'member' });
+
+      expect(refused.status).toBe(404);
+      expect(refused.body).toEqual(ABSENCE);
+    });
+  });
+
+  describe('the two kinds of principal, refused in both directions', () => {
+    it('refuses an operator on a route that declares tenant roles', async () => {
+      // Refused today by the branch that has not learned to judge roles yet;
+      // 2.3 must keep this failing for the right reason rather than by
+      // accident, which is why it is asserted before that pass rather than
+      // after.
+      const response = await request(app.getHttpServer())
+        .get('/restricted')
+        .set({ 'x-test-actor': 'operator' });
+
+      expect(response.status).toBe(404);
+      expect(entered.size).toBe(0);
+    });
+
+    it('refuses a tenant member on a route that declares an operator', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/operators')
+        .set({ 'x-test-actor': 'member' });
+
+      expect(response.status).toBe(404);
+      expect(entered.size).toBe(0);
     });
   });
 

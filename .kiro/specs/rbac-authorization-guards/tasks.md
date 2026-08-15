@@ -58,7 +58,7 @@ four conflicting versions of one file.
   - _Requirements: 1.2, 1.4, 1.5, 5.5_
   - _Boundary: Access guard_
 
-- [ ] 2.2 Enforce the operator declaration
+- [x] 2.2 Enforce the operator declaration
   - Admit a platform operator; refuse everyone else as an absence
   - Refuse an operator on a route that declares tenant roles, and refuse a
     tenant member on a route that declares an operator
@@ -281,3 +281,15 @@ inherits them rather than rediscovering them.
   tests, and the one that matters is "never lets the handler run" — a route that
   executed and then answered 404 would satisfy every status assertion and have
   already done its work.
+- **A test can pass for the wrong reason and look like proof.** 2.2's withdrawal
+  test — admit an operator, withdraw the status, refuse the same credential —
+  survived a guard deliberately broken to cache its first verdict per route.
+  Withdrawing operator status makes the resolver return *no principal at all*,
+  so the refusal came from the null-actor branch and never reached the cache.
+  The discriminating pair is one caller admitted and a different caller refused
+  on the same route, in a single test rather than across two that happen to run
+  in that order. Found by breaking the guard, not by reading the test.
+- 6.3 is split on purpose: that the *resolver* re-reads operator status per
+  request is feature 2's claim, already proven end to end in
+  `operator-boundary.integration-spec.ts`. What 2.2 asserts is narrower and is
+  the only part this feature owns — that the guard adds no memory in front of it.

@@ -9,15 +9,16 @@ this, then `.kiro/specs/authentication/tasks.md`.
   `implemented`.
 - **Feature 2 `authentication`: complete.** 33/33 tasks, spec phase
   `implemented`.
-- **Feature 3 `rbac-authorization-guards`: 3/19 tasks.** Section 1 (declaration
-  and route inventory) is committed; 2.1 (the guard's first pass) is in the
-  working tree, uncommitted.
-- Último commit: `feat(rbac-authorization-guards): declare route access, and
-  enumerate what declares it` (tasks 1.1 and 1.2).
-- Tests: `pnpm test` 253 passing, `pnpm test:integration` 108 passing,
+- **Feature 3 `rbac-authorization-guards`: 4/19 tasks.** Sections 1 and tasks
+  2.1–2.2 done; 2.2 (the operator declaration) is in the working tree,
+  uncommitted.
+- Último commit: `feat(rbac-authorization-guards): refuse a route that declares
+  nothing` (task 2.1).
+- Tests: `pnpm test` 260 passing, `pnpm test:integration` 108 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
-- Next task: 2.2, the operator declaration. Run it as
-  `/kiro-impl rbac-authorization-guards 2.2` — **with the task number**, which
+- Next task: 2.3, tenant roles resolved against a membership — the largest task
+  in the feature. Run it as
+  `/kiro-impl rbac-authorization-guards 2.3` — **with the task number**, which
   is what selects manual mode. Manual mode has no commit step at all; without
   numbers it commits per task and breaks the rule below.
 
