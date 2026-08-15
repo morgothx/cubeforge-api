@@ -47,11 +47,19 @@ export const ACCESS_DECLARATION = Symbol('ACCESS_DECLARATION');
 export function Access(
   declaration: AccessDeclaration,
 ): CustomDecorator<symbol> {
-  reject(declaration);
+  assertUsable(declaration);
   return SetMetadata(ACCESS_DECLARATION, declaration);
 }
 
-function reject(declaration: AccessDeclaration): void {
+/**
+ * Throws unless the declaration could mean something.
+ *
+ * Exported so the suite that walks every route can ask the same question of
+ * what is actually attached, rather than trusting that everything went through
+ * `Access` — metadata is data, and a test that re-checks it is checking the
+ * application rather than this function.
+ */
+export function assertUsable(declaration: AccessDeclaration): void {
   const written = JSON.stringify(declaration);
   const refuse = (reason: string): never => {
     throw new Error(`this access declaration ${reason}: ${written}`);

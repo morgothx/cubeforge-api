@@ -1,4 +1,10 @@
-import { Controller, Get, Post, type INestApplication } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  SetMetadata,
+  type INestApplication,
+} from '@nestjs/common';
 import {
   DiscoveryModule,
   DiscoveryService,
@@ -12,7 +18,7 @@ import { Argon2PasswordHasher } from '../../crypto/argon2-password-hasher';
 import { JwtAccessTokenIssuer } from '../../crypto/access-token-issuer';
 import { createIdentityTestContext } from '../../testing/identity-test-context';
 import { createInMemoryApplication } from '../../testing/in-memory-application';
-import { Access } from './access.decorator';
+import { ACCESS_DECLARATION, Access, assertUsable } from './access.decorator';
 import { RouteInventory, type DeclaredRoute } from './route-inventory';
 
 /**
@@ -111,6 +117,26 @@ describe('the route inventory', () => {
       list: { public: true },
       create: { roles: ['admin'] },
     });
+  });
+
+  it('reports a declaration that bypassed the decorator as unusable', async () => {
+    @Controller('smuggled')
+    class SmuggledController {
+      // `SetMetadata` with the same key, skipping the validation `Access` runs.
+      // A route declaring an empty role list permits nobody, which is a typo
+      // wearing the costume of a decision.
+      @Get()
+      @SetMetadata(ACCESS_DECLARATION, { roles: [] })
+      list(): void {}
+    }
+
+    const inventory = await inventoryOf(SmuggledController);
+    const [route] = inventory.all();
+
+    expect(route.declaration).toEqual({ roles: [] });
+    expect(() => {
+      assertUsable(route.declaration!);
+    }).toThrow(/permits nobody/);
   });
 
   it('finds a controller nobody told it about', async () => {
@@ -227,6 +253,51 @@ describe('the route inventory, against the real application', () => {
       'GET /tenants/:tenantId/api-keys': { roles: ['admin'] },
       'DELETE /tenants/:tenantId/api-keys/:apiKeyId': { roles: ['admin'] },
     });
+  });
+
+  /**
+   * The claim that survives the table above.
+   *
+   * That table lists every route by name, so today the two say the same thing.
+   * They stop saying the same thing the moment somebody adds a route: the table
+   * would have to be updated by hand, and this would not. This is the one that
+   * catches the route nobody thought about.
+   */
+  it('leaves no route undeclared', () => {
+    const undeclared = routes
+      .filter((route) => route.declaration === null)
+      .map(
+        (route) =>
+          `${route.method} ${route.path} — ${route.controller}.${route.handler}`,
+      );
+
+    expect(undeclared).toEqual([]);
+  });
+
+  /**
+   * The narrow case this catches, stated precisely: `Access` validates when the
+   * module is imported, so a declaration it rejects crashes startup and no test
+   * ever runs. What remains reachable is metadata attached *without* going
+   * through `Access` — `SetMetadata` with the same key, which is exactly what a
+   * well-meaning developer reaches for. The test below this one proves the
+   * check has teeth against that case.
+   */
+  it('carries no declaration that could not mean anything', () => {
+    const unusable = routes.flatMap((route) => {
+      if (route.declaration === null) {
+        return [];
+      }
+      try {
+        assertUsable(route.declaration);
+        return [];
+      } catch (error) {
+        return [
+          `${route.method} ${route.path}: ${error instanceof Error ? error.message : String(error)}`,
+        ];
+      }
+    });
+
+    expect(unusable).toEqual([]);
   });
 
   it('admits no machine caller on any route it ships with', () => {

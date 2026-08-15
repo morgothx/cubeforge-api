@@ -9,20 +9,20 @@ this, then `.kiro/specs/authentication/tasks.md`.
   `implemented`.
 - **Feature 2 `authentication`: complete.** 33/33 tasks, spec phase
   `implemented`.
-- **Feature 3 `rbac-authorization-guards`: 13/19 tasks. The feature is live.**
-  Sections 1–4 complete: the guard is registered globally, every route is
-  declared, and an undeclared route is refused. 4.5 is in the working tree,
-  uncommitted. Only section 5, the validation suites, remains.
-- Último commit: `feat(rbac-authorization-guards): declare access on all sixteen
-  routes` (tasks 4.1–4.4). Note its subject lost its leading `f` — `eat(...)`.
-- Tests: `pnpm test` 278 passing, `pnpm test:integration` 109 passing,
+- **Feature 3 `rbac-authorization-guards`: 14/19 tasks. The feature is live.**
+  Sections 1–4 complete and 5.1 with them. 5.1 is in the working tree,
+  uncommitted. Five validation tasks remain.
+- Último commit: `feat(rbac-authorization-guards): register the guard for every
+  route` (task 4.5). An earlier one, tasks 4.1–4.4, has a typo'd subject:
+  `eat(...)` instead of `feat(...)`.
+- Tests: `pnpm test` 281 passing, `pnpm test:integration` 109 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
-- Next task: 5.1, proving no route is undeclared and no declaration is
-  meaningless. Section 5 is the validation suite; 5.3 (the tenant × role matrix
-  over every route) is the big one, and must be built with actors the platform
-  can actually produce — see the note about that under section 2. Run it as
-  `/kiro-impl rbac-authorization-guards 5.1` — **with the task number**, which
-  is what selects manual mode. Manual mode has no commit step at all; without
+- Next task: 5.2, proving the declared roles and the enforced roles have not
+  drifted. Then 5.3, the tenant × role matrix over every route — the big one,
+  and it must be built with actors the platform can actually produce (see the
+  note under section 2 about an actor's tenant always being the path's). Run it
+  as `/kiro-impl rbac-authorization-guards 5.2` — **with the task number**,
+  which is what selects manual mode. Manual mode has no commit step at all; without
   numbers it commits per task and breaks the rule below.
 
 Camilo commits. Propose a message, never run `git commit`.

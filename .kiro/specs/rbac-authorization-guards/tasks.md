@@ -179,7 +179,7 @@ so 4.5 is last and is the task that makes the feature live.
 
 ## 5. Validation
 
-- [ ] 5.1 Prove no route is undeclared, and no declaration is meaningless
+- [x] 5.1 Prove no route is undeclared, and no declaration is meaningless
   - Assert every route in the assembled application carries a declaration, and
     name the offenders when one does not
   - Assert no declaration is self-contradictory or permits nobody, and that no
@@ -419,3 +419,23 @@ inherits them rather than rediscovering them.
   logs "no credential for this address", which only the use case can say. The
   public declaration let one through and the guard stopped the other, and the
   caller cannot tell which happened.
+- **5.1's RED could not come from the test failing** — the application already
+  satisfies it. It came from the condition the task actually names: that the
+  failure be legible. Verified by removing one declaration and *reading the
+  output*, which prints
+  `DELETE /tenants/:tenantId/api-keys/:apiKeyId — ApiKeysController.destroy`.
+  Actionable without opening a file.
+- **`Access` validates when the module is imported, so an unusable declaration
+  crashes startup rather than failing a test.** Discovered while trying to break
+  the "no meaningless declaration" assertion: making the check stricter stopped
+  the suite from loading at all, with the stack pointing at
+  `credential-setup.controller.ts` being imported. The assertion therefore
+  guards a narrower case than it looked like it did — metadata attached with
+  `SetMetadata` directly, bypassing `Access`, which is exactly what a
+  well-meaning developer reaches for. A test now proves it catches that.
+- `assertUsable` is exported from the decorator (it was the private `reject`) so
+  the suite asks the same question of what is actually attached, rather than
+  trusting that everything went through `Access`.
+- The undeclared-route test and the declaration table say the same thing today,
+  because the table lists all sixteen. They diverge the moment a route is added:
+  the table needs a hand, this one does not. That is why both exist.
