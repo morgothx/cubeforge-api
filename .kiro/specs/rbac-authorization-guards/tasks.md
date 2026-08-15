@@ -110,7 +110,7 @@ four conflicting versions of one file.
 
 ## 3. What the use cases enforce, said out loud
 
-- [ ] 3.1 Name the roles each tenant-scoped use case enforces, and widen the
+- [x] 3.1 Name the roles each tenant-scoped use case enforces, and widen the
       listing
   - Replace the role literal inside each of the seven tenant-scoped
     authorization calls with a named value the use case exports
@@ -123,7 +123,11 @@ four conflicting versions of one file.
   - Done when the seven values are exported and used, the listing use case
     admits all three roles, and the existing use-case suites still pass with the
     widened rule asserted
-  - _Requirements: 2.1, 4.2_
+  - Withhold every email address from a caller who is not an administrator
+    here, so widening who may read the listing discloses nothing requirement
+    10.3 of `tenant-and-user-management` reserves to administrators. The
+    decision belongs to the use case, which already knows the caller's role
+  - _Requirements: 2.1, 2.1.1, 4.2_
   - _Boundary: Application use cases_
 
 ## 4. Declare the routes, then turn the guard on
@@ -357,3 +361,27 @@ inherits them rather than rediscovering them.
   nothing to fail first. The spec keeps a deliberately generous ceiling (50 ms)
   that will never trip on a busy laptop but does catch a lost index or a
   resolution that starts issuing a query per membership.
+- **3.1 hit a conflict between two approved requirements and stopped.** Widening
+  the member listing to editor and viewer contradicts requirement 10.3 of
+  `tenant-and-user-management` — a person's email address is reserved to
+  administrators of a tenant they belong to — because the listing carries every
+  member's address. The use case even said so in its own docstring, written in
+  feature 1, and neither the requirements phase nor the design phase noticed.
+  Settled with Camilo on 2026-08-15: **10.3 stands, and the listing withholds
+  addresses from non-administrators.** Requirement 2.1.1 and a design section
+  were written before any code, rather than after.
+- The rule lives in the use case, not the response mapper. What a caller may
+  learn is a rule about access, and the layer that just resolved their role to
+  answer at all is the one that knows it.
+- The response omits `email` entirely rather than sending `null`, so a listing
+  without addresses says "not for you" instead of implying these people have
+  none.
+- Incidental tightening: the use case used to return the repository's
+  `MembershipWithPerson`, which carries the raw membership status the route
+  never published. `ListedMember` publishes exactly what the route answers with
+  — `active`, not `status` — so two integration specs that had been reaching
+  through to `.membership.status` now assert what a caller can actually see.
+- One existing edge test had used "a viewer listing members" as its example of a
+  denial. That is no longer a denial, so it now uses the API keys, which remain
+  the administrator's alone. A test whose premise a feature removes has to be
+  re-aimed, not deleted.

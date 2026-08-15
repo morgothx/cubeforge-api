@@ -65,6 +65,14 @@ central design question of this feature.
 becomes reachable by all three roles; every mutation stays with the
 administrator.
 
+**Reading it does not mean reading everything in it.** The listing carries email
+addresses, and feature 1's requirement 10.3 reserves those to administrators of
+a tenant the person belongs to. Widening who may call the route would otherwise
+quietly weaken a disclosure rule this platform already made, so the listing
+answers a non-administrator without addresses rather than being closed to them.
+That conflict was found while implementing and settled deliberately, not by
+whichever requirement happened to be read last.
+
 **A role declaration is about people.** An API key carries a role of its own,
 and admitting a machine caller is a separate statement a route makes
 deliberately. No route admits one today, and that must be written rather than
@@ -136,6 +144,10 @@ requires is visible where the endpoint is defined.
 - **2.1** When a tenant member requests the list of their tenant's members, the
   Authorization Service shall permit the request while their role is
   administrator, editor or viewer.
+- **2.1.1** While the requesting member's role is not administrator, the
+  Authorization Service shall omit every email address from that listing, so
+  that widening who may read it discloses nothing requirement 10.3 of
+  `tenant-and-user-management` reserves to administrators.
 - **2.2** If a tenant member whose role is editor or viewer requests any change
   to their tenant's membership, the Authorization Service shall deny the
   request.

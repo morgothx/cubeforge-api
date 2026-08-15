@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { DomainViolation } from '../../domain/errors';
 import type { ApiKeyId } from '../../domain/identifiers';
+import type { Role } from '../../domain/membership/role';
 import type { ActorContext } from '../actor-context';
 import { CLOCK, type Clock } from '../ports/clock';
 import {
@@ -14,6 +15,11 @@ export interface RevokeApiKeyCommand {
   readonly apiKeyId: ApiKeyId;
 }
 
+/** Cutting off a machine caller is an administrative act. */
+export const REVOKE_API_KEY_ROLES = [
+  'admin',
+] as const satisfies readonly Role[];
+
 @Injectable()
 export class RevokeApiKeyUseCase {
   constructor(
@@ -26,7 +32,11 @@ export class RevokeApiKeyUseCase {
     await this.unitOfWork.runInTenant(
       tenantOf(command.actor),
       async (repositories) => {
-        await authorizeInTenant(repositories, command.actor, ['admin']);
+        await authorizeInTenant(
+          repositories,
+          command.actor,
+          REVOKE_API_KEY_ROLES,
+        );
 
         // Looked up first so a key belonging to another tenant is reported as
         // absent. Revoking blind would succeed silently — the repository

@@ -16,6 +16,11 @@ export interface ChangeMemberRoleCommand {
   readonly role: string;
 }
 
+/** Changing what a colleague may do is the administrator's alone. */
+export const CHANGE_MEMBER_ROLE_ROLES = [
+  'admin',
+] as const satisfies readonly Role[];
+
 @Injectable()
 export class ChangeMemberRoleUseCase {
   constructor(
@@ -27,7 +32,11 @@ export class ChangeMemberRoleUseCase {
     return this.unitOfWork.runInTenant(
       tenantOf(command.actor),
       async (repositories) => {
-        await authorizeInTenant(repositories, command.actor, ['admin']);
+        await authorizeInTenant(
+          repositories,
+          command.actor,
+          CHANGE_MEMBER_ROLE_ROLES,
+        );
 
         const parsed = parseRole(command.role);
         if (!parsed.ok) {

@@ -3,6 +3,7 @@ import { DomainViolation } from '../../domain/errors';
 import type { MembershipId } from '../../domain/identifiers';
 import { revokeMembership } from '../../domain/membership/membership.entity';
 import { assertTenantRetainsAdministrator } from '../../domain/tenant/tenant-administration.policy';
+import type { Role } from '../../domain/membership/role';
 import type { ActorContext } from '../actor-context';
 import {
   TENANT_SCOPED_UNIT_OF_WORK,
@@ -15,6 +16,11 @@ export interface RevokeMembershipCommand {
   readonly membershipId: MembershipId;
 }
 
+/** Removing someone from a tenant is an administrative act. */
+export const REVOKE_MEMBERSHIP_ROLES = [
+  'admin',
+] as const satisfies readonly Role[];
+
 @Injectable()
 export class RevokeMembershipUseCase {
   constructor(
@@ -26,7 +32,11 @@ export class RevokeMembershipUseCase {
     return this.unitOfWork.runInTenant(
       tenantOf(command.actor),
       async (repositories) => {
-        await authorizeInTenant(repositories, command.actor, ['admin']);
+        await authorizeInTenant(
+          repositories,
+          command.actor,
+          REVOKE_MEMBERSHIP_ROLES,
+        );
 
         const membership = await repositories.memberships.findById(
           command.membershipId,

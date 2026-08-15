@@ -78,34 +78,84 @@ describe('listing the members of a tenant', () => {
 
     expect(active.map((entry) => entry.email)).toEqual(['admin@example.com']);
     expect(everyone).toHaveLength(2);
+    // `active`, not the raw membership status: the listing publishes whether a
+    // person may act here, which is what requirement 10.1 asks for and what the
+    // route has always answered with.
     expect(
-      everyone.find((entry) => entry.email === 'member@example.com')?.membership
-        .status,
-    ).toBe('revoked');
+      everyone.find((entry) => entry.email === 'member@example.com')?.active,
+    ).toBe(false);
   });
 
-  /** Requirement 10.3: the email is for administrators of this tenant only. */
-  it('denies the listing to a member who is not an administrator', async () => {
-    const acme = await context.seedTenant('Acme');
-    await context.seedMember({
-      tenantId: acme,
-      email: 'admin@example.com',
-      role: 'admin',
-    });
-    const viewer = await context.seedMember({
-      tenantId: acme,
-      email: 'viewer@example.com',
-      role: 'viewer',
+  describe('who may read it, and how much of it', () => {
+    async function aTenantOfThree(): Promise<{
+      tenantId: Awaited<ReturnType<typeof context.seedTenant>>;
+      admin: Awaited<ReturnType<typeof context.seedMember>>;
+      editor: Awaited<ReturnType<typeof context.seedMember>>;
+      viewer: Awaited<ReturnType<typeof context.seedMember>>;
+    }> {
+      const tenantId = await context.seedTenant('Acme');
+      return {
+        tenantId,
+        admin: await context.seedMember({
+          tenantId,
+          email: 'admin@example.com',
+          role: 'admin',
+        }),
+        editor: await context.seedMember({
+          tenantId,
+          email: 'editor@example.com',
+          role: 'editor',
+        }),
+        viewer: await context.seedMember({
+          tenantId,
+          email: 'viewer@example.com',
+          role: 'viewer',
+        }),
+      };
+    }
+
+    it('answers an administrator with every address', async () => {
+      const { tenantId, admin } = await aTenantOfThree();
+
+      const members = await list.execute({
+        actor: context.actingAs(tenantId, admin),
+        includeInactive: false,
+      });
+
+      expect(members.map((member) => member.email).sort()).toEqual([
+        'admin@example.com',
+        'editor@example.com',
+        'viewer@example.com',
+      ]);
     });
 
-    const attempt = list.execute({
-      actor: context.actingAs(acme, viewer),
-      includeInactive: false,
-    });
+    /**
+     * Requirement 2.1.1. Widening who may call this route must not widen what
+     * the route discloses: requirement 10.3 of the identity feature reserves a
+     * person's address to administrators of a tenant they belong to, and that
+     * rule survives this feature rather than being quietly relaxed by it.
+     */
+    it.each(['editor', 'viewer'] as const)(
+      'answers a %s with the same people and no addresses',
+      async (role) => {
+        const tenant = await aTenantOfThree();
 
-    await expect(attempt).rejects.toMatchObject({
-      error: { kind: 'forbidden' },
-    });
+        const members = await list.execute({
+          actor: context.actingAs(tenant.tenantId, tenant[role]),
+          includeInactive: false,
+        });
+
+        expect(members).toHaveLength(3);
+        expect(members.every((member) => member.email === null)).toBe(true);
+        // The listing is still useful: who is here, in what role, and whether
+        // they are active. Only the address is withheld.
+        expect(members.map((member) => member.role).sort()).toEqual([
+          'admin',
+          'editor',
+          'viewer',
+        ]);
+      },
+    );
   });
 
   it('reports absence to an administrator of another tenant', async () => {

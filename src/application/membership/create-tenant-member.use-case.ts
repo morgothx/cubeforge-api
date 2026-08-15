@@ -31,6 +31,11 @@ export interface CreateTenantMemberResult {
   readonly role: Role;
 }
 
+/** Adding someone to a tenant is an administrative act. */
+export const CREATE_TENANT_MEMBER_ROLES = [
+  'admin',
+] as const satisfies readonly Role[];
+
 /**
  * The use case that carries requirement 4.3, so its shape is deliberate.
  *
@@ -56,7 +61,11 @@ export class CreateTenantMemberUseCase {
     return this.unitOfWork.runInTenant(
       tenantOf(command.actor),
       async (repositories) => {
-        await authorizeInTenant(repositories, command.actor, ['admin']);
+        await authorizeInTenant(
+          repositories,
+          command.actor,
+          CREATE_TENANT_MEMBER_ROLES,
+        );
 
         const role = this.parseRole(command.role);
         const email = this.parseEmail(command.email);

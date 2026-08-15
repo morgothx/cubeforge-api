@@ -2,7 +2,7 @@ import type { IssuedApiKey } from '../../../application/api-key/issue-api-key.us
 import type { IssuedSession } from '../../../application/authentication/sign-in.use-case';
 import type { CreateTenantMemberResult } from '../../../application/membership/create-tenant-member.use-case';
 import type { ApiKeySummary } from '../../../application/ports/api-key.repository';
-import type { MembershipWithPerson } from '../../../application/ports/membership.repository';
+import type { ListedMember } from '../../../application/membership/list-tenant-members.use-case';
 import type { ProvisionedTenant } from '../../../application/tenant/provision-tenant.use-case';
 import type { OpaqueSecret } from '../../../domain/credential/secrets';
 import type { Tenant } from '../../../domain/tenant/tenant.entity';
@@ -49,22 +49,23 @@ export function toProvisionedTenantResponse(
 export interface MemberResponse {
   readonly membershipId: string;
   readonly personId: string;
-  readonly email: string;
+  /** Absent entirely for a caller who is not an administrator here (2.1.1). */
+  readonly email?: string;
   readonly role: string;
   readonly active: boolean;
 }
 
-export function toMemberResponse(entry: MembershipWithPerson): MemberResponse {
+/**
+ * The field is omitted rather than sent as `null`, so a listing without
+ * addresses says "not for you" instead of implying these people have none.
+ */
+export function toMemberResponse(entry: ListedMember): MemberResponse {
   return {
-    membershipId: entry.membership.id,
-    personId: entry.membership.personId,
-    email: entry.email,
-    role: entry.membership.role,
-    // Requirement 10.1 asks whether the membership is active, not what its
-    // status string happens to be — a person deactivated platform-wide is not
-    // active here either.
-    active:
-      entry.membership.status === 'active' && entry.personStatus === 'active',
+    membershipId: entry.membershipId,
+    personId: entry.personId,
+    ...(entry.email === null ? {} : { email: entry.email }),
+    role: entry.role,
+    active: entry.active,
   };
 }
 

@@ -165,10 +165,16 @@ describe('tenant isolation', () => {
         )?.role,
       ).toBe('admin');
 
+      // The same person, reading in Globex where they are only a viewer: they
+      // see who is there and no addresses at all. One person, one credential,
+      // two different answers decided entirely by which tenant the path names.
       const globexMembers = await request(app.getHttpServer())
         .get(`/tenants/${globex.id}/members`)
         .set(asGlobexViewer);
-      expect(globexMembers.status).toBe(404);
+      expect(globexMembers.status).toBe(200);
+      const seen = body<{ email?: string; role: string }[]>(globexMembers);
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.every((member) => member.email === undefined)).toBe(true);
     });
   });
 

@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { Role } from '../../domain/membership/role';
 import type { ActorContext } from '../actor-context';
 import type { ApiKeySummary } from '../ports/api-key.repository';
 import {
@@ -10,6 +11,9 @@ import { authorizeInTenant, tenantOf } from '../tenant-authorization';
 export interface ListApiKeysQuery {
   readonly actor: ActorContext;
 }
+
+/** Reading the keys included: knowing what can act for a tenant is administrative. */
+export const LIST_API_KEYS_ROLES = ['admin'] as const satisfies readonly Role[];
 
 /**
  * Administrators only. A key grants access to the tenant's data, so who holds
@@ -27,7 +31,7 @@ export class ListApiKeysUseCase {
     return this.unitOfWork.runInTenant(
       tenantOf(query.actor),
       async (repositories) => {
-        await authorizeInTenant(repositories, query.actor, ['admin']);
+        await authorizeInTenant(repositories, query.actor, LIST_API_KEYS_ROLES);
         return repositories.apiKeys.list();
       },
     );

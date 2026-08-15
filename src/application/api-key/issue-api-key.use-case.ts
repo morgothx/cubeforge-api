@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { OpaqueSecret } from '../../domain/credential/secrets';
 import { DomainViolation } from '../../domain/errors';
 import type { ApiKeyId } from '../../domain/identifiers';
-import { parseRole } from '../../domain/membership/role';
+import { parseRole, type Role } from '../../domain/membership/role';
 import type { ActorContext } from '../actor-context';
 import { CLOCK, type Clock } from '../ports/clock';
 import {
@@ -30,6 +30,9 @@ export interface IssuedApiKey {
   readonly secret: OpaqueSecret;
 }
 
+/** A key acts for the whole tenant, so only an administrator may mint one. */
+export const ISSUE_API_KEY_ROLES = ['admin'] as const satisfies readonly Role[];
+
 /**
  * Issues a key into the administrator's own tenant, with a role from the same
  * permitted set people hold.
@@ -53,7 +56,11 @@ export class IssueApiKeyUseCase {
     return this.unitOfWork.runInTenant(
       tenantOf(command.actor),
       async (repositories) => {
-        await authorizeInTenant(repositories, command.actor, ['admin']);
+        await authorizeInTenant(
+          repositories,
+          command.actor,
+          ISSUE_API_KEY_ROLES,
+        );
 
         const parsed = parseRole(command.role);
         if (!parsed.ok) {

@@ -175,11 +175,14 @@ describe('the HTTP edge', () => {
         role: 'viewer',
       });
 
+      // The API keys, not the member listing: a viewer may now read the
+      // members of their own tenant, so that is no longer a denial. Managing
+      // keys is still the administrator's alone.
       const denied = await request(app.getHttpServer())
-        .get(`/tenants/${tenantId}/members`)
+        .get(`/tenants/${tenantId}/api-keys`)
         .set(await asMember(tenantId, viewer));
       const absent = await request(app.getHttpServer())
-        .get('/tenants/no-such-tenant/members')
+        .get('/tenants/no-such-tenant/api-keys')
         .set(await asMember('no-such-tenant', viewer));
 
       expect(denied.status).toBe(404);

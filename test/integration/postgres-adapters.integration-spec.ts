@@ -172,7 +172,7 @@ describe('the identity use cases against PostgreSQL', () => {
         includeInactive: false,
       });
       return members.find((member) => member.email === 'shared@example.com')
-        ?.membership.role;
+        ?.role;
     };
 
     expect(await roleIn(acme.admin)).toBe('editor');
@@ -327,7 +327,7 @@ describe('the identity use cases against PostgreSQL', () => {
     await expect(
       revokeMembership.execute({
         actor: acme.admin,
-        membershipId: members[0].membership.id,
+        membershipId: members[0].membershipId,
       }),
     ).rejects.toMatchObject({ error: { kind: 'last-administrator' } });
   });

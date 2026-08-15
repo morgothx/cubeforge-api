@@ -232,7 +232,7 @@ export const LIST_TENANT_MEMBERS_ROLES = ['admin', 'editor', 'viewer'] as const;
 | `DELETE /tenants/:tenantId` | `{ operator: true }` |
 | `DELETE /platform/people/:personId` | `{ operator: true }` |
 | `POST /platform/people/:personId/setup-tokens` | `{ operator: true }` |
-| `GET /tenants/:tenantId/members` | `{ roles: ['admin', 'editor', 'viewer'] }` |
+| `GET /tenants/:tenantId/members` | `{ roles: ['admin', 'editor', 'viewer'] }` — see the address carve-out below |
 | `POST /tenants/:tenantId/members` | `{ roles: ['admin'] }` |
 | `PATCH /tenants/:tenantId/members/:membershipId` | `{ roles: ['admin'] }` |
 | `DELETE /tenants/:tenantId/members/:membershipId` | `{ roles: ['admin'] }` |
@@ -240,6 +240,35 @@ export const LIST_TENANT_MEMBERS_ROLES = ['admin', 'editor', 'viewer'] as const;
 
 Sixteen routes, every one declared. `GET /tenants/:tenantId/members` is the
 only widening, and `ListTenantMembersUseCase` widens with it.
+
+### The listing's address carve-out
+
+Widening that one route collided with requirement 10.3 of
+`tenant-and-user-management`, which reserves a person's email address to
+administrators of a tenant they belong to. The listing carries every member's
+address, so admitting editors and viewers to the route would have weakened a
+disclosure rule the platform already made — quietly, and for convenience.
+
+The listing therefore varies by the caller's role. `ListTenantMembersUseCase`
+returns a shape of its own rather than the repository's:
+
+```typescript
+export interface ListedMember {
+  readonly membershipId: MembershipId;
+  readonly personId: PersonId;
+  /** `null` for every caller who is not an administrator here (2.1.1). */
+  readonly email: EmailAddress | null;
+  readonly role: Role;
+  readonly active: boolean;
+}
+```
+
+The decision lives in the use case, not in the response mapper: what a caller
+may learn is a rule about access, and the layer that already resolved their role
+is the one that knows it. `toMemberResponse` omits the field when it is null,
+so a non-administrator's response has no `email` key at all rather than one
+holding `null` — an absent field states "not for you" without implying the
+person has no address.
 
 ---
 
@@ -346,7 +375,8 @@ same body on purpose; this feature adds no new mapping and no new status.
 | `src/adapters/http/credential-setup.controller.ts` | `@Access({ operator: true })` |
 | `src/adapters/http/tenant-members.controller.ts` | Declarations; the listing widens to all three roles |
 | `src/adapters/http/api-keys.controller.ts` | `@Access({ roles: ['admin'] })` on all three |
-| `src/application/membership/list-tenant-members.use-case.ts` | Permitted roles become a named value, widened to all three |
+| `src/application/membership/list-tenant-members.use-case.ts` | Permitted roles become a named value, widened to all three; returns `ListedMember`, withholding addresses from non-administrators |
+| `src/adapters/http/dto/responses.ts` | `MemberResponse.email` becomes optional and is omitted when withheld |
 | `src/application/membership/create-tenant-member.use-case.ts` | Permitted roles become a named value |
 | `src/application/membership/change-member-role.use-case.ts` | Permitted roles become a named value |
 | `src/application/membership/revoke-membership.use-case.ts` | Permitted roles become a named value |
@@ -370,6 +400,7 @@ same body on purpose; this feature adds no new mapping and no new status.
 | 1.5 | `{ public: true }`, required explicitly on the four `/auth` routes |
 | 1.6 | `{ operator: true }`, distinct from `roles` in the declaration type |
 | 2.1 | `GET /tenants/:tenantId/members` declares all three roles; the use case widens with it |
+| 2.1.1 | `ListedMember.email` is null for a non-administrator, and the response omits the field |
 | 2.2 | Member mutations declare `['admin']` |
 | 2.3 | All three API key routes declare `['admin']` |
 | 2.4 | The guard resolves the membership in the tenant named by the path |
