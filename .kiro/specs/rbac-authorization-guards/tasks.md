@@ -67,7 +67,7 @@ four conflicting versions of one file.
   - _Requirements: 1.6, 6.3, 6.4_
   - _Boundary: Access guard_
 
-- [ ] 2.3 Enforce tenant roles by resolving the membership
+- [x] 2.3 Enforce tenant roles by resolving the membership
   - Resolve the tenant, the person and their membership in a transaction of the
     guard's own, scoped to the tenant the request path names, and apply the
     existing access decision rather than restating it
@@ -293,3 +293,21 @@ inherits them rather than rediscovering them.
   request is feature 2's claim, already proven end to end in
   `operator-boundary.integration-spec.ts`. What 2.2 asserts is narrower and is
   the only part this feature owns — that the guard adds no memory in front of it.
+- **"A member of another tenant" is not a state the system can produce.** The
+  first version of 2.3's stranger test built an actor carrying Globex while
+  addressing Acme's route, and the guard admitted it — correctly, because that
+  actor is coherent. It is also impossible: the middleware takes the tenant from
+  the path, so an actor's tenant always *is* the path's. A stranger is a person
+  whose membership lives elsewhere reaching a path that names Acme, and the
+  refusal comes from finding no membership here. The matrix in 5.3 has to be
+  built the same way or it will assert against actors the platform cannot make.
+- The guard reuses `authorizeInTenant` rather than restating the rule, so the
+  two layers reach the same verdict from the same code and differ only in which
+  transaction they read in. That also settles 5.3's logging without touching the
+  application layer: the error filter already logs the violation's kind, so
+  `forbidden` and `not-found` are distinguishable in the log while identical in
+  the response. Adding reasons inside `authorizeInTenant` was considered and
+  proved unnecessary.
+- The guard is now `async`. `canActivate` returning a promise is ordinary for
+  Nest, but it means every guarded tenant route awaits a transaction before the
+  handler starts — the cost 2.5 has to measure.

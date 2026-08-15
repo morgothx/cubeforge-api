@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Injectable,
+  Logger,
   Module,
   type INestApplication,
   type MiddlewareConsumer,
@@ -14,7 +15,17 @@ import type { NextFunction, Request, Response } from 'express';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import type { ActorContext } from '../../../application/actor-context';
-import { apiKeyId, personId, tenantId } from '../../../domain/identifiers';
+import {
+  apiKeyId,
+  personId,
+  tenantId,
+  type TenantId,
+} from '../../../domain/identifiers';
+import { TENANT_SCOPED_UNIT_OF_WORK } from '../../../application/ports/tenant-scoped-unit-of-work';
+import {
+  createIdentityTestContext,
+  type IdentityTestContext,
+} from '../../testing/identity-test-context';
 import { DomainErrorFilter } from '../domain-error.filter';
 import { attachActor } from '../principal.middleware';
 import { Access } from './access.decorator';
@@ -114,12 +125,26 @@ const ACTORS: Record<string, ActorContext> = {
     RestrictedController,
     OperatorController,
   ],
-  providers: [{ provide: APP_GUARD, useClass: AccessGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: AccessGuard },
+    // Present so the guard can be constructed; the suite that actually
+    // resolves memberships overrides it with a seeded one.
+    {
+      provide: TENANT_SCOPED_UNIT_OF_WORK,
+      useFactory: () => createIdentityTestContext().tenantScoped,
+    },
+  ],
 })
 class GuardedModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(ActorFromHeader).forRoutes('*path');
   }
+}
+
+/** Lets a test name a principal the fixed map above does not carry. */
+function register(name: string, actor: ActorContext): string {
+  ACTORS[name] = actor;
+  return name;
 }
 
 /**
@@ -301,6 +326,217 @@ describe('the access guard', () => {
         expect(response.body).toEqual(ABSENCE);
         expect(entered.size).toBe(0);
       },
+    );
+  });
+});
+
+/**
+ * The guard against real membership records, held in memory.
+ *
+ * Everything above judges a principal by its kind alone. This is where the
+ * guard has to go and look: the role a person holds is a fact in storage, in
+ * one tenant, and the request names which one.
+ */
+describe('the access guard, resolving a membership', () => {
+  let app: INestApplication<App>;
+  let context: IdentityTestContext;
+  let logged: string[];
+
+  const ABSENCE = {
+    statusCode: 404,
+    message: 'the requested record does not exist',
+  };
+
+  let acme: TenantId;
+
+  beforeAll(async () => {
+    context = createIdentityTestContext();
+
+    const acmeId = await context.seedTenant('Acme');
+    const globexId = await context.seedTenant('Globex');
+    acme = acmeId;
+
+    const asMember = async (
+      tenant: typeof acmeId,
+      email: string,
+      role: 'admin' | 'editor' | 'viewer',
+      name: string,
+    ): Promise<string> =>
+      register(name, {
+        kind: 'tenant-member',
+        personId: await context.seedMember({ tenantId: tenant, email, role }),
+        tenantId: tenant,
+      });
+
+    administrator = await asMember(
+      acmeId,
+      'admin@acme.example.com',
+      'admin',
+      'acme-admin',
+    );
+    editor = await asMember(
+      acmeId,
+      'editor@acme.example.com',
+      'editor',
+      'acme-editor',
+    );
+    viewer = await asMember(
+      acmeId,
+      'viewer@acme.example.com',
+      'viewer',
+      'acme-viewer',
+    );
+    // Registered against **Acme**, though their only membership is in Globex.
+    // That is what a stranger actually looks like: the tenant on the actor
+    // comes from the request path, so it always matches the path and never the
+    // caller's wishes. An actor naming a tenant it belongs to but did not
+    // address is not a case the system can produce.
+    const globexAdmin = await context.seedMember({
+      tenantId: globexId,
+      email: 'admin@globex.example.com',
+      role: 'admin',
+    });
+    register('stranger-in-acme', {
+      kind: 'tenant-member',
+      personId: globexAdmin,
+      tenantId: acmeId,
+    });
+    register('globex-admin', {
+      kind: 'tenant-member',
+      personId: globexAdmin,
+      tenantId: globexId,
+    });
+
+    // The same person, an administrator here and a viewer there. Which one they
+    // are depends entirely on the tenant the request names.
+    const dual = await context.seedMember({
+      tenantId: acmeId,
+      email: 'dual@example.com',
+      role: 'admin',
+    });
+    await context.seedMember({
+      tenantId: globexId,
+      email: 'dual@example.com',
+      personId: dual,
+      role: 'viewer',
+    });
+    register('dual-in-acme', {
+      kind: 'tenant-member',
+      personId: dual,
+      tenantId: acmeId,
+    });
+    register('dual-in-globex', {
+      kind: 'tenant-member',
+      personId: dual,
+      tenantId: globexId,
+    });
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [GuardedModule],
+    })
+      .overrideProvider(TENANT_SCOPED_UNIT_OF_WORK)
+      .useValue(context.tenantScoped)
+      .compile();
+    app = moduleRef.createNestApplication<INestApplication<App>>();
+    app.useGlobalFilters(new DomainErrorFilter());
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(() => {
+    entered.clear();
+    withdrawn.clear();
+    logged = [];
+    jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation((message: unknown) => {
+        logged.push(String(message));
+      });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const restricted = (actor: string) =>
+    request(app.getHttpServer())
+      .get('/restricted')
+      .set({ 'x-test-actor': actor });
+
+  it('admits a member whose role the route names', async () => {
+    const response = await restricted('acme-admin');
+
+    expect(response.status).toBe(200);
+    expect(entered.has('restricted')).toBe(true);
+  });
+
+  it.each(['acme-editor', 'acme-viewer'])(
+    'refuses %s, who belongs here and holds the wrong role',
+    async (actor) => {
+      const response = await restricted(actor);
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual(ABSENCE);
+      expect(entered.size).toBe(0);
+    },
+  );
+
+  it('refuses a stranger, who holds an administrator role somewhere else', async () => {
+    // The same person is an administrator in Globex and reaches Acme's route
+    // with Acme on the actor, because the path put it there.
+    expect((await restricted('globex-admin')).status).toBe(200);
+
+    const response = await restricted('stranger-in-acme');
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual(ABSENCE);
+  });
+
+  it('answers the wrong role and no standing at all with the same bytes', async () => {
+    const wrongRole = await restricted('acme-viewer');
+    const noStanding = await restricted('stranger-in-acme');
+
+    // Requirement 5.1 and 5.2 together: a caller must not be able to tell "you
+    // are here but may not" from "you are not here", because the difference
+    // confirms that a tenant, and their place in it, exists.
+    expect(wrongRole.status).toBe(noStanding.status);
+    expect(wrongRole.body).toEqual(noStanding.body);
+  });
+
+  it('tells the two apart in the log, where only operators read', async () => {
+    await restricted('acme-viewer');
+    const denial = logged.join('\n');
+    logged = [];
+    await restricted('stranger-in-acme');
+    const absence = logged.join('\n');
+
+    expect(denial).toContain('forbidden');
+    expect(absence).toContain('not-found');
+    expect(denial).not.toEqual(absence);
+  });
+
+  it('judges the same person by the tenant the request names', async () => {
+    // Administrator in Acme, viewer in Globex. Nothing about the person
+    // changes between these two requests; only the path does.
+    expect((await restricted('dual-in-acme')).status).toBe(200);
+    expect((await restricted('dual-in-globex')).status).toBe(404);
+  });
+
+  it('refuses a member of a tenant that has been deactivated', async () => {
+    await context.platform.runAsOperator(({ tenants }) =>
+      tenants.updateStatus(acme, 'inactive'),
+    );
+
+    const response = await restricted('acme-admin');
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual(ABSENCE);
+
+    await context.platform.runAsOperator(({ tenants }) =>
+      tenants.updateStatus(acme, 'active'),
     );
   });
 });

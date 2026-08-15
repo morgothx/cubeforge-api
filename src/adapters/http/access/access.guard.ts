@@ -1,10 +1,16 @@
 import {
+  Inject,
   Injectable,
   type CanActivate,
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
+import {
+  TENANT_SCOPED_UNIT_OF_WORK,
+  type TenantScopedUnitOfWork,
+} from '../../../application/ports/tenant-scoped-unit-of-work';
+import { authorizeInTenant } from '../../../application/tenant-authorization';
 import { DomainViolation } from '../../../domain/errors';
 import { resolvedActor } from '../principal.middleware';
 import { ACCESS_DECLARATION, type AccessDeclaration } from './access.decorator';
@@ -23,9 +29,13 @@ import { ACCESS_DECLARATION, type AccessDeclaration } from './access.decorator';
  */
 @Injectable()
 export class AccessGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    @Inject(TENANT_SCOPED_UNIT_OF_WORK)
+    private readonly tenantScoped: TenantScopedUnitOfWork,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const declaration = this.declarationFor(context);
     if (declaration === undefined) {
       throw refusal('this route declares no access');
@@ -53,13 +63,28 @@ export class AccessGuard implements CanActivate {
       return true;
     }
 
-    // Everything the guard has not yet learned to judge is refused rather than
-    // admitted. The pass still to come teaches it tenant roles; a half-built
-    // guard that let through what it could not evaluate would be worse than no
-    // guard, because it would look like one.
-    throw refusal(
-      `this declaration is not yet enforced: ${JSON.stringify(declaration)}`,
+    if (actor.kind !== 'tenant-member') {
+      // An operator is above every tenant and inside none of them; a machine is
+      // handled by the pass that teaches this guard about `machines`. Until
+      // then it is refused, which is the same answer it will get on any route
+      // that does not admit it.
+      throw refusal(
+        `this route is for tenant members; this caller is a ${actor.kind}`,
+      );
+    }
+
+    // The tenant comes from the request path — the middleware put it on the
+    // actor — so "administrator of one tenant operating on another" is not
+    // expressible here rather than merely rejected.
+    //
+    // A transaction of the guard's own, because the use case behind the route
+    // has not opened one yet and owns the one it will. The two reads can differ
+    // if a membership changes between them; the request is refused either way,
+    // which is the direction that costs nothing.
+    await this.tenantScoped.runInTenant(actor.tenantId, (repositories) =>
+      authorizeInTenant(repositories, actor, declaration.roles),
     );
+    return true;
   }
 
   /**
