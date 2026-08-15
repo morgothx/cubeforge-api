@@ -195,9 +195,48 @@ describe('the route inventory, against the real application', () => {
     ]);
   });
 
-  it('reports every one of them as declaring nothing, for now', () => {
-    // True until section 4 declares them. When that lands this assertion
-    // inverts, and 5.1 is where it lives afterwards.
-    expect(routes.filter((route) => route.declaration !== null)).toEqual([]);
+  it('reports what each of them declares', () => {
+    // The design's declaration table, restated where a machine checks it. 5.1
+    // adds the stronger claim — that *no* route is undeclared, whatever the
+    // table says — but this is what pins each route to the access it was
+    // designed to have.
+    expect(
+      Object.fromEntries(
+        routes.map((route) => [
+          `${route.method} ${route.path}`,
+          route.declaration,
+        ]),
+      ),
+    ).toEqual({
+      'POST /auth/sign-in': { public: true },
+      'POST /auth/refresh': { public: true },
+      'POST /auth/sign-out': { public: true },
+      'POST /auth/credentials': { public: true },
+      'POST /tenants': { operator: true },
+      'GET /tenants': { operator: true },
+      'DELETE /tenants/:tenantId': { operator: true },
+      'DELETE /platform/people/:personId': { operator: true },
+      'POST /platform/people/:personId/setup-tokens': { operator: true },
+      'GET /tenants/:tenantId/members': {
+        roles: ['admin', 'editor', 'viewer'],
+      },
+      'POST /tenants/:tenantId/members': { roles: ['admin'] },
+      'PATCH /tenants/:tenantId/members/:membershipId': { roles: ['admin'] },
+      'DELETE /tenants/:tenantId/members/:membershipId': { roles: ['admin'] },
+      'POST /tenants/:tenantId/api-keys': { roles: ['admin'] },
+      'GET /tenants/:tenantId/api-keys': { roles: ['admin'] },
+      'DELETE /tenants/:tenantId/api-keys/:apiKeyId': { roles: ['admin'] },
+    });
+  });
+
+  it('admits no machine caller on any route it ships with', () => {
+    // Requirement 3.4. The mechanism exists and is proven by a fixture; no
+    // real endpoint uses it until feature 5 decides one should.
+    expect(
+      routes.filter(
+        (route) =>
+          route.declaration !== null && 'machines' in route.declaration,
+      ),
+    ).toEqual([]);
   });
 });

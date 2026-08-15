@@ -22,6 +22,7 @@ import {
   type ProvisionedTenantResponse,
   type TenantResponse,
 } from './dto/responses';
+import { Access } from './access/access.decorator';
 
 /** Operator-facing. Every method here refuses a tenant member. */
 @Controller('tenants')
@@ -33,6 +34,7 @@ export class TenantsController {
   ) {}
 
   @Post()
+  @Access({ operator: true })
   async create(
     @Req() request: Request,
     @Body() body: CreateTenantRequest,
@@ -47,6 +49,7 @@ export class TenantsController {
   }
 
   @Get()
+  @Access({ operator: true })
   async index(@Req() request: Request): Promise<TenantResponse[]> {
     const tenants = await this.list.execute({ actor: actorOf(request) });
     return tenants.map(toTenantResponse);
@@ -58,6 +61,7 @@ export class TenantsController {
    * the system does about it.
    */
   @Delete(':tenantId')
+  @Access({ operator: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   async destroy(
     @Req() request: Request,

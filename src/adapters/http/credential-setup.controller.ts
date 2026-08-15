@@ -4,6 +4,7 @@ import { IssueSetupTokenUseCase } from '../../application/credential/issue-setup
 import { personId } from '../../domain/identifiers';
 import { actorOf } from './principal.middleware';
 import { toSetupTokenResponse, type SetupTokenResponse } from './dto/responses';
+import { Access } from './access/access.decorator';
 
 /**
  * Operator-facing, and the only way a person ever acquires a password.
@@ -18,6 +19,7 @@ export class CredentialSetupController {
   constructor(private readonly issue: IssueSetupTokenUseCase) {}
 
   @Post()
+  @Access({ operator: true })
   async store(
     @Req() request: Request,
     @Param('personId') id: string,

@@ -9,18 +9,17 @@ this, then `.kiro/specs/authentication/tasks.md`.
   `implemented`.
 - **Feature 2 `authentication`: complete.** 33/33 tasks, spec phase
   `implemented`.
-- **Feature 3 `rbac-authorization-guards`: 8/19 tasks.** Sections 1, 2 and 3 are
-  complete. 3.1 is in the working tree, uncommitted, and is the first change of
-  behaviour in the feature: any member may now list their tenant's members, and
-  only an administrator sees the addresses in it.
-- Último commit: `test(rbac-authorization-guards): measure what the guard's
-  resolution costs` (task 2.5).
-- Tests: `pnpm test` 275 passing, `pnpm test:integration` 109 passing,
+- **Feature 3 `rbac-authorization-guards`: 12/19 tasks.** Sections 1–3 complete
+  and all sixteen routes declared (4.1–4.4, in the working tree, uncommitted).
+  The declarations are inert: nothing reads them until 4.5.
+- Último commit: `feat(rbac-authorization-guards): let any member read the
+  listing, without the addresses` (task 3.1).
+- Tests: `pnpm test` 276 passing, `pnpm test:integration` 109 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
-- Next task: 4.1, declaring the authentication routes public. Section 4
-  declares all sixteen routes and then turns the guard on in 4.5, which is the
-  task that makes the feature live. Run it as
-  `/kiro-impl rbac-authorization-guards 4.1` — **with the task number**, which
+- Next task: **4.5, the one that makes the feature live** — register the guard
+  globally. Expect this to be the noisy task: from here the whole suite depends
+  on all sixteen declarations being right. Run it as
+  `/kiro-impl rbac-authorization-guards 4.5` — **with the task number**, which
   is what selects manual mode. Manual mode has no commit step at all; without
   numbers it commits per task and breaks the rule below.
 

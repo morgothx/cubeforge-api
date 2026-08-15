@@ -136,14 +136,14 @@ Declaration comes first on purpose. Registering the guard while routes are still
 undeclared would refuse them — correctly, and catastrophically for the suite —
 so 4.5 is last and is the task that makes the feature live.
 
-- [ ] 4.1 (P) Declare the authentication routes reachable without a principal
+- [x] 4.1 (P) Declare the authentication routes reachable without a principal
   - All four credential endpoints, each stating it explicitly rather than
     inheriting anything
   - Done when signing in still works with no credential presented
   - _Requirements: 1.5_
   - _Boundary: Authentication controller_
 
-- [ ] 4.2 (P) Declare the operator routes
+- [x] 4.2 (P) Declare the operator routes
   - Provisioning, listing and deactivating a tenant; deactivating a person;
     issuing a setup token
   - Done when all five carry an operator declaration and the inventory reports
@@ -151,7 +151,7 @@ so 4.5 is last and is the task that makes the feature live.
   - _Requirements: 1.6_
   - _Boundary: Tenants, platform people and credential setup controllers_
 
-- [ ] 4.3 (P) Declare the tenant member routes
+- [x] 4.3 (P) Declare the tenant member routes
   - Listing declares all three roles; creating, re-roling and revoking declare
     the administrator
   - Done when a viewer can list the tenant's members through the route and is
@@ -160,7 +160,7 @@ so 4.5 is last and is the task that makes the feature live.
   - _Requirements: 2.1, 2.2_
   - _Boundary: Tenant members controller_
 
-- [ ] 4.4 (P) Declare the API key routes
+- [x] 4.4 (P) Declare the API key routes
   - All three declare the administrator, reading included
   - Done when an editor and a viewer are both refused the listing
   - _Requirements: 2.3_
@@ -385,3 +385,16 @@ inherits them rather than rediscovering them.
   denial. That is no longer a denial, so it now uses the API keys, which remain
   the administrator's alone. A test whose premise a feature removes has to be
   re-aimed, not deleted.
+- All sixteen declarations landed under one RED: the inventory test written in
+  1.2 had an assertion marked provisional — "every route declares nothing, for
+  now" — and section 4 is what inverts it. It now restates the design's
+  declaration table where a machine checks it, so a route declared differently
+  from the design fails with the route named.
+- **The declarations are inert until 4.5.** Nothing reads them yet, so these
+  four tasks prove the declarations are present and correct, not that they are
+  enforced. The suites passing here says the application still behaves exactly
+  as it did — which is the point of declaring before registering.
+- A scripted edit inserted the decorator import in the middle of a multi-line
+  import statement, because "the last line starting with `import`" is not the
+  end of the import block. The build caught it immediately; worth remembering
+  that this repository's controllers all open with multi-line imports.

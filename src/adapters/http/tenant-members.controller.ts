@@ -28,6 +28,7 @@ import {
   type CreatedMemberResponse,
   type MemberResponse,
 } from './dto/responses';
+import { Access } from './access/access.decorator';
 
 /**
  * Administrator-facing, scoped to one tenant by the path.
@@ -48,6 +49,7 @@ export class TenantMembersController {
   ) {}
 
   @Post()
+  @Access({ roles: ['admin'] })
   async store(
     @Req() request: Request,
     @Body() body: CreateTenantMemberRequest,
@@ -61,6 +63,7 @@ export class TenantMembersController {
   }
 
   @Get()
+  @Access({ roles: ['admin', 'editor', 'viewer'] })
   async index(
     @Req() request: Request,
     @Query('includeInactive') includeInactive?: string,
@@ -73,6 +76,7 @@ export class TenantMembersController {
   }
 
   @Patch(':membershipId')
+  @Access({ roles: ['admin'] })
   @HttpCode(HttpStatus.NO_CONTENT)
   async update(
     @Req() request: Request,
@@ -87,6 +91,7 @@ export class TenantMembersController {
   }
 
   @Delete(':membershipId')
+  @Access({ roles: ['admin'] })
   @HttpCode(HttpStatus.NO_CONTENT)
   async destroy(
     @Req() request: Request,

@@ -22,6 +22,7 @@ import {
   type ApiKeyResponse,
   type IssuedApiKeyResponse,
 } from './dto/responses';
+import { Access } from './access/access.decorator';
 
 /**
  * Administrator-facing, scoped to one tenant by the path, exactly like the
@@ -42,6 +43,7 @@ export class ApiKeysController {
   ) {}
 
   @Post()
+  @Access({ roles: ['admin'] })
   async store(
     @Req() request: Request,
     @Body() body: IssueApiKeyRequest,
@@ -56,6 +58,7 @@ export class ApiKeysController {
   }
 
   @Get()
+  @Access({ roles: ['admin'] })
   async index(@Req() request: Request): Promise<ApiKeyResponse[]> {
     const keys = await this.list.execute({
       actor: actorOf(request),
@@ -64,6 +67,7 @@ export class ApiKeysController {
   }
 
   @Delete(':apiKeyId')
+  @Access({ roles: ['admin'] })
   @HttpCode(HttpStatus.NO_CONTENT)
   async destroy(
     @Req() request: Request,

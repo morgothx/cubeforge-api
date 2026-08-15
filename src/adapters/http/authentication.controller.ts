@@ -25,6 +25,7 @@ import {
   SignOutRequest,
 } from './dto/requests';
 import { toSessionResponse, type SessionResponse } from './dto/responses';
+import { Access } from './access/access.decorator';
 
 /**
  * The only routes that take no actor: presenting the credential *is* the
@@ -57,6 +58,7 @@ export class AuthenticationController {
    * confirm the address exists.
    */
   @Post('sign-in')
+  @Access({ public: true })
   @UseGuards(CredentialThrottlerGuard)
   @SkipThrottle({ [REDEMPTION_BY_ORIGIN]: true })
   @HttpCode(HttpStatus.OK)
@@ -67,6 +69,7 @@ export class AuthenticationController {
   }
 
   @Post('refresh')
+  @Access({ public: true })
   @HttpCode(HttpStatus.OK)
   async update(@Body() body: RefreshSessionRequest): Promise<SessionResponse> {
     return toSessionResponse(
@@ -77,6 +80,7 @@ export class AuthenticationController {
   }
 
   @Post('sign-out')
+  @Access({ public: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   async destroy(@Body() body: SignOutRequest): Promise<void> {
     await this.signOut.execute({
@@ -91,6 +95,7 @@ export class AuthenticationController {
    * yet and must sign in with what they chose.
    */
   @Post('credentials')
+  @Access({ public: true })
   @UseGuards(CredentialThrottlerGuard)
   // Counted by origin only: a setup token names nobody until it is looked up,
   // so there is no address to count by.

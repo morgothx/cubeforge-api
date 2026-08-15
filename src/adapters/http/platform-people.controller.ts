@@ -10,6 +10,7 @@ import type { Request } from 'express';
 import { DeactivatePersonUseCase } from '../../application/person/deactivate-person.use-case';
 import { personId } from '../../domain/identifiers';
 import { actorOf } from './principal.middleware';
+import { Access } from './access/access.decorator';
 
 /**
  * Operator-facing, and deliberately the only route that names a person by their
@@ -21,6 +22,7 @@ export class PlatformPeopleController {
   constructor(private readonly deactivate: DeactivatePersonUseCase) {}
 
   @Delete(':personId')
+  @Access({ operator: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   async destroy(
     @Req() request: Request,
