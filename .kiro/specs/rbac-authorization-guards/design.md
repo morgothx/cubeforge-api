@@ -394,10 +394,13 @@ same body on purpose; this feature adds no new mapping and no new status.
 
 ## Open Questions
 
-- **The cost of the second read is not yet a number.** The implementation
-  measures it and records the figure, the way feature 2 measured an Argon2 hash
-  rather than inheriting one. If it is bad, the transaction decision is the one
-  to revisit, and it is isolated to the guard.
+- ~~The cost of the second read is not yet a number.~~ **Answered in task 2.5:**
+  6.05 ms per tenant-scoped request for the guard's resolution on the local
+  stack, of which 1.11 ms is the transaction and 4.94 ms the three reads. Since
+  the use case repeats those reads, a request pays roughly 12 ms of
+  authorization in total. The decision stands for a dashboard API; the full
+  breakdown and the reason `people` dominates it are in the Implementation Notes
+  of `tasks.md`.
 - **`isolation-matrix.integration-spec.ts` overlaps the new role matrix.** One
   suite should own the claim. Which one absorbs which is a judgment best made
   with both in front of us, so it is a task rather than a decision here.

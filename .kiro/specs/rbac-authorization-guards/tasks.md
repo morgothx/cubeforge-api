@@ -98,7 +98,7 @@ four conflicting versions of one file.
   - _Requirements: 3.2, 3.3, 3.4_
   - _Boundary: Access guard_
 
-- [ ] 2.5 Measure what the guard's resolution costs
+- [x] 2.5 Measure what the guard's resolution costs
   - Time a tenant-scoped request with the guard resolving and with it short-
     circuited, on this machine, against the local database
   - Record the figure in the Implementation Notes, so the transaction decision
@@ -325,3 +325,35 @@ inherits them rather than rediscovering them.
   own failing test — the "wrong tenant" and "wrong role" cases had both passed
   before the pass landed, via the fail-closed branch, so passing afterwards
   proved nothing on its own.
+- **The guard's resolution costs ~6 ms per tenant-scoped request** on this
+  machine (Docker PostgreSQL on localhost, 50 iterations, warm pool):
+
+  | | ms/request |
+  |---|---|
+  | guard resolving a membership | 6.05 |
+  | guard short-circuiting on a public route | 0.00 |
+  | the transaction alone, empty | 1.11 |
+  | the three reads | 4.94 |
+
+  Broken down further, over an 0.87 ms empty-transaction baseline:
+  `tenants.findCurrent` 2.32, `people.findById` 4.19, `memberships.findByPerson`
+  3.75. **`people` is the slowest because its row-level security policy runs an
+  `EXISTS` against `memberships` for every candidate row**, so reading a person
+  also costs a membership lookup. That is migration 0001's design working as
+  intended, not a defect, and it costs the same inside the use case's
+  transaction.
+- **The figure that actually matters is double this.** The use case repeats the
+  same three reads in its own transaction, so a tenant-scoped request now pays
+  roughly 12 ms of authorization rather than 6. That is the true price of two
+  layers that do not share a point of failure, and it was worth stating plainly
+  rather than reporting only the guard's half.
+- **Verdict: the transaction decision stands.** For a dashboard API answering
+  human-paced requests, 12 ms is affordable and buys refusal before application
+  logic plus an independent second layer. It is the first thing to revisit if a
+  latency budget ever appears, and the alternatives are already written down in
+  `research.md` — sharing the resolution was rejected because it would make the
+  second layer depend on the first.
+- 2.5 is a measurement, not a behaviour, so it has no RED phase: there was
+  nothing to fail first. The spec keeps a deliberately generous ceiling (50 ms)
+  that will never trip on a busy laptop but does catch a lost index or a
+  resolution that starts issuing a query per membership.
