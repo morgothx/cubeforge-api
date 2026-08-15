@@ -63,11 +63,29 @@ export class AccessGuard implements CanActivate {
       return true;
     }
 
+    if (actor.kind === 'machine') {
+      if (declaration.machines !== true) {
+        // The key may well carry the role the route names. Holding the role is
+        // not the question: reaching a route as a machine is a separate
+        // admission a route has to make deliberately.
+        throw refusal('this route does not admit machine callers');
+      }
+      if (!declaration.roles.includes(actor.role)) {
+        throw refusal(
+          `this key carries ${actor.role}, which this route does not name`,
+        );
+      }
+      // A person's tenant comes from the path, so the two cannot disagree. A
+      // machine's comes from its credential, so they can — and this comparison
+      // is what keeps a key inside the tenant it was issued into.
+      if (actor.tenantId !== tenantInPath(context)) {
+        throw refusal('this key belongs to a tenant this path does not name');
+      }
+      return true;
+    }
+
     if (actor.kind !== 'tenant-member') {
-      // An operator is above every tenant and inside none of them; a machine is
-      // handled by the pass that teaches this guard about `machines`. Until
-      // then it is refused, which is the same answer it will get on any route
-      // that does not admit it.
+      // An operator is above every tenant and inside none of them.
       throw refusal(
         `this route is for tenant members; this caller is a ${actor.kind}`,
       );
@@ -100,6 +118,21 @@ export class AccessGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
   }
+}
+
+/**
+ * The tenant the request addressed, read from the matched route's parameter.
+ *
+ * A guard runs after routing, so `params` is populated and is the precise
+ * source — unlike the middleware upstream, which runs before matching and has
+ * to recognize the path with a pattern. A route that admits machines and names
+ * no tenant has nothing to compare a key against, and returning `null` refuses
+ * it.
+ */
+function tenantInPath(context: ExecutionContext): string | null {
+  const { params } = context.switchToHttp().getRequest<Request>();
+  const value: unknown = params.tenantId;
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
 function refusal(reason: string): DomainViolation {

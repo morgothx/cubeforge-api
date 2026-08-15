@@ -9,15 +9,19 @@ this, then `.kiro/specs/authentication/tasks.md`.
   `implemented`.
 - **Feature 2 `authentication`: complete.** 33/33 tasks, spec phase
   `implemented`.
-- **Feature 3 `rbac-authorization-guards`: 5/19 tasks.** Section 1 and tasks
-  2.1–2.3 done; 2.3 (tenant roles resolved against a membership) is in the
-  working tree, uncommitted.
-- Último commit: `feat(rbac-authorization-guards): enforce the operator
-  declaration` (task 2.2).
-- Tests: `pnpm test` 268 passing, `pnpm test:integration` 108 passing,
+- **Feature 3 `rbac-authorization-guards`: 6/19 tasks.** Section 1 and tasks
+  2.1–2.4 done; 2.4 (machine callers) is in the working tree, uncommitted. The
+  guard now judges every declaration shape and is still registered nowhere.
+- Último commit: `feat(rbac-authorization-guards): enforce tenant roles against
+  a membership` (task 2.3).
+- Tests: `pnpm test` 273 passing, `pnpm test:integration` 108 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
-- Next task: 2.4, machine callers. Run it as
-  `/kiro-impl rbac-authorization-guards 2.4` — **with the task number**, which
+- Next task: 2.5, measuring the guard's extra read. **Note an ordering problem
+  with it**: a truthful figure needs PostgreSQL, and the guard is not registered
+  in the real application until 4.5. Either measure it by driving the guard
+  directly against the real unit of work in an integration test, or move 2.5
+  after 4.5. Decide with Camilo before starting it. Run it as
+  `/kiro-impl rbac-authorization-guards 2.5` — **with the task number**, which
   is what selects manual mode. Manual mode has no commit step at all; without
   numbers it commits per task and breaks the rule below.
 

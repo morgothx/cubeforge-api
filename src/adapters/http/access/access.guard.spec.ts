@@ -69,6 +69,21 @@ class RestrictedController {
   }
 }
 
+/**
+ * The fixture route for machine admission. No shipped endpoint admits machines
+ * (3.4) and inventing one would be feature 5's decision taken early, so the
+ * mechanism is proven here instead.
+ */
+@Controller('integrations/:tenantId')
+class MachineAdmittingController {
+  @Get()
+  @Access({ roles: ['editor'], machines: true })
+  list(): string {
+    entered.add('integrations');
+    return 'reached';
+  }
+}
+
 @Controller('operators')
 class OperatorController {
   @Get()
@@ -124,6 +139,7 @@ const ACTORS: Record<string, ActorContext> = {
     PublicController,
     RestrictedController,
     OperatorController,
+    MachineAdmittingController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AccessGuard },
@@ -538,5 +554,128 @@ describe('the access guard, resolving a membership', () => {
     await context.platform.runAsOperator(({ tenants }) =>
       tenants.updateStatus(acme, 'active'),
     );
+  });
+});
+
+/**
+ * Machines are admitted by a separate statement, never by holding a role.
+ *
+ * An API key carries a role of its own, which is what makes this worth writing
+ * down: without a deliberate admission, a key carrying `admin` would otherwise
+ * look exactly like an administrator to a route that only asked for one.
+ */
+describe('the access guard, and machine callers', () => {
+  let app: INestApplication<App>;
+  let context: IdentityTestContext;
+
+  const ABSENCE = {
+    statusCode: 404,
+    message: 'the requested record does not exist',
+  };
+
+  let acme: TenantId;
+  let globex: TenantId;
+
+  beforeAll(async () => {
+    context = createIdentityTestContext();
+    acme = await context.seedTenant('Acme');
+    globex = await context.seedTenant('Globex');
+
+    register('acme-editor-key', {
+      kind: 'machine',
+      apiKeyId: apiKeyId('018f2c00-0000-7000-8000-0000000000e1'),
+      tenantId: acme,
+      role: 'editor',
+    });
+    register('acme-viewer-key', {
+      kind: 'machine',
+      apiKeyId: apiKeyId('018f2c00-0000-7000-8000-0000000000e2'),
+      tenantId: acme,
+      role: 'viewer',
+    });
+    register('acme-admin-key', {
+      kind: 'machine',
+      apiKeyId: apiKeyId('018f2c00-0000-7000-8000-0000000000e3'),
+      tenantId: acme,
+      role: 'admin',
+    });
+    register('acme-member', {
+      kind: 'tenant-member',
+      personId: await context.seedMember({
+        tenantId: acme,
+        email: 'editor@acme.example.com',
+        role: 'editor',
+      }),
+      tenantId: acme,
+    });
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [GuardedModule],
+    })
+      .overrideProvider(TENANT_SCOPED_UNIT_OF_WORK)
+      .useValue(context.tenantScoped)
+      .compile();
+    app = moduleRef.createNestApplication<INestApplication<App>>();
+    app.useGlobalFilters(new DomainErrorFilter());
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(() => {
+    entered.clear();
+    withdrawn.clear();
+  });
+
+  const integrations = (tenant: TenantId, actor: string) =>
+    request(app.getHttpServer())
+      .get(`/integrations/${tenant}`)
+      .set({ 'x-test-actor': actor });
+
+  it('refuses a key on a route that does not admit machines, whatever it carries', async () => {
+    // The key carries `admin`, which is exactly what the route asks of a
+    // person. Holding the role is not the question.
+    const response = await request(app.getHttpServer())
+      .get('/restricted')
+      .set({ 'x-test-actor': 'acme-admin-key' });
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual(ABSENCE);
+    expect(entered.size).toBe(0);
+  });
+
+  it('admits a key carrying a permitted role on the tenant it belongs to', async () => {
+    const response = await integrations(acme, 'acme-editor-key');
+
+    expect(response.status).toBe(200);
+    expect(entered.has('integrations')).toBe(true);
+  });
+
+  it('refuses the same key when the path names another tenant', async () => {
+    // Unlike a person, a machine's tenant comes from its credential rather than
+    // from the path, so the two can disagree and the guard has to compare them.
+    const response = await integrations(globex, 'acme-editor-key');
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual(ABSENCE);
+    expect(entered.size).toBe(0);
+  });
+
+  it('refuses a key whose role the route does not name', async () => {
+    const response = await integrations(acme, 'acme-viewer-key');
+
+    expect(response.status).toBe(404);
+    expect(entered.size).toBe(0);
+  });
+
+  it('still judges a person by their membership on a route that admits machines', async () => {
+    // `machines` widens who may reach a route; it does not turn the role check
+    // off for the people who were already reaching it.
+    const response = await integrations(acme, 'acme-member');
+
+    expect(response.status).toBe(200);
+    expect(entered.has('integrations')).toBe(true);
   });
 });

@@ -84,7 +84,7 @@ four conflicting versions of one file.
   - _Requirements: 1.1, 2.4, 4.3, 5.1, 5.2, 5.3, 5.4_
   - _Boundary: Access guard_
 
-- [ ] 2.4 Refuse machine callers unless a route admits them
+- [x] 2.4 Refuse machine callers unless a route admits them
   - Refuse a machine credential on any route that does not declare machines
     admissible, whatever role that credential carries
   - Where a route does admit them, permit a credential carrying a permitted role
@@ -311,3 +311,17 @@ inherits them rather than rediscovering them.
 - The guard is now `async`. `canActivate` returning a promise is ordinary for
   Nest, but it means every guarded tenant route awaits a transaction before the
   handler starts — the cost 2.5 has to measure.
+- **A machine's tenant and the path's can disagree; a person's cannot.** The
+  middleware puts the path's tenant on a person's actor, so for people the two
+  are the same value by construction. A key carries the tenant it was issued
+  into, so the guard has to compare them itself. Read from
+  `request.params.tenantId` rather than by matching the URL: a guard runs after
+  routing, so the parameter is populated and is the precise source, unlike the
+  middleware upstream which runs before matching and needs a pattern.
+- A route that admits machines but names no tenant has nothing to compare a key
+  against, so `tenantInPath` returns null and the key is refused. Fail-closed on
+  a shape no route has today, rather than a special case nobody would maintain.
+- The three machine checks were each broken separately to confirm each has its
+  own failing test — the "wrong tenant" and "wrong role" cases had both passed
+  before the pass landed, via the fail-closed branch, so passing afterwards
+  proved nothing on its own.
