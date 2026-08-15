@@ -42,7 +42,7 @@ One component, built in four passes. These are deliberately **not** `(P)`: they
 all edit the same decision path, and splitting them across agents would produce
 four conflicting versions of one file.
 
-- [ ] 2.1 Refuse a route that declares nothing, and admit the ones that declare
+- [x] 2.1 Refuse a route that declares nothing, and admit the ones that declare
       themselves public
   - Refuse before the handler runs, and prove it with a handler that records
     whether it was entered
@@ -263,3 +263,21 @@ inherits them rather than rediscovering them.
   routes by name rather than counting them, so adding one fails with the route
   named instead of with a number nobody can act on. It is built by hand from
   `ModulesContainer` in that test because nothing provides it until 4.5.
+- **The guard fails closed on declarations it cannot yet judge.** Built in
+  passes, so between 2.1 and 2.3 it refuses `operator` and `roles` routes
+  outright rather than admitting what it has not learned to evaluate. A
+  half-built guard that let those through would be worse than none, because it
+  would look like one. Each later pass replaces a refusal with a decision.
+- 2.1 touched one file outside its boundary: `principal.middleware.ts` gained an
+  exported `attachActor`, which is the write the middleware already performed
+  inline. Exported so the `ACTOR` symbol stays private and a test that needs a
+  principal without a credential has to say so by calling it, instead of
+  reaching into the request. Worth the spill; recorded rather than hidden.
+- The guard takes only the `Reflector` so far. The design's constructor also
+  names the tenant-scoped unit of work, which arrives in 2.3 where it is first
+  used — a dependency injected before it is needed is a dependency nobody can
+  see the reason for.
+- Proved by breaking, not by watching: admitting undeclared routes fails five
+  tests, and the one that matters is "never lets the handler run" — a route that
+  executed and then answered 404 would satisfy every status assertion and have
+  already done its work.

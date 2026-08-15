@@ -36,7 +36,7 @@ export class PrincipalMiddleware implements NestMiddleware {
     if (credential !== null) {
       const actor = await this.resolver.resolve(credential);
       if (actor !== null) {
-        request[ACTOR] = actor;
+        attachActor(request, actor);
       }
     }
     next();
@@ -82,6 +82,17 @@ function header(request: Request, name: string): string | undefined {
   const value = request.headers[name];
   const single = Array.isArray(value) ? value[0] : value;
   return single?.trim() || undefined;
+}
+
+/**
+ * Puts a resolved principal on the request.
+ *
+ * Exported so the symbol can stay private: this is the only way to write one,
+ * and a test that needs a principal without a credential says so by calling
+ * this rather than by reaching into the request.
+ */
+export function attachActor(request: Request, actor: ActorContext): void {
+  (request as RequestWithActor)[ACTOR] = actor;
 }
 
 /**
