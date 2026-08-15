@@ -6,6 +6,7 @@ import {
 import { CorrelationMiddleware } from './adapters/http/correlation.middleware';
 import { PrincipalMiddleware } from './adapters/http/principal.middleware';
 import { AuthenticationModule } from './authentication.module';
+import { AuthorizationModule } from './authorization.module';
 import { SystemModule } from './system.module';
 import { IdentityModule } from './identity.module';
 
@@ -15,7 +16,12 @@ import { IdentityModule } from './identity.module';
  * in this file.
  */
 @Module({
-  imports: [SystemModule, AuthenticationModule, IdentityModule],
+  imports: [
+    SystemModule,
+    AuthenticationModule,
+    AuthorizationModule,
+    IdentityModule,
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

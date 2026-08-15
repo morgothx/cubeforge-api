@@ -22,10 +22,13 @@ import {
   type TenantId,
 } from '../../../domain/identifiers';
 import { TENANT_SCOPED_UNIT_OF_WORK } from '../../../application/ports/tenant-scoped-unit-of-work';
+import { Argon2PasswordHasher } from '../../crypto/argon2-password-hasher';
+import { JwtAccessTokenIssuer } from '../../crypto/access-token-issuer';
 import {
   createIdentityTestContext,
   type IdentityTestContext,
 } from '../../testing/identity-test-context';
+import { createInMemoryApplication } from '../../testing/in-memory-application';
 import { DomainErrorFilter } from '../domain-error.filter';
 import { attachActor } from '../principal.middleware';
 import { Access } from './access.decorator';
@@ -677,5 +680,85 @@ describe('the access guard, and machine callers', () => {
 
     expect(response.status).toBe(200);
     expect(entered.has('integrations')).toBe(true);
+  });
+});
+
+/**
+ * The guard as the application actually registers it.
+ *
+ * Everything above builds a module of its own, which proves the guard's
+ * decisions and nothing about whether the real application uses it. This mounts
+ * a route the application does not ship, declaring nothing, and expects it to
+ * be refused — which can only happen if the guard is registered for routes
+ * nobody thought about.
+ */
+describe('the access guard, as the application registers it', () => {
+  const tokens = new JwtAccessTokenIssuer({
+    secret: 'a-signing-secret-long-enough-for-the-rule',
+    accessTokenLifetimeSeconds: 900,
+  });
+  const hasher = new Argon2PasswordHasher({
+    memoryCostKiB: 8192,
+    timeCost: 1,
+    parallelism: 1,
+  });
+
+  @Controller('a-route-nobody-declared')
+  class UndeclaredProbeController {
+    @Get()
+    list(): string {
+      entered.add('probe');
+      return 'reached';
+    }
+  }
+
+  let app: INestApplication<App>;
+
+  beforeAll(async () => {
+    app = await createInMemoryApplication({
+      context: createIdentityTestContext(),
+      hasher,
+      tokens,
+      throttling: {
+        windowSeconds: 60,
+        cooldownSeconds: 60,
+        signInAttemptsPerAddress: 3,
+        signInAttemptsPerOrigin: 8,
+        redemptionsPerOrigin: 3,
+      },
+      controllers: [UndeclaredProbeController],
+    });
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(() => {
+    entered.clear();
+  });
+
+  it('refuses a route the application never declared', async () => {
+    const response = await request(app.getHttpServer()).get(
+      '/a-route-nobody-declared',
+    );
+
+    expect(response.status).toBe(404);
+    expect(entered.has('probe')).toBe(false);
+  });
+
+  it('still admits the routes that declared themselves public', async () => {
+    // Registration must not turn the credential endpoints off. A guard that
+    // refused everything would satisfy the assertion above and lock the door
+    // on the way in.
+    const response = await request(app.getHttpServer())
+      .post('/auth/sign-in')
+      .send({ email: 'nobody@example.com', password: 'not the password' });
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({
+      statusCode: 404,
+      message: 'the requested record does not exist',
+    });
   });
 });

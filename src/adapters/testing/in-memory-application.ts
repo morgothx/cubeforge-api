@@ -1,4 +1,9 @@
-import { Global, Module, type INestApplication } from '@nestjs/common';
+import {
+  Global,
+  Module,
+  type INestApplication,
+  type Type,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getOptionsToken } from '@nestjs/throttler';
 import type { App } from 'supertest/types';
@@ -58,6 +63,12 @@ export interface InMemoryApplicationOptions {
   readonly tokens: AccessTokenIssuer;
   /** Small limits, so a test can exhaust a bucket in a few requests. */
   readonly throttling: ThrottlingConfig;
+  /**
+   * Extra controllers to mount alongside the real ones, for the tests that
+   * need a route the application does not ship — proving that a route nobody
+   * declared is refused needs a route nobody declared.
+   */
+  readonly controllers?: readonly Type<unknown>[];
 }
 
 /**
@@ -84,7 +95,10 @@ export async function createInMemoryApplication(
     context.apiKeys,
   );
 
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+  const moduleRef = await Test.createTestingModule({
+    imports: [AppModule],
+    controllers: [...(options.controllers ?? [])],
+  })
     .overrideModule(DrizzleModule)
     .useModule(NoDatabaseModule)
     .overrideProvider(TENANT_SCOPED_UNIT_OF_WORK)

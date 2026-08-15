@@ -166,7 +166,7 @@ so 4.5 is last and is the task that makes the feature live.
   - _Requirements: 2.3_
   - _Boundary: API keys controller_
 
-- [ ] 4.5 Register the guard for every route
+- [x] 4.5 Register the guard for every route
   - Bind it globally, so a route that was never considered is still covered
   - Give it the dependencies it needs to resolve a membership, without making
     any use case aware of it
@@ -398,3 +398,24 @@ inherits them rather than rediscovering them.
   import statement, because "the last line starting with `import`" is not the
   end of the import block. The build caught it immediately; worth remembering
   that this repository's controllers all open with multi-line imports.
+- **The feature is live as of 4.5, and the suite went green on the first run.**
+  That is the payoff of declaring all sixteen routes before registering
+  anything: had a declaration been wrong, it would have surfaced here as a
+  broken route rather than as a silent hole.
+- Proved by mounting a route the application does not ship, declaring nothing,
+  and expecting a refusal — which only a globally registered guard can produce.
+  `createInMemoryApplication` gained a `controllers` option for it: proving that
+  an undeclared route is refused needs an undeclared route, and the sixteen real
+  ones are all declared.
+- **Requirement 1.3 verified by breaking, and it is the sharpest check in the
+  feature**: narrowing the member listing's declaration to `admin` alone refuses
+  a viewer through the real application *while the use case still permits all
+  three roles*. The declaration drives the outcome, and nothing behind the route
+  changed.
+- **Smoke against `node dist/main.js`**, which is where the two layers became
+  visible as two. Both requests answer 404 and the log tells them apart:
+  `GET /tenants` with no credential logs "this route needs a principal and none
+  was resolved" — the guard, before the handler — while `POST /auth/sign-in`
+  logs "no credential for this address", which only the use case can say. The
+  public declaration let one through and the guard stopped the other, and the
+  caller cannot tell which happened.
