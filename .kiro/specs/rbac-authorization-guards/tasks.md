@@ -189,7 +189,7 @@ so 4.5 is last and is the task that makes the feature live.
   - _Requirements: 1.2, 3.4, 6.2_
   - _Boundary: Route inventory tests_
 
-- [ ] 5.2 Prove the declared roles and the enforced roles have not drifted
+- [x] 5.2 Prove the declared roles and the enforced roles have not drifted
   - Compare each route's declared roles against the value the use case behind it
     enforces; for operator routes, compare the declaration against the use case
     requiring an operator
@@ -439,3 +439,19 @@ inherits them rather than rediscovering them.
 - The undeclared-route test and the declaration table say the same thing today,
   because the table lists all sixteen. They diverge the moment a route is added:
   the table needs a hand, this one does not. That is why both exist.
+- **Nothing in the running system links a route to the use case behind it**, so
+  the pairing is stated in the drift spec. It is not a third list to keep in
+  step: the role constants are imported, so renaming or deleting one fails the
+  build rather than the test. Two further assertions stop the table going stale
+  — every route that names roles, and every route declared for an operator, must
+  appear in it, so a route added later cannot escape the comparison.
+- Both directions of drift were verified: widening a declaration without its use
+  case fails, and widening a use case without its declaration fails. That is
+  what makes the two layers independent *and* consistent — a deliberate change
+  has to be written twice, which is the friction a security rule deserves.
+- **A source-presence check was satisfied by an unused import.** The operator
+  routes have no value to compare, only a call, so the spec greps the use case's
+  source. Grepping for `requirePlatformOperator` survived deleting the call,
+  because the import line still mentioned it — found by breaking, not by
+  reading. It now greps for `requirePlatformOperator(`, which does not appear in
+  an import.
