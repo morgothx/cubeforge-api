@@ -9,21 +9,20 @@ this, then `.kiro/specs/authentication/tasks.md`.
   `implemented`.
 - **Feature 2 `authentication`: complete.** 33/33 tasks, spec phase
   `implemented`.
-- **Feature 3 `rbac-authorization-guards`: 17/19 tasks. The feature is live.**
-  Sections 1–4 complete, plus 5.1–5.4. 5.4 is in the working tree, uncommitted.
-  Two validation tasks remain: 5.5 and 5.6.
-- Último commit: `test(rbac-authorization-guards): prove the matrix over every
-  route` (task 5.3). An earlier one, tasks 4.1–4.4, has a typo'd subject:
+- **Feature 3 `rbac-authorization-guards`: 18/19 tasks. The feature is live.**
+  Sections 1–4 complete, plus 5.1–5.5. 5.5 is in the working tree, uncommitted.
+  **Only 5.6 remains**, and it is a judgment task rather than new coverage.
+- Último commit: `test(rbac-authorization-guards): prove a refusal discloses
+  nothing` (task 5.4). An earlier one, tasks 4.1–4.4, has a typo'd subject:
   `eat(...)`.
-- Tests: `pnpm test` 295 passing, `pnpm test:integration` 133 passing,
+- Tests: `pnpm test` 300 passing, `pnpm test:integration` 133 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
-- Next task: 5.5, the second layer standing on its own — invoke a tenant-scoped
-  use case directly, with no route and no guard, and confirm it still refuses.
-  5.3 already gave strong evidence for this (the whole matrix passes with the
-  guard unregistered), so 5.5 is the direct proof. Then 5.6, the overlap with
-  feature 1's isolation matrix. Run it as
-  `/kiro-impl rbac-authorization-guards 5.5` — **with the task number**, which
-  is what selects manual mode. Manual mode has no commit step at all; without
+- Next task: **5.6, the last one** — settle the overlap between feature 1's
+  `isolation-matrix.integration-spec.ts` and the new `role-matrix`. Decide which
+  owns which claim and move coverage rather than deleting it; the role matrix
+  now covers every route for every role, which the older suite predates. Run it
+  as `/kiro-impl rbac-authorization-guards 5.6` — **with the task number**,
+  which is what selects manual mode. Manual mode has no commit step at all; without
   numbers it commits per task and breaks the rule below.
 
 Camilo commits. Propose a message, never run `git commit`.

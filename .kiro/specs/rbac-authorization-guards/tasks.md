@@ -225,7 +225,7 @@ so 4.5 is last and is the task that makes the feature live.
   - _Requirements: 5.1, 5.2, 5.3, 5.5_
   - _Boundary: Disclosure tests_
 
-- [ ] 5.5 (P) Prove the second layer stands on its own
+- [x] 5.5 (P) Prove the second layer stands on its own
   - Invoke a tenant-scoped use case directly, with no route and no guard, and
     assert it still refuses an actor whose role is not permitted
   - Done when deleting the guard's registration leaves this test passing while
@@ -491,3 +491,16 @@ inherits them rather than rediscovering them.
 - The comparison covers headers as well as status and body, minus the three that
   are volatile by design. A refusal that differed only in a header would
   otherwise pass a body comparison and still be an oracle.
+- **The two layers were finally proved independent in both directions.** Delete
+  a use case's own check: this spec fails naming the operation, and the role
+  matrix still passes because the guard covers it. Delete the guard's
+  registration (5.3): the matrix's log test fails and this spec is untouched —
+  by construction, since it boots no application and imports no module. Each
+  layer has a witness the other cannot satisfy, which is what "no shared point
+  of failure" has to mean to be worth claiming.
+- The six administrative operations are collected rather than asserted one at a
+  time, so a failure names the operation that let the caller through instead of
+  stopping at the first. Removing one check printed `"listing API keys"`, which
+  is the whole diagnosis.
+- One test admits the administrator on purpose. Without it, six refusals would
+  pass just as well against a layer that refused everybody.
