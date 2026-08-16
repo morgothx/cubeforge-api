@@ -49,18 +49,31 @@ export async function authorizeInTenant(
   );
 
   if (tenant === null || person === null) {
-    throw new DomainViolation({ kind: 'not-found' });
+    throw new DomainViolation(
+      { kind: 'not-found' },
+      tenant === null ? 'no such tenant' : 'no such person',
+    );
   }
 
   const decision = decideAccess({ tenant, person, membership });
   // A grant implies a membership; testing for it again is what lets the
   // compiler agree, and costs a comparison rather than a cast.
   if (!decision.granted || membership === null) {
-    throw new DomainViolation({ kind: 'not-found' });
+    // `decideAccess` already worked out which of four things went wrong, and
+    // discarding it left the log saying only "not-found". Requirement 5.3 of
+    // the authorization feature wants the reason recorded, and this is the
+    // reason.
+    throw new DomainViolation(
+      { kind: 'not-found' },
+      decision.granted ? 'no membership' : decision.refusal.kind,
+    );
   }
 
   if (!permitted.includes(decision.role)) {
-    throw new DomainViolation({ kind: 'forbidden' });
+    throw new DomainViolation(
+      { kind: 'forbidden' },
+      `this caller is a ${decision.role} here; the operation permits ${permitted.join(', ')}`,
+    );
   }
 
   return { tenant, person, membership, role: decision.role };

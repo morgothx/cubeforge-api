@@ -215,7 +215,7 @@ so 4.5 is last and is the task that makes the feature live.
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 5.4, 6.1, 6.3, 6.4_
   - _Boundary: Role matrix tests_
 
-- [ ] 5.4 (P) Prove a refusal still discloses nothing
+- [x] 5.4 (P) Prove a refusal still discloses nothing
   - Assert a refusal for the wrong role and a refusal for no membership at all
     are identical in status and body
   - Assert the reason for each appears in the log and in no response
@@ -473,3 +473,21 @@ inherits them rather than rediscovering them.
 - Refusals are asserted as `{ principal, status }` pairs rather than bare
   statuses, so a failure names who was wrongly admitted instead of printing
   `expected 404, received 200` with no clue which of six callers it was.
+- **`authorizeInTenant` was throwing without reasons, and 2.3's note that adding
+  them "proved unnecessary" was wrong.** It was true for 2.3's needs and false
+  for requirement 5.3, which asks that the reason for every refusal be recorded.
+  The log was saying only `forbidden` or `not-found`, leaving an operator to
+  guess which of four access refusals had happened while `decideAccess` had
+  already worked it out and discarded it. Now each refusal carries its cause.
+- Found by breaking, in a roundabout way: leaking `reason` into the response
+  body did *not* fail the byte-identical test, because both refusals had no
+  reason to leak. A break that fails less than expected is worth reading rather
+  than moving past.
+- **A stranger's refusal logs "no such person", not "no membership".** From
+  inside the tenant's transaction, row-level security has already hidden a
+  person who belongs to another tenant, so the access decision never runs on
+  them — the second isolation layer answers first. The test asserts what
+  actually happens rather than what the authorization code would have concluded.
+- The comparison covers headers as well as status and body, minus the three that
+  are volatile by design. A refusal that differed only in a header would
+  otherwise pass a body comparison and still be an oracle.
