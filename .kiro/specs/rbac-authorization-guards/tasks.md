@@ -200,7 +200,7 @@ so 4.5 is last and is the task that makes the feature live.
   - _Requirements: 4.2_
   - _Boundary: Route inventory tests_
 
-- [ ] 5.3 Prove the matrix: every role, every route, refused in every direction
+- [x] 5.3 Prove the matrix: every role, every route, refused in every direction
   - Walk every route in the application for each of the three roles, in their
     own tenant and against another, through the assembled application and the
     real database
@@ -455,3 +455,21 @@ inherits them rather than rediscovering them.
   because the import line still mentioned it — found by breaking, not by
   reading. It now greps for `requirePlatformOperator(`, which does not appear in
   an import.
+- **The status matrix passes with the guard unregistered, and that is the
+  finding.** Every principal it refuses is refused identically by the use case
+  behind the route, so no status can tell which layer answered. That is not a
+  weakness in the matrix — it is the two layers being genuinely independent, and
+  it is the strongest evidence so far that requirement 4.1 holds. It does mean
+  the matrix proves a claim about the *system* and not about the guard.
+- So one test asks the log instead, which is where the design put the
+  distinction. Unregister the guard and it alone fails, while all eighteen other
+  cases stay green. **First probe was wrong**: an operator calling
+  `/tenants/{id}/api-keys` resolves as a *tenant member*, because the path names
+  a tenant and feature 2's resolver reads it that way deliberately. The probe
+  that works is a tenant member on `GET /tenants`, a path with no tenant in it.
+- The suite walks the routes the inventory reports, not a list written by hand,
+  and a coverage test compares the two. A route added later is reported by the
+  inventory and fails here by name until it is covered.
+- Refusals are asserted as `{ principal, status }` pairs rather than bare
+  statuses, so a failure names who was wrongly admitted instead of printing
+  `expected 404, received 200` with no clue which of six callers it was.

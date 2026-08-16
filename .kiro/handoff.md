@@ -9,19 +9,20 @@ this, then `.kiro/specs/authentication/tasks.md`.
   `implemented`.
 - **Feature 2 `authentication`: complete.** 33/33 tasks, spec phase
   `implemented`.
-- **Feature 3 `rbac-authorization-guards`: 15/19 tasks. The feature is live.**
-  Sections 1–4 complete, plus 5.1 and 5.2. 5.2 is in the working tree,
-  uncommitted. Four validation tasks remain.
-- Último commit: `test(rbac-authorization-guards): prove no route is undeclared`
-  (task 5.1). An earlier one, tasks 4.1–4.4, has a typo'd subject: `eat(...)`.
-- Tests: `pnpm test` 295 passing, `pnpm test:integration` 109 passing,
+- **Feature 3 `rbac-authorization-guards`: 16/19 tasks. The feature is live.**
+  Sections 1–4 complete, plus 5.1–5.3. 5.3, the role matrix, is in the working
+  tree, uncommitted. Three validation tasks remain: 5.4, 5.5 and 5.6.
+- Último commit: `test(rbac-authorization-guards): prove the two layers have not
+  drifted` (task 5.2). An earlier one, tasks 4.1–4.4, has a typo'd subject:
+  `eat(...)`.
+- Tests: `pnpm test` 295 passing, `pnpm test:integration` 128 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
-- Next task: **5.3, the tenant × role matrix over every route** — the largest
-  remaining task. Build it with actors the platform can actually produce: an
-  actor's tenant always *is* the path's, so a stranger is a person whose
-  membership lives elsewhere reaching this path, never an actor carrying a
-  foreign tenant. Run it as
-  `/kiro-impl rbac-authorization-guards 5.3` — **with the task number**, which
+- Next task: 5.4, proving a refusal still discloses nothing. Then 5.5 (the
+  second layer standing alone — note that 5.3 already gave strong evidence for
+  it, since the matrix passes with the guard unregistered) and 5.6 (the overlap
+  with feature 1's isolation matrix, which the new role matrix now largely
+  subsumes). Run it as
+  `/kiro-impl rbac-authorization-guards 5.4` — **with the task number**, which
   is what selects manual mode. Manual mode has no commit step at all; without
   numbers it commits per task and breaks the rule below.
 
