@@ -9,21 +9,19 @@ this, then `.kiro/specs/authentication/tasks.md`.
   `implemented`.
 - **Feature 2 `authentication`: complete.** 33/33 tasks, spec phase
   `implemented`.
-- **Feature 3 `rbac-authorization-guards`: 18/19 tasks. The feature is live.**
-  Sections 1–4 complete, plus 5.1–5.5. 5.5 is in the working tree, uncommitted.
-  **Only 5.6 remains**, and it is a judgment task rather than new coverage.
+- **Feature 3 `rbac-authorization-guards`: complete.** 19/19 tasks, spec phase
+  `implemented`. 5.5 and 5.6 are in the working tree, uncommitted.
 - Último commit: `test(rbac-authorization-guards): prove a refusal discloses
-  nothing` (task 5.4). An earlier one, tasks 4.1–4.4, has a typo'd subject:
-  `eat(...)`.
-- Tests: `pnpm test` 300 passing, `pnpm test:integration` 133 passing,
+  nothing` (task 5.4); 5.5 and 5.6 follow it, uncommitted. One earlier commit,
+  tasks 4.1–4.4, has a typo'd subject: `eat(...)`.
+- Tests: `pnpm test` 300 passing, `pnpm test:integration` 125 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
-- Next task: **5.6, the last one** — settle the overlap between feature 1's
-  `isolation-matrix.integration-spec.ts` and the new `role-matrix`. Decide which
-  owns which claim and move coverage rather than deleting it; the role matrix
-  now covers every route for every role, which the older suite predates. Run it
-  as `/kiro-impl rbac-authorization-guards 5.6` — **with the task number**,
-  which is what selects manual mode. Manual mode has no commit step at all; without
-  numbers it commits per task and breaks the rule below.
+- Next: feature 3 is finished. The roadmap's step 4 is `frontend-shell`, which
+  needs its own `.kiro/` inside `cubeforge-web` — that repo still holds only an
+  `.nvmrc`. Camilo's call whether to start it.
+- When a task run resumes: `/kiro-impl <feature> <numbers>` — **with the task
+  numbers**, which is what selects manual mode. Manual mode has no commit step
+  at all; without numbers it commits per task and breaks the rule below.
 
 Camilo commits. Propose a message, never run `git commit`.
 

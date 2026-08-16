@@ -432,6 +432,11 @@ same body on purpose; this feature adds no new mapping and no new status.
   authorization in total. The decision stands for a dashboard API; the full
   breakdown and the reason `people` dominates it are in the Implementation Notes
   of `tasks.md`.
-- **`isolation-matrix.integration-spec.ts` overlaps the new role matrix.** One
-  suite should own the claim. Which one absorbs which is a judgment best made
-  with both in front of us, so it is a task rather than a decision here.
+- ~~`isolation-matrix.integration-spec.ts` overlaps the new role matrix.~~
+  **Settled in task 5.6.** Access is the role matrix's: every role, every route,
+  including the stranger and the operator, walked from the route inventory.
+  Indistinguishability is the disclosure suite's. What stayed in the isolation
+  suite is what neither says — that a refusal destroys no records, that an
+  operator's view names nobody's tenant, and that adding an address registered
+  elsewhere is indistinguishable from adding an unknown one. Eight tests moved;
+  none were lost, and the mapping is in the Implementation Notes.

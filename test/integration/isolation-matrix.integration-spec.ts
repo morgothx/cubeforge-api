@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -9,19 +8,25 @@ import {
   memberHeaders,
   operatorHeaders,
   seedTenantWithAdministrator,
-  type Role,
 } from './support/application';
 import { seed } from './support/database';
 import { useIntegrationDatabase } from './support/fixtures';
 
 /**
- * The tests this feature exists to make possible.
+ * What tenant isolation guarantees beyond who may reach which route.
  *
- * Every one of them goes through the assembled application against the real
+ * Every one of these goes through the assembled application against the real
  * database, because that is the only level where the claim is meaningful: the
  * repository predicate, the row-level security policy, the use case and the
  * error filter all have to agree, and any one of them failing alone would be
  * invisible to a narrower test.
+ *
+ * Feature 3 took over the parts of this file that were about *access*. Refusing
+ * a role is now the role matrix's claim, and a refusal disclosing nothing is
+ * the disclosure suite's. What remains is what neither of them says: that a
+ * refusal destroys no records, that an operator's view names nobody's tenant,
+ * and that adding an address already registered elsewhere is indistinguishable
+ * from adding an unknown one.
  */
 describe('tenant isolation', () => {
   useIntegrationDatabase();
@@ -36,147 +41,20 @@ describe('tenant isolation', () => {
     await app.close();
   });
 
-  const ROLES: readonly Role[] = ['admin', 'editor', 'viewer'];
-
-  describe('the role matrix — every role, refused in every direction', () => {
-    it.each(ROLES)(
-      'refuses a %s of one tenant every operation against another',
-      async (role) => {
-        const acme = await seedTenantWithAdministrator(app, 'Acme');
-        const globex = await seedTenantWithAdministrator(app, 'Globex');
-        const intruder = await addMember(
-          app,
-          acme,
-          `${role}@acme.example.com`,
-          role,
-        );
-        const target = await addMember(
-          app,
-          globex,
-          'target@globex.example.com',
-          'viewer',
-        );
-        const headers = await memberHeaders(globex.id, intruder.personId);
-
-        // Sequential on purpose: each request now resolves its principal
-        // against the database, and firing them together only tests the pool.
-        const attempts = [
-          () =>
-            request(app.getHttpServer())
-              .get(`/tenants/${globex.id}/members`)
-              .set(headers),
-          () =>
-            request(app.getHttpServer())
-              .post(`/tenants/${globex.id}/members`)
-              .set(headers)
-              .send({ email: 'newcomer@example.com', role: 'viewer' }),
-          () =>
-            request(app.getHttpServer())
-              .patch(`/tenants/${globex.id}/members/${target.membershipId}`)
-              .set(headers)
-              .send({ role: 'admin' }),
-          () =>
-            request(app.getHttpServer())
-              .delete(`/tenants/${globex.id}/members/${target.membershipId}`)
-              .set(headers),
-        ];
-
-        for (const attempt of attempts) {
-          expect((await attempt()).status).toBe(404);
-        }
-        // Nothing was written on the way to being refused.
-        const members = await request(app.getHttpServer())
-          .get(`/tenants/${globex.id}/members`)
-          .set(globex.headers);
-        expect(body<unknown[]>(members)).toHaveLength(2);
-      },
-    );
-
-    it.each(ROLES)(
-      'refuses a %s indistinguishably from a record that exists nowhere',
-      async (role) => {
-        const acme = await seedTenantWithAdministrator(app, 'Acme');
-        const globex = await seedTenantWithAdministrator(app, 'Globex');
-        const intruder = await addMember(
-          app,
-          acme,
-          `${role}@acme.example.com`,
-          role,
-        );
-        const target = await addMember(
-          app,
-          globex,
-          'target@globex.example.com',
-          'viewer',
-        );
-        const headers = await memberHeaders(acme.id, intruder.personId);
-
-        const foreign = await request(app.getHttpServer())
-          .delete(`/tenants/${acme.id}/members/${target.membershipId}`)
-          .set(headers);
-        const imaginary = await request(app.getHttpServer())
-          .delete(`/tenants/${acme.id}/members/${randomUUID()}`)
-          .set(headers);
-
-        expect(foreign.status).toBe(imaginary.status);
-        expect(foreign.body).toEqual(imaginary.body);
-      },
-    );
-  });
-
-  describe('one person, two tenants, two roles', () => {
-    /**
-     * The sharpest form of the guarantee: the same principal, whose permissions
-     * differ entirely depending on which tenant they are acting in.
-     */
-    it('grants exactly the permissions of the tenant in context, both ways', async () => {
-      const acme = await seedTenantWithAdministrator(app, 'Acme');
-      const globex = await seedTenantWithAdministrator(app, 'Globex');
-      const person = await addMember(app, acme, 'shared@example.com', 'admin');
-      await request(app.getHttpServer())
-        .post(`/tenants/${globex.id}/members`)
-        .set(globex.headers)
-        .send({ email: 'shared@example.com', role: 'viewer' });
-
-      const asAcmeAdmin = await memberHeaders(acme.id, person.personId);
-      const asGlobexViewer = await memberHeaders(globex.id, person.personId);
-
-      // Administrator in Acme: permitted.
-      const inAcme = await request(app.getHttpServer())
-        .post(`/tenants/${acme.id}/members`)
-        .set(asAcmeAdmin)
-        .send({ email: 'newcomer@acme.example.com', role: 'viewer' });
-      expect(inAcme.status).toBe(201);
-
-      // The very same person, viewer in Globex: refused, and told nothing.
-      const inGlobex = await request(app.getHttpServer())
-        .post(`/tenants/${globex.id}/members`)
-        .set(asGlobexViewer)
-        .send({ email: 'newcomer@globex.example.com', role: 'viewer' });
-      expect(inGlobex.status).toBe(404);
-
-      // And a read, in both directions, showing each tenant's own membership.
-      const acmeMembers = await request(app.getHttpServer())
-        .get(`/tenants/${acme.id}/members`)
-        .set(asAcmeAdmin);
-      expect(
-        body<{ email: string; role: string }[]>(acmeMembers).find(
-          (member) => member.email === 'shared@example.com',
-        )?.role,
-      ).toBe('admin');
-
-      // The same person, reading in Globex where they are only a viewer: they
-      // see who is there and no addresses at all. One person, one credential,
-      // two different answers decided entirely by which tenant the path names.
-      const globexMembers = await request(app.getHttpServer())
-        .get(`/tenants/${globex.id}/members`)
-        .set(asGlobexViewer);
-      expect(globexMembers.status).toBe(200);
-      const seen = body<{ email?: string; role: string }[]>(globexMembers);
-      expect(seen.length).toBeGreaterThan(0);
-      expect(seen.every((member) => member.email === undefined)).toBe(true);
-    });
-  });
+  /**
+   * The role matrix that used to live here — every role of one tenant refused
+   * every operation against another, indistinguishably from a record that
+   * exists nowhere — moved to `role-matrix.integration-spec.ts` in feature 3.
+   * That suite makes the same claim across *every* route the application
+   * serves rather than the four member operations, and walks the route
+   * inventory so a route added later cannot escape it. The same-person-two-
+   * tenants case moved with it, and the indistinguishability of a refusal is
+   * now owned by `authorization-disclosure.integration-spec.ts`.
+   *
+   * What stays here is what those suites do not assert: that refusing access
+   * destroys nothing, and that an operator's view discloses no one's
+   * participation in a tenant.
+   */
 
   describe('the operator boundary', () => {
     it('lets an operator create, list and deactivate tenants', async () => {
@@ -197,31 +75,8 @@ describe('tenant isolation', () => {
       expect(deactivated.status).toBe(204);
     });
 
-    it('gives an operator nothing when reaching inside a tenant', async () => {
-      const acme = await seedTenantWithAdministrator(app, 'Acme');
-      const member = await addMember(app, acme, 'member@example.com', 'viewer');
-
-      const operator = await operatorHeaders();
-      const attempts = [
-        () =>
-          request(app.getHttpServer())
-            .get(`/tenants/${acme.id}/members`)
-            .set(operator),
-        () =>
-          request(app.getHttpServer())
-            .post(`/tenants/${acme.id}/members`)
-            .set(operator)
-            .send({ email: 'newcomer@example.com', role: 'viewer' }),
-        () =>
-          request(app.getHttpServer())
-            .delete(`/tenants/${acme.id}/members/${member.membershipId}`)
-            .set(operator),
-      ];
-
-      for (const attempt of attempts) {
-        expect((await attempt()).status).toBe(404);
-      }
-    });
+    // "An operator gets nothing inside a tenant" moved to the role matrix,
+    // which asserts it on every tenant route rather than on three of them.
 
     /** Requirement 3.3: no operator response may hint at who belongs where. */
     it('reveals no tenant participation in any operator response', async () => {
@@ -239,6 +94,12 @@ describe('tenant isolation', () => {
     });
   });
 
+  /**
+   * The refusals below are also asserted by the role matrix, and that is not a
+   * duplicate: the claim here is the *conjunction* — access is denied **and**
+   * nothing is destroyed. Dropping the refusal half would leave "the records
+   * are still there" saying nothing about whether they are still reachable.
+   */
   describe('deactivation denies access without destroying anything', () => {
     it('refuses every role in a deactivated tenant, and keeps the records', async () => {
       const acme = await seedTenantWithAdministrator(app, 'Acme');

@@ -234,7 +234,7 @@ so 4.5 is last and is the task that makes the feature live.
   - _Requirements: 4.1, 4.3_
   - _Boundary: Application use case tests_
 
-- [ ] 5.6 Settle the overlap with the existing isolation matrix
+- [x] 5.6 Settle the overlap with the existing isolation matrix
   - The isolation suite from feature 1 and the matrix from 5.3 assert
     overlapping claims; decide which owns which, and leave one home for each
   - Do not delete coverage to resolve a duplicate — move it
@@ -504,3 +504,19 @@ inherits them rather than rediscovering them.
   is the whole diagnosis.
 - One test admits the administrator on purpose. Without it, six refusals would
   pass just as well against a layer that refused everybody.
+- **5.6 moved eight tests and lost none.** The mapping, checked one by one:
+  "refuses a *role* of one tenant every operation against another" (three tests)
+  → the role matrix's `stranger` principal, refused on all twelve routes rather
+  than four operations; "refuses a *role* indistinguishably from a record that
+  exists nowhere" (three) → the disclosure suite, which compares three refusals
+  including headers; "one person, two tenants, two roles" → the role matrix's
+  same-person case; "gives an operator nothing inside a tenant" → the operator
+  principal, refused on all seven tenant routes.
+- **The deactivation tests stayed, and their refusal assertions with them.**
+  That is not a leftover duplicate: the claim is the conjunction — access is
+  denied *and* nothing is destroyed — and dropping the refusal half would leave
+  "the records are still there" saying nothing about whether they are reachable.
+  Recorded in the file so the next reader does not "clean it up".
+- The rule followed throughout was the task's: move coverage, never delete it to
+  resolve a duplicate. Every removal names where the claim went, in the file it
+  left.
