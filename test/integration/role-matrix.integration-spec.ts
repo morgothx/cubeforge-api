@@ -402,8 +402,9 @@ describe('the role matrix', () => {
 
     try {
       // A tenant member on an operator route. The path names no tenant, so the
-      // middleware resolves operator status and finds none — and the guard is
-      // what turns that absence into a refusal before the controller asks.
+      // caller resolves to a person acting in none — and the guard is what
+      // turns the wrong kind of principal into a refusal before the controller
+      // asks.
       const refused = await request(server())
         .get('/tenants')
         .set(world.headers.viewer);
@@ -413,10 +414,16 @@ describe('the role matrix', () => {
     }
 
     // A reason only the guard produces. Without it the controller's own
-    // `actorOf` refuses the same request, saying "no credential was presented"
-    // instead — same 404 to the caller, different line in the log.
+    // `actorOf` admits the principal and the use case refuses instead — same
+    // 404 to the caller, different line in the log.
+    //
+    // Re-aimed in `caller-identity` task 1.2, which is the test doing its job:
+    // this caller used to resolve to no principal at all, so the line to look
+    // for was the guard's "needs a principal and none was resolved". Now they
+    // resolve to a person, and the guard refuses them for being the wrong kind.
+    // Both lines belong to the guard alone, which is all this asks.
     expect(logged.join('\n')).toContain(
-      'this route needs a principal and none was resolved',
+      'this route is for operators; this caller is a person',
     );
   });
 

@@ -155,6 +155,15 @@ The active check is new here and matters: a deactivated person's token verifies
 until it expires, and until now no tenantless route existed for a plain person
 to reach with it.
 
+**It must be its own read, and it must come first — found in task 1.2.**
+`isOperator` already requires an active person, so it answers `false` for a
+deactivated operator, which is indistinguishable from an ordinary member.
+Writing this as `isOperator ? operator : person` therefore resolves a
+deactivated operator to a *person*: deactivating a compromised operator would
+grant them access rather than remove it. The read is
+`credentials.findByPerson`, which exists for precisely this question — refresh
+asks it of a token holder for feature 2's requirement 6.1 — so no port changes.
+
 ### The declaration
 
 ```typescript

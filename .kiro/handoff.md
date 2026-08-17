@@ -1,7 +1,7 @@
 # Handoff — cubeforge-api
 
-Written 2026-08-14. Receiver: the next agent session (Claude or Codex). Read
-this, then `.kiro/specs/authentication/tasks.md`.
+Written 2026-08-17. Receiver: the next agent session (Claude or Codex). Read
+this, then `.kiro/specs/caller-identity/tasks.md`.
 
 ## Where things stand
 
@@ -10,15 +10,24 @@ this, then `.kiro/specs/authentication/tasks.md`.
 - **Feature 2 `authentication`: complete.** 33/33 tasks, spec phase
   `implemented`.
 - **Feature 3 `rbac-authorization-guards`: complete.** 19/19 tasks, spec phase
-  `implemented`. 5.5 and 5.6 are in the working tree, uncommitted.
-- Último commit: `test(rbac-authorization-guards): prove a refusal discloses
-  nothing` (task 5.4); 5.5 and 5.6 follow it, uncommitted. One earlier commit,
-  tasks 4.1–4.4, has a typo'd subject: `eat(...)`.
-- Tests: `pnpm test` 300 passing, `pnpm test:integration` 125 passing,
+  `implemented`.
+- **Feature 4 `caller-identity`: in progress.** 2/10 tasks. `spec.json` phase
+  `tasks-generated`, all three approvals `true`. Delivers `GET /me`, which the
+  frontend cannot start without — a client that just signed in has no way to
+  learn its own tenants or role.
+- Tarea activa: **1.2 complete and VERIFIED**; next actionable is **2.1**, "Add
+  the declaration shape". Section 3 is marked `(P)` and may be taken instead —
+  it shares no file with section 2.
+- Último commit: task 1.1 of `caller-identity`. **Uncommitted in the tree:** the
+  spec files for `caller-identity` (a `docs(...)` commit of their own) and task
+  1.2. One earlier commit, tasks 4.1–4.4 of feature 3, has a typo'd subject:
+  `eat(...)`.
+- Ciclo TDD: 1.2 VERIFIED — RED from a new `principal-resolver.spec.ts`, GREEN,
+  then verified by breaking (deleting the active check fails two of its tests).
+  2.1 NOT_STARTED.
+- Tests corridos: `pnpm test` 308 passing, `pnpm test:integration` 125 passing,
   `pnpm lint` and `pnpm build` clean. Last run: all green.
-- Next: feature 3 is finished. The roadmap's step 4 is `frontend-shell`, which
-  needs its own `.kiro/` inside `cubeforge-web` — that repo still holds only an
-  `.nvmrc`. Camilo's call whether to start it.
+- Próximo paso exacto: `/kiro-impl caller-identity 2.1`.
 - When a task run resumes: `/kiro-impl <feature> <numbers>` — **with the task
   numbers**, which is what selects manual mode. Manual mode has no commit step
   at all; without numbers it commits per task and breaks the rule below.
@@ -34,12 +43,17 @@ summarize, propose a Conventional Commits message in English, and wait.
 `/kiro-impl` autonomous mode commits per task, so it is banned. Use **manual mode,
 block by block**. This was decided in an earlier session and reaffirmed.
 
-## Next: feature 2 is finished
+## Next: `caller-identity`, sections 2 and 3
 
-All 33 tasks are done and `spec.json` reads `implemented`. Nothing in the
-`authentication` spec is outstanding.
+Features 1–3 are `implemented` and nothing in them is outstanding. Feature 4
+delivers one route, `GET /me`, and is larger than that sounds: it touches the
+actor union, the resolver, the access declaration and its guard, and the
+persistence layer, because none of those could express "a person acting in no
+tenant". Sections 1.1 and 1.2 built the principal and the resolver; what remains
+is the declaration shape (2.x), the person-confined read (3.x), the use case and
+route (4.x), and validation (5.1).
 
-The platform now has an entrance:
+The platform's entrance is unchanged:
 
 ```
 pnpm ops:bootstrap-operator founder@example.com
@@ -78,6 +92,18 @@ DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
 
 ## Things that will bite you
 
+- **Type errors in spec files are invisible to every command this repo runs.**
+  `pnpm build` excludes `**/*spec.ts` and `ts-jest` transpiles without checking,
+  so an impossible object in a test compiles, runs, and passes. Type-check with
+  `npx tsc --noEmit -p tsconfig.json`, which is wired to no script.
+  **It currently reports 34 pre-existing errors across nine spec files** —
+  Camilo has been told and has not yet decided when to repair them. Do not read
+  a clean `pnpm test` as a clean type-check.
+- **`isOperator` means "an active operator", so `false` covers two very
+  different people.** A deactivated operator and an ordinary member are the same
+  answer. Branching on it alone to choose between principals resolved a
+  deactivated operator to a plain `person` — deactivation granting access
+  instead of removing it. Check the person's status separately, and first.
 - **`jose` is out, `@nestjs/jwt` is in.** jose is ESM-only; Node 22 can
   `require()` it but Jest's runtime cannot, and pnpm's layout defeats
   `transformIgnorePatterns`. Do not reintroduce it without moving Jest to ESM.

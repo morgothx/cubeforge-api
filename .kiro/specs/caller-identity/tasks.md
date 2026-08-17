@@ -24,7 +24,7 @@ anywhere for it to live, and each is useful to state on its own.
   - _Requirements: 3.1_
   - _Boundary: Actor context_
 
-- [ ] 1.2 Resolve a person on a path that names no tenant
+- [x] 1.2 Resolve a person on a path that names no tenant
   - Where the resolver today answers "an operator, or nobody", answer "an
     operator, a person, or nobody"
   - Refuse anyone the platform no longer counts as active, whatever their
@@ -138,7 +138,9 @@ The two can be built in either order.
     table, its undeclared-route check, the drift check's two pairings, and the
     role matrix's coverage assertion. Each was written to fail when a route
     appears without them being told, and each will
-  - Re-aim the role matrix's guard probe, whose message task 1.2 changed
+  - ~~Re-aim the role matrix's guard probe, whose message task 1.2 changed~~ —
+    **done in 1.2**, which is where the message changed and therefore where the
+    tree would otherwise have been left red
   - Do not weaken an assertion to accommodate the new route — the whole point of
     those suites is that a new route cannot slip past them
   - **Sits here rather than in the validation section because 4.2 turns those
@@ -188,3 +190,28 @@ inherits them rather than rediscovering them.
   **That run reports 34 pre-existing errors across nine spec files**, most from
   features 1 and 2 — recorded here rather than fixed, because they are outside
   this task's boundary and their repair is Camilo's call.
+- **`isOperator` conflates "not an operator" with "not active", and reading it
+  alone would have been a privilege escalation.** It joins `people` and requires
+  `status = 'active'` — feature 2's fix — so it answers `false` for a
+  deactivated operator, indistinguishable from an ordinary member. The obvious
+  implementation of 1.2, `isOperator ? operator : person`, therefore resolves a
+  deactivated operator to a **person** and hands them every route open to one:
+  deactivating a compromised operator would have granted access rather than
+  removed it. The status check has to be its own read and has to come first.
+  Removing it fails two tests in `principal-resolver.spec.ts`.
+- **No new port was needed for the status check.** `credentials.findByPerson`
+  already exists for exactly this: its doc says refreshing "starts from a token,
+  not an address, and still has to know whether the person behind it has been
+  deactivated". A tenantless request is the same situation. It costs one extra
+  query in the same transaction, and returns a password digest this caller
+  discards — worth folding into the standing read of task 3.2 if that read ends
+  up covering it.
+- **Two tests in that spec pass before the implementation and are load-bearing
+  after it.** A deactivated person and an unknown person both resolved to `null`
+  already, because *every* non-operator did. They only become assertions about
+  the active check once a non-operator resolves to something — which is why the
+  probe that deletes the check is the evidence, not the initial RED.
+- **The role-matrix guard probe was re-aimed here rather than in 4.3**, which
+  also lists it: 1.2 is what changes the message, so deferring would have left
+  the tree red at a checkpoint. It now looks for `this route is for operators;
+  this caller is a person`, which is still a line only the guard produces.

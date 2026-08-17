@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { OpaqueSecret } from '../domain/credential/secrets';
-import type { TenantId } from '../domain/identifiers';
+import type { PersonId, TenantId } from '../domain/identifiers';
 import type { ActorContext } from './actor-context';
 import {
   ACCESS_TOKEN_ISSUER,
@@ -98,12 +98,37 @@ export class PrincipalResolver {
     if (tenantId !== null) {
       return { kind: 'tenant-member', personId, tenantId };
     }
+    return this.resolveStanding(personId);
+  }
 
-    // Read from storage on every request, so withdrawing operator status takes
-    // effect at once rather than when a token happens to expire (11.4).
-    const isOperator = await this.authenticator.runAuthenticating(
-      ({ operators }) => operators.isOperator(personId),
+  /**
+   * What a verified token amounts to when the path names no tenant: an
+   * operator, a person acting in no tenant, or nobody.
+   *
+   * Both facts are read from storage on every request, so withdrawing operator
+   * status or deactivating a person takes effect at once rather than when a
+   * token happens to expire (11.4, 6.1).
+   *
+   * The status check has to come first and cannot be folded into
+   * `isOperator`, which already requires an active person and therefore
+   * answers `false` for a deactivated operator — indistinguishable from an
+   * ordinary member. Reading it alone would resolve a deactivated operator to
+   * a *person* and hand them every route open to one, which is the opposite of
+   * what deactivating them was for.
+   */
+  private async resolveStanding(
+    personId: PersonId,
+  ): Promise<ActorContext | null> {
+    return this.authenticator.runAuthenticating(
+      async ({ credentials, operators }) => {
+        const stored = await credentials.findByPerson(personId);
+        if (stored === null || stored.personStatus !== 'active') {
+          return null;
+        }
+        return (await operators.isOperator(personId))
+          ? { kind: 'platform-operator' as const, personId }
+          : { kind: 'person' as const, personId };
+      },
     );
-    return isOperator ? { kind: 'platform-operator', personId } : null;
   }
 }
