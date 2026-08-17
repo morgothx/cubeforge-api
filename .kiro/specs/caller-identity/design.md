@@ -116,8 +116,19 @@ export type ActorContext =
 A person who authenticated and is acting inside no tenant. Distinct from
 `tenant-member` because that kind carries a tenant and every check on it assumes
 one; making that tenant nullable instead would leave every existing check
-compiling and quietly wrong, where a new kind makes the compiler name each place
-that has to decide.
+compiling and quietly wrong.
+
+**Correction, found in task 1.1: the compiler names nothing.** This design
+claimed a new kind would make it point at every site that has to decide. It does
+not — nothing switches on `ActorContext` exhaustively. The `unreachable` pattern
+this repository uses is applied to `DomainError`, not to actors, and every
+actor check is a negative comparison (`!== 'tenant-member'`,
+`!== 'platform-operator'`). Adding the kind compiles cleanly.
+
+The consequence is not that the behaviour is wrong — negative comparisons fail
+closed, so a person is refused everywhere tenant-scoped, which is correct. It is
+that nothing *enforces* it, and a future check written as a positive chain would
+admit the new kind silently. Tests pin the refusals for that reason.
 
 **An operator is not also a person here.** The resolver produces whichever the
 caller is, so `operator` routes and `person` routes both need their own branch,

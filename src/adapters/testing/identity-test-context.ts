@@ -104,6 +104,15 @@ export function createIdentityTestContext() {
     personId: identifiers.personId(),
   };
 
+  /**
+   * Someone who authenticated and is acting inside no tenant. Nothing
+   * tenant-scoped admits them, which is what the suites using this assert.
+   */
+  const person: ActorContext = {
+    kind: 'person',
+    personId: identifiers.personId(),
+  };
+
   return {
     store,
     credentials,
@@ -117,6 +126,7 @@ export function createIdentityTestContext() {
     seedOperator,
     actingAs,
     operator,
+    person,
   };
 }
 

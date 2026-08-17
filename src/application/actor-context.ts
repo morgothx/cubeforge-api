@@ -22,6 +22,19 @@ import type { Role } from '../domain/membership/role';
  */
 export type ActorContext =
   | { readonly kind: 'platform-operator'; readonly personId: PersonId }
+  /**
+   * A person who authenticated and is acting inside no tenant. Distinct from a
+   * tenant member, which carries a tenant every check on it assumes: making
+   * that tenant nullable instead would leave those checks compiling and quietly
+   * wrong.
+   *
+   * Nothing tenant-scoped admits this kind. Every such check is written as "not
+   * a tenant member", so a person is refused there — but by the shape of the
+   * comparison rather than by the type system, since nothing switches on this
+   * union exhaustively. The refusals are asserted in tests for exactly that
+   * reason.
+   */
+  | { readonly kind: 'person'; readonly personId: PersonId }
   | {
       readonly kind: 'tenant-member';
       readonly personId: PersonId;

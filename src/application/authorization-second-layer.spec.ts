@@ -178,6 +178,18 @@ describe('the second layer, standing on its own', () => {
     ).rejects.toMatchObject({ error: { kind: 'not-found' } });
   });
 
+  it('refuses a person acting in no tenant, who has no standing in one', async () => {
+    // The fourth kind of principal: someone who authenticated and is not acting
+    // inside any tenant. Every check here is written as "not a tenant member",
+    // so it is refused — but nothing in the type system forced that, which is
+    // why it is asserted rather than assumed.
+    await expect(
+      new ListApiKeysUseCase(context.tenantScoped).execute({
+        actor: { kind: 'person', personId: administrator },
+      }),
+    ).rejects.toMatchObject({ error: { kind: 'not-found' } });
+  });
+
   it('refuses a platform operator, who is above this tenant and not in it', async () => {
     await expect(
       new ListApiKeysUseCase(context.tenantScoped).execute({

@@ -10,7 +10,7 @@ anywhere for it to live, and each is useful to state on its own.
 
 ## 1. A person acting in no tenant
 
-- [ ] 1.1 Give the actor union its fourth kind
+- [x] 1.1 Give the actor union its fourth kind
   - Add a principal that names a person and no tenant, distinct from the tenant
     member, which carries one and whose every check assumes it
   - Decide what each existing site that reads the actor kind does with it: the
@@ -170,3 +170,21 @@ The two can be built in either order.
 
 Findings recorded during implementation belong here, so the next feature
 inherits them rather than rediscovering them.
+
+- **The design was wrong about the compiler, and 1.1 is where it showed.** It
+  claimed a fourth actor kind would make the compiler name every site that has
+  to decide what the kind means. Nothing switches on `ActorContext`
+  exhaustively: `unreachable` is used for `DomainError`, and every actor check
+  is a negative comparison. Adding the kind compiled cleanly and named nothing.
+  The behaviour is still right — negative comparisons fail closed — but it is
+  right by the shape of the comparisons rather than by the type system, so the
+  refusals are asserted in tests. The design has been corrected.
+- **Type errors in spec files are invisible to `pnpm build` and `pnpm test`.**
+  The build excludes `**/*spec.ts`, and `ts-jest` transpiles without checking.
+  The first attempt at a RED for this task was an invalid `{ kind: 'person' }`
+  in a spec, which *passed* — the object was never type-checked and the runtime
+  behaved as the negative comparisons dictate. The real RED came from
+  `npx tsc --noEmit -p tsconfig.json`, which is not wired to any script.
+  **That run reports 34 pre-existing errors across nine spec files**, most from
+  features 1 and 2 — recorded here rather than fixed, because they are outside
+  this task's boundary and their repair is Camilo's call.

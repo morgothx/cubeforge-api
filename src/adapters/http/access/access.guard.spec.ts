@@ -119,6 +119,12 @@ class ActorFromHeader implements NestMiddleware {
 }
 
 const ACTORS: Record<string, ActorContext> = {
+  // Authenticated, acting in no tenant. No declaration admits this kind yet —
+  // the shape that will is task 2.1 — so every route must refuse it.
+  person: {
+    kind: 'person',
+    personId: personId('018f2c00-0000-7000-8000-00000000000e'),
+  },
   operator: {
     kind: 'platform-operator',
     personId: personId('018f2c00-0000-7000-8000-00000000000a'),
@@ -201,7 +207,7 @@ describe('the access guard', () => {
   });
 
   describe('a route that declares nothing', () => {
-    it.each(['operator', 'member', 'machine'])(
+    it.each(['operator', 'member', 'machine', 'person'])(
       'refuses a %s, who might have satisfied any declaration it could have had',
       async (actor) => {
         const response = await request(app.getHttpServer())
