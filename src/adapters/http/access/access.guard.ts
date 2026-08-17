@@ -64,17 +64,20 @@ export class AccessGuard implements CanActivate {
     }
 
     if ('person' in declaration) {
-      // Refused for now, and deliberately: task 2.2 of `caller-identity` gives
-      // this branch its rule. Widening the declaration union made the compiler
-      // name every site that reads a declaration — this one included — because
-      // the guard narrows the union positively and the residual changed shape.
+      // The only declaration that asks nothing about standing. Both kinds
+      // below name a person, and requirement 3.1 admits a caller whether or
+      // not they hold a membership or an operator record — so there is nothing
+      // further to read, and no tenant transaction to open.
       //
-      // Until the rule exists, the declaration is one this guard cannot
-      // evaluate, and the guard's founding rule is that such a route is
-      // refused rather than admitted. A half-built branch that let callers
-      // through would look like protection.
+      // A machine is refused because it names a credential rather than a
+      // person. A tenant member is refused because their request named a
+      // tenant, which makes it a different kind of request: the same human on
+      // a path naming no tenant resolves to `person` and is admitted.
+      if (actor.kind === 'person' || actor.kind === 'platform-operator') {
+        return true;
+      }
       throw refusal(
-        'this route admits any person, a shape this guard cannot yet evaluate',
+        `this route admits any person; this caller is a ${actor.kind}`,
       );
     }
 

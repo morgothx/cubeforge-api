@@ -55,7 +55,7 @@ anywhere for it to live, and each is useful to state on its own.
   - _Requirements: 3.4_
   - _Boundary: Access declaration_
 
-- [ ] 2.2 Enforce it
+- [x] 2.2 Enforce it
   - Admit a person and an operator: both name a person, and the requirement
     admits a caller whether or not they hold any membership or operator status
   - Refuse a machine, which names a credential rather than a person, and refuse
@@ -256,3 +256,21 @@ inherits them rather than rediscovering them.
   pre-existing tests in that block had the same weakness and were converted too.
   One test still asserts the echo, deliberately, because reporting what was
   written is the only clue an import-time failure has.
+- **The `person` branch opens no transaction, and that is the point of where it
+  sits.** Every other non-public declaration ends in a read: the roles branch
+  opens a tenant transaction to resolve a membership, and the machine branch
+  compares the key's tenant against the path. This one asks only what kind of
+  credential was presented, because requirement 3.1 admits a caller regardless
+  of standing — so it is the cheapest branch in the guard, and the only one
+  whose answer cannot go stale between the guard and the use case behind it.
+- **Four of this task's six tests passed before the implementation**, because
+  2.1 left the branch refusing everything. Three probes were needed to make them
+  mean something: admitting every kind fails two of them, admitting machines
+  fails one, admitting tenant members fails the other. Blanket-refusal is the
+  same failure shape as the deactivated-operator case in 1.2 — a test that
+  passes because *nothing* is admitted proves nothing about who is.
+- **Two of the six can never fail through this branch at all.** A caller with no
+  credential and a caller whose standing was withdrawn are both refused earlier,
+  by the guard's null check and by the resolver respectively. They are asserted
+  here anyway: "admits any person" must not quietly become "admits any past
+  person", and the assertion belongs on the first route a plain person reaches.

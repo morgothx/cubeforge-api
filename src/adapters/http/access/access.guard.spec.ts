@@ -256,35 +256,81 @@ describe('the access guard', () => {
   });
 
   /**
-   * Task 2.1 gave the declaration this shape and stopped there. Widening the
-   * union made the compiler name every site that reads a declaration, this
-   * guard included, so the shape could not be added without the guard saying
-   * something about it — and the only honest thing to say before 2.2 writes the
-   * rule is no.
-   *
-   * **Task 2.2 replaces this whole block.** It is here so the interval between
-   * the two is closed rather than merely short: a shape a route can attach and
-   * a guard cannot judge must fail closed, and that has to be asserted while it
-   * is true.
+   * The widest declaration short of `public`, and the only one that asks
+   * nothing about where the caller stands — no tenant, no role, no operator
+   * record. What it does ask is that the caller *be* a person, which is a
+   * question about the kind of credential presented rather than about
+   * standing, and the five principals below are the whole answer to it.
    */
-  describe('a route that admits any person, before the guard can judge one', () => {
-    it.each(['person', 'operator', 'member', 'machine'])(
-      'refuses a %s, because the rule does not exist yet',
+  describe('a route that admits any person', () => {
+    it.each(['person', 'operator'])(
+      'admits a %s, who names a person',
       async (actor) => {
         const response = await request(app.getHttpServer())
           .get('/standing')
           .set({ 'x-test-actor': actor });
 
-        expect(response.status).toBe(404);
-        expect(response.body).toEqual(ABSENCE);
+        expect(response.status).toBe(200);
+        expect(entered.has('standing')).toBe(true);
       },
     );
 
-    it('never lets the handler run', async () => {
-      await request(app.getHttpServer())
+    it('admits an operator without asking for any membership', async () => {
+      // The distinction that makes this shape necessary. An operator holds no
+      // membership anywhere, and a route declared for roles would refuse them;
+      // a route declared for operators would refuse the ordinary member. Only
+      // this shape admits both, which is why requirement 3.1 needed it.
+      const response = await request(app.getHttpServer())
+        .get('/standing')
+        .set({ 'x-test-actor': 'operator' });
+
+      expect(response.status).toBe(200);
+    });
+
+    it('refuses a machine, which names a credential rather than a person', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/standing')
+        .set({ 'x-test-actor': 'machine' });
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual(ABSENCE);
+      expect(entered.has('standing')).toBe(false);
+    });
+
+    it('refuses a tenant member, whose request named a tenant', async () => {
+      // Not a judgement about the person, who may well be entitled to ask: the
+      // request they made is a different kind of request. On a path naming no
+      // tenant the resolver would have produced a `person` for them, and that
+      // caller is admitted two tests above.
+      const response = await request(app.getHttpServer())
+        .get('/standing')
+        .set({ 'x-test-actor': 'member' });
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual(ABSENCE);
+      expect(entered.has('standing')).toBe(false);
+    });
+
+    it('refuses a caller presenting nothing at all', async () => {
+      const response = await request(app.getHttpServer()).get('/standing');
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual(ABSENCE);
+      expect(entered.has('standing')).toBe(false);
+    });
+
+    it('refuses a person whose standing was withdrawn since', async () => {
+      // The resolver reads the platform on every request, so a withdrawn
+      // person resolves to nothing at all rather than to a stale principal.
+      // Asserted here because this route is the first a plain person reaches,
+      // and "admits any person" must not mean "admits any past person".
+      withdrawn.add('person');
+
+      const response = await request(app.getHttpServer())
         .get('/standing')
         .set({ 'x-test-actor': 'person' });
 
+      expect(response.status).toBe(404);
       expect(entered.has('standing')).toBe(false);
     });
   });

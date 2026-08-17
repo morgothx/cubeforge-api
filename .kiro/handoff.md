@@ -11,30 +11,29 @@ this, then `.kiro/specs/caller-identity/tasks.md`.
   `implemented`.
 - **Feature 3 `rbac-authorization-guards`: complete.** 19/19 tasks, spec phase
   `implemented`.
-- **Feature 4 `caller-identity`: in progress.** 3/10 tasks. `spec.json` phase
+- **Feature 4 `caller-identity`: in progress.** 4/10 tasks. `spec.json` phase
   `tasks-generated`, all three approvals `true`. Delivers `GET /me`, which the
   frontend cannot start without — a client that just signed in has no way to
   learn its own tenants or role.
-- Tarea activa: **2.1 complete and VERIFIED**; next actionable is **2.2**,
-  "Enforce it" — the guard branch. Section 3 is marked `(P)` and may be taken
-  instead; it shares no file with section 2.
-- Último commit: the repo-wide type-error repair that added `pnpm typecheck`.
-  **Uncommitted in the tree:** task 2.1. One earlier commit, tasks 4.1–4.4 of
+- Tarea activa: **2.2 complete and VERIFIED**, which finishes section 2. Next
+  actionable is **3.1**, the `current_person_id()` function, grant and policy —
+  the first migration this feature adds.
+- Último commit: task 2.1 of `caller-identity`. **Uncommitted in the tree:**
+  task 2.2. One earlier commit, tasks 4.1–4.4 of
   feature 3, has a typo'd subject: `eat(...)`.
-- Ciclo TDD: 2.1 VERIFIED — RED in `access.decorator.spec.ts` (5 failing) plus
-  a failing `pnpm typecheck`, GREEN, then verified by breaking (blanking the
-  four refusal reasons fails the four tests). 2.2 NOT_STARTED.
-- **2.2 has a block waiting for it.** The guard refuses `{ person: true }`
-  outright, and `access.guard.spec.ts` has a describe pinning that refusal for
-  all four principals. 2.2 replaces both — that describe turning red is the RED,
-  not a regression.
-- Tests corridos: `pnpm test` 317 passing, `pnpm test:integration` 125 passing,
+- Ciclo TDD: 2.2 VERIFIED — RED from the describe 2.1 left behind (3 failing),
+  GREEN, then three probes: admitting every kind, admitting machines, admitting
+  tenant members, each caught by the test written for it. 3.1 NOT_STARTED.
+- **3.1 is a migration and needs the database.** `docker compose up -d postgres`,
+  and `pnpm db:bootstrap` once on a fresh volume. It is the first task in this
+  feature that `pnpm test` alone cannot verify.
+- Tests corridos: `pnpm test` 319 passing, `pnpm test:integration` 125 passing,
   `pnpm lint`, `pnpm typecheck` and `pnpm build` clean. Last run: all green.
 - **`pnpm typecheck` is new** (`tsc --noEmit`) and reports zero errors. It was
   added after 1.2 because nothing in this repo type-checked a spec file; the 34
   errors it first found are all repaired. Run it at every checkpoint — in 2.1 it
   was half the RED, catching a declaration shape the union did not yet carry.
-- Próximo paso exacto: `/kiro-impl caller-identity 2.2`.
+- Próximo paso exacto: `/kiro-impl caller-identity 3.1`.
 - When a task run resumes: `/kiro-impl <feature> <numbers>` — **with the task
   numbers**, which is what selects manual mode. Manual mode has no commit step
   at all; without numbers it commits per task and breaks the rule below.
@@ -56,9 +55,10 @@ Features 1–3 are `implemented` and nothing in them is outstanding. Feature 4
 delivers one route, `GET /me`, and is larger than that sounds: it touches the
 actor union, the resolver, the access declaration and its guard, and the
 persistence layer, because none of those could express "a person acting in no
-tenant". Tasks 1.1 and 1.2 built the principal and the resolver, and 2.1 the
-declaration shape; what remains is the guard branch (2.2), the person-confined
-read (3.x), the use case and route (4.x), and validation (5.1).
+tenant". Section 1 built the principal and the resolver and section 2 the
+declaration and its guard branch, so **a route can now be declared open to any
+authenticated person and the guard enforces it**. What remains is the
+person-confined read (3.x), the use case and route (4.x), and validation (5.1).
 
 The platform's entrance is unchanged:
 
