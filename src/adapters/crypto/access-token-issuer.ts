@@ -1,4 +1,6 @@
 import { JwtService } from '@nestjs/jwt';
+import type { AccessTokenIssuer } from '../../application/ports/access-token-issuer';
+import { accessToken, type AccessToken } from '../../domain/credential/secrets';
 import { personId, type PersonId } from '../../domain/identifiers';
 
 /**
@@ -57,17 +59,25 @@ interface AccessTokenClaims {
   readonly exp: number;
 }
 
-export class JwtAccessTokenIssuer {
+/**
+ * `implements` is load-bearing. Nest's `useClass` and `useFactory` accept a
+ * provider that merely resembles its token, so for a while this class returned
+ * a bare `string` where the port promises an `AccessToken` and nothing said so:
+ * the brand existed in the port and in the use case, and no code anywhere
+ * applied it. The declaration is what makes the port a contract the build
+ * checks.
+ */
+export class JwtAccessTokenIssuer implements AccessTokenIssuer {
   private readonly jwt = new JwtService();
 
   constructor(private readonly config: TokenConfig) {}
 
-  issue(subject: PersonId, issuedAt: Date): Promise<string> {
+  async issue(subject: PersonId, issuedAt: Date): Promise<AccessToken> {
     const issuedAtSeconds = Math.floor(issuedAt.getTime() / 1000);
 
     // The timestamps are set explicitly rather than left to the library, so the
     // clock the rest of the application injects is the only source of time.
-    return this.jwt.signAsync(
+    const signed = await this.jwt.signAsync(
       {
         sub: subject,
         iss: ISSUER,
@@ -76,6 +86,7 @@ export class JwtAccessTokenIssuer {
       },
       { secret: this.config.secret, algorithm: ALGORITHM },
     );
+    return accessToken(signed);
   }
 
   /**

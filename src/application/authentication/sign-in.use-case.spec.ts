@@ -9,7 +9,11 @@ import {
   type IdentityTestContext,
 } from '../../adapters/testing/identity-test-context';
 import { SESSION_LIFETIME_DAYS } from '../../domain/credential/session';
-import { emailAddress, personId } from '../../domain/identifiers';
+import {
+  emailAddress,
+  personId,
+  type PersonId,
+} from '../../domain/identifiers';
 import { createPerson } from '../../domain/person/person.entity';
 import { SignInUseCase } from './sign-in.use-case';
 
@@ -50,7 +54,7 @@ describe('signing in', () => {
   /** A fresh tenant per call: tenant names are unique platform-wide. */
   async function aMemberWithPassword(
     email = 'member@example.com',
-  ): Promise<string> {
+  ): Promise<PersonId> {
     const tenantId = await context.seedTenant(`Tenant ${(tenantCount += 1)}`);
     const person = await context.seedMember({
       tenantId,

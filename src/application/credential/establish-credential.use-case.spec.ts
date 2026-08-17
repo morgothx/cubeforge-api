@@ -7,7 +7,7 @@ import {
   TEST_MOMENT,
   type IdentityTestContext,
 } from '../../adapters/testing/identity-test-context';
-import { signInId } from '../../domain/identifiers';
+import { signInId, type PersonId } from '../../domain/identifiers';
 import {
   secretDigest,
   type OpaqueSecret,
@@ -51,7 +51,7 @@ describe('establishing a credential', () => {
     );
   });
 
-  async function aPerson(email = 'member@example.com'): Promise<string> {
+  async function aPerson(email = 'member@example.com'): Promise<PersonId> {
     const tenantId = await context.seedTenant('Acme');
     return context.seedMember({ tenantId, email, role: 'viewer' });
   }
@@ -101,7 +101,7 @@ describe('establishing a credential', () => {
   });
 
   describe('redeeming', () => {
-    async function issuedFor(person: string): Promise<OpaqueSecret> {
+    async function issuedFor(person: PersonId): Promise<OpaqueSecret> {
       return issue.execute({ actor: context.operator, personId: person });
     }
 

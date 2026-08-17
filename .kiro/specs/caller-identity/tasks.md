@@ -187,9 +187,27 @@ inherits them rather than rediscovering them.
   in a spec, which *passed* — the object was never type-checked and the runtime
   behaved as the negative comparisons dictate. The real RED came from
   `npx tsc --noEmit -p tsconfig.json`, which is not wired to any script.
-  **That run reports 34 pre-existing errors across nine spec files**, most from
-  features 1 and 2 — recorded here rather than fixed, because they are outside
-  this task's boundary and their repair is Camilo's call.
+  **That run reported 34 pre-existing errors across nine spec files**, most from
+  features 1 and 2. **Repaired between tasks 1.2 and 2.1**, on Camilo's
+  decision, and `pnpm typecheck` now exists so the gap cannot reopen silently:
+  - Six were one production defect, not a test defect. `JwtAccessTokenIssuer`
+    did not declare `implements AccessTokenIssuer`, and returned a bare `string`
+    where the port promises a branded `AccessToken`. Nest's `useFactory` accepts
+    a provider that merely resembles its token, so nothing objected — and
+    `accessToken()` was called nowhere in the whole repository. The brand
+    existed in the port and in `EstablishedSession` and was applied by no one.
+    **Adapters must declare `implements` on the port they satisfy**; DI does not
+    check it for you.
+  - Twenty-two were test helpers annotated `Promise<string>` while returning
+    `PersonId`. One annotation per helper; the branded type flows from there.
+  - Three were **accidental globals**: `administrator`, `editor` and `viewer`
+    were assigned in `access.guard.spec.ts` and declared nowhere. ts-jest emits
+    CommonJS, which is not strict mode, so the assignment created a global and
+    the suite passed. All three were write-only — the tests address those
+    principals by string literal.
+  - One was a `personId` property passed to `seedMember`, which takes no person.
+    Silently ignored; the fixture resolves the person from the address, which is
+    what made the test correct despite it.
 - **`isOperator` conflates "not an operator" with "not active", and reading it
   alone would have been a privilege escalation.** It joins `people` and requires
   `status = 'active'` — feature 2's fix — so it answers `false` for a

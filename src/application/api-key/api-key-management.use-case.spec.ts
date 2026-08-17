@@ -5,7 +5,11 @@ import {
   TEST_MOMENT,
   type IdentityTestContext,
 } from '../../adapters/testing/identity-test-context';
-import { apiKeyId, type TenantId } from '../../domain/identifiers';
+import {
+  apiKeyId,
+  type PersonId,
+  type TenantId,
+} from '../../domain/identifiers';
 import { IssueApiKeyUseCase } from './issue-api-key.use-case';
 import { ListApiKeysUseCase } from './list-api-keys.use-case';
 import { RevokeApiKeyUseCase } from './revoke-api-key.use-case';
@@ -32,7 +36,7 @@ describe('managing API keys', () => {
 
   async function aTenantWithAdmin(
     name: string,
-  ): Promise<{ tenantId: TenantId; admin: string }> {
+  ): Promise<{ tenantId: TenantId; admin: PersonId }> {
     const tenantId = await context.seedTenant(name);
     const admin = await context.seedMember({
       tenantId,

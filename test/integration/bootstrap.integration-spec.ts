@@ -274,9 +274,14 @@ describe('the bootstrap path', () => {
     return body<unknown[]>(listed);
   }
 
+  /**
+   * `object` rather than `unknown`: every caller sends a JSON body or nothing,
+   * and `unknown` narrowed by `!== undefined` still admits `null`, which the
+   * request builder does not take.
+   */
   async function post(
     path: string,
-    payload?: unknown,
+    payload?: object,
     headers: Record<string, string> = {},
   ): Promise<Response> {
     const app = await application();

@@ -393,24 +393,12 @@ describe('the access guard, resolving a membership', () => {
         tenantId: tenant,
       });
 
-    administrator = await asMember(
-      acmeId,
-      'admin@acme.example.com',
-      'admin',
-      'acme-admin',
-    );
-    editor = await asMember(
-      acmeId,
-      'editor@acme.example.com',
-      'editor',
-      'acme-editor',
-    );
-    viewer = await asMember(
-      acmeId,
-      'viewer@acme.example.com',
-      'viewer',
-      'acme-viewer',
-    );
+    // The handles are the names, and the tests below use those names as
+    // literals, so nothing is kept: these calls exist for the seeding and the
+    // registration they perform.
+    await asMember(acmeId, 'admin@acme.example.com', 'admin', 'acme-admin');
+    await asMember(acmeId, 'editor@acme.example.com', 'editor', 'acme-editor');
+    await asMember(acmeId, 'viewer@acme.example.com', 'viewer', 'acme-viewer');
     // Registered against **Acme**, though their only membership is in Globex.
     // That is what a stranger actually looks like: the tenant on the actor
     // comes from the request path, so it always matches the path and never the
@@ -439,10 +427,11 @@ describe('the access guard, resolving a membership', () => {
       email: 'dual@example.com',
       role: 'admin',
     });
+    // No person is named here, and none can be: the fixture resolves one from
+    // the address, which is what makes this the same person in both tenants.
     await context.seedMember({
       tenantId: globexId,
       email: 'dual@example.com',
-      personId: dual,
       role: 'viewer',
     });
     register('dual-in-acme', {

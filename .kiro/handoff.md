@@ -26,7 +26,10 @@ this, then `.kiro/specs/caller-identity/tasks.md`.
   then verified by breaking (deleting the active check fails two of its tests).
   2.1 NOT_STARTED.
 - Tests corridos: `pnpm test` 308 passing, `pnpm test:integration` 125 passing,
-  `pnpm lint` and `pnpm build` clean. Last run: all green.
+  `pnpm lint`, `pnpm typecheck` and `pnpm build` clean. Last run: all green.
+- **`pnpm typecheck` is new** (`tsc --noEmit`) and reports zero errors. It was
+  added after 1.2 because nothing in this repo type-checked a spec file; the 34
+  errors it first found are all repaired. Run it at every checkpoint.
 - Próximo paso exacto: `/kiro-impl caller-identity 2.1`.
 - When a task run resumes: `/kiro-impl <feature> <numbers>` — **with the task
   numbers**, which is what selects manual mode. Manual mode has no commit step
@@ -92,13 +95,22 @@ DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
 
 ## Things that will bite you
 
-- **Type errors in spec files are invisible to every command this repo runs.**
-  `pnpm build` excludes `**/*spec.ts` and `ts-jest` transpiles without checking,
-  so an impossible object in a test compiles, runs, and passes. Type-check with
-  `npx tsc --noEmit -p tsconfig.json`, which is wired to no script.
-  **It currently reports 34 pre-existing errors across nine spec files** —
-  Camilo has been told and has not yet decided when to repair them. Do not read
-  a clean `pnpm test` as a clean type-check.
+- **Neither `pnpm test` nor `pnpm build` type-checks a spec file.** The build
+  excludes `**/*spec.ts` and `ts-jest` transpiles without checking, so an
+  impossible object in a test compiles, runs and passes. **Run `pnpm typecheck`**
+  — added for exactly this, and clean as of 2026-08-17, after the 34 errors it
+  first surfaced were repaired. There is no CI yet, so this gate is only as good
+  as remembering it: run it beside lint and build at every checkpoint.
+- **Declare `implements` on an adapter, always.** Nest's `useClass` and
+  `useFactory` accept a provider that merely resembles its token, so a port is
+  not a contract until a class says it satisfies one. `JwtAccessTokenIssuer`
+  returned a bare `string` where the port promises a branded `AccessToken` for
+  as long as that declaration was missing, and `accessToken()` was called
+  nowhere in the repository — a nominal type nothing produced.
+- **`ts-jest` emits CommonJS, which is not strict mode.** An assignment to an
+  undeclared name creates a global instead of throwing, so a spec can reference
+  variables that do not exist and still pass. `pnpm typecheck` is what catches
+  it; three such names lived in `access.guard.spec.ts`.
 - **`isOperator` means "an active operator", so `false` covers two very
   different people.** A deactivated operator and an ordinary member are the same
   answer. Branching on it alone to choose between principals resolved a
@@ -147,7 +159,7 @@ DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
 docker compose up -d postgres     # the local database
 pnpm db:bootstrap                 # once per fresh database
 pnpm db:migrate
-pnpm lint && pnpm test && pnpm test:integration && pnpm build
+pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration && pnpm build
 pnpm ops:bootstrap-operator <email>  # the first way in: creates, records, issues a token
 pnpm ops:grant-operator <email>      # promotes an existing person; refuses an unknown one
 ```
