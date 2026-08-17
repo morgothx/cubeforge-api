@@ -72,7 +72,7 @@ anywhere for it to live, and each is useful to state on its own.
 Independent of section 2 — different files, different layer, no shared state.
 The two can be built in either order.
 
-- [ ] 3.1 Publish a person into a transaction, and let a policy confine the read
+- [x] 3.1 Publish a person into a transaction, and let a policy confine the read
   - Mirror the tenant mechanism exactly: a stable function reading a
     transaction-local setting, and a policy on memberships that admits only rows
     belonging to the published person
@@ -274,3 +274,24 @@ inherits them rather than rediscovering them.
   by the guard's null check and by the resolver respectively. They are asserted
   here anyway: "admits any person" must not quietly become "admits any past
   person", and the assertion belongs on the first route a plain person reaches.
+- **An existing test asserted the *absence* of this grant, and the tasks did not
+  predict it.** `authenticator-adapters.integration-spec.ts` asserted
+  `permission denied for table memberships` as the boundary of the
+  authenticating identity — the research recorded that the grant was missing
+  but not that a test had frozen the absence. Granting `SELECT` turned it red.
+  Re-aimed rather than deleted: the boundary moved, it did not dissolve, so the
+  test now asserts that the read discloses nothing with nobody published and
+  that this identity still cannot *write* a membership. Task 1.2 flagged its
+  equivalent in the role matrix in advance; this one had to be found by running
+  the suite.
+- **A migration written before its test is not a RED, and the probes are the
+  real evidence.** The new suite passed on its first run, because global setup
+  had already applied the migration. Three probes supply what the ordering did
+  not: `USING (true)` fails three tests, dropping the policy fails two, and
+  revoking the grant fails three. The strongest is `USING (true)` — it fails
+  the with-nobody-published assertion, which no query-level predicate would
+  have caught.
+- **The confinement is keyed on the person, and the fixture is built so that a
+  wrong key still fails.** Both people in the fixture share a tenant, so a
+  policy accidentally written against `tenant_id` would satisfy "the caller
+  sees two rows" and be caught by "the other person sees one".

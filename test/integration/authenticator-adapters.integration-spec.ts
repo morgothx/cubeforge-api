@@ -350,10 +350,34 @@ describe('the authenticating adapters', () => {
      * the grant is the boundary, and a repository that simply lacks a method
      * would prove nothing about what the identity could do if one were added.
      */
-    it('is refused on memberships, which are tenant-owned', async () => {
+    /**
+     * Re-aimed in `caller-identity` task 3.1, which gave this identity a
+     * `SELECT` on memberships confined to one published person.
+     *
+     * This test used to assert `permission denied`, and the absence of the
+     * grant was the whole boundary. The boundary moved rather than dissolved:
+     * the read exists, it discloses nothing without a person published, and it
+     * is still a read. What the confinement itself is worth is proved in
+     * `second-isolation-layer.integration-spec.ts`; what this asserts is that
+     * the new grant did not turn an authenticating identity into a writer.
+     */
+    it('reads no membership unless a person is published, and writes none ever', async () => {
+      const seen = await asAuthenticator(async (client) => {
+        const { rows } = await client.query<{ id: string }>(
+          'SELECT id FROM memberships',
+        );
+        return rows;
+      });
+      expect(seen).toEqual([]);
+
+      const person = await aPerson('writer@example.com');
+      const tenant = await aTenant('Acme');
       await expect(
         asAuthenticator((client) =>
-          client.query('SELECT count(*) FROM memberships'),
+          client.query(
+            'INSERT INTO memberships (id, tenant_id, person_id, role) VALUES ($1, $2, $3, $4)',
+            [randomUUID(), tenant, person, 'admin'],
+          ),
         ),
       ).rejects.toThrow(/permission denied for table memberships/);
     });

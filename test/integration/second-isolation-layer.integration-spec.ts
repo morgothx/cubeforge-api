@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { asPersonInTenant, seed } from './support/database';
+import {
+  asAuthenticator,
+  asAuthenticatorForPerson,
+  asPersonInTenant,
+  seed,
+} from './support/database';
 import { useIntegrationDatabase } from './support/fixtures';
 
 /**
@@ -126,6 +131,152 @@ describe('the second isolation layer, on its own', () => {
     );
 
     await expect(attempt).rejects.toThrow(/row-level security/);
+  });
+});
+
+/**
+ * The one read in the platform that crosses tenants, and the only thing keeping
+ * it from being a way to read anyone's memberships anywhere.
+ *
+ * Same mechanism as the tenant policies above, with the subject changed: the
+ * caller is published into the transaction and the policy — not the query —
+ * decides what comes back. So the queries here carry no predicate at all, which
+ * is what makes them evidence about the database rather than about the
+ * repository that will eventually issue them.
+ */
+describe('confining the authenticating identity to one person', () => {
+  useIntegrationDatabase();
+
+  /** One person in two tenants, and a second person in one of them. */
+  async function twoPeopleAcrossTenants(): Promise<{
+    caller: string;
+    other: string;
+    tenants: readonly string[];
+  }> {
+    const caller = randomUUID();
+    const other = randomUUID();
+    const acme = randomUUID();
+    const globex = randomUUID();
+
+    await seed(async (client) => {
+      await client.query(
+        'INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4)',
+        [acme, 'Acme', globex, 'Globex'],
+      );
+      await client.query(
+        'INSERT INTO people (id, email) VALUES ($1, $2), ($3, $4)',
+        [caller, 'caller@example.com', other, 'other@example.com'],
+      );
+      for (const [tenant, person, role] of [
+        [acme, caller, 'admin'],
+        [globex, caller, 'viewer'],
+        [acme, other, 'editor'],
+      ] as const) {
+        await client.query(
+          'INSERT INTO memberships (id, tenant_id, person_id, role) VALUES ($1, $2, $3, $4)',
+          [randomUUID(), tenant, person, role],
+        );
+      }
+    });
+
+    return { caller, other, tenants: [acme, globex] };
+  }
+
+  async function membershipsSeenBy(
+    person: string,
+  ): Promise<{ tenant_id: string; person_id: string; role: string }[]> {
+    return asAuthenticatorForPerson(person, async (client) => {
+      // No WHERE. The repository built in task 3.2 will write one, and this
+      // assertion has to hold without it — otherwise the confinement lives in
+      // the query, where the next edit can drop it.
+      const { rows } = await client.query<{
+        tenant_id: string;
+        person_id: string;
+        role: string;
+      }>('SELECT tenant_id, person_id, role FROM memberships');
+      return rows;
+    });
+  }
+
+  it('returns the published person every membership they hold, across tenants', async () => {
+    const { caller, tenants } = await twoPeopleAcrossTenants();
+
+    const visible = await membershipsSeenBy(caller);
+
+    // Two tenants, two roles, one query, and no tenant published anywhere.
+    // This is the capability that did not exist: `cubeforge_app` would have
+    // needed one transaction per tenant, and could not have known which.
+    expect(visible).toHaveLength(2);
+    expect(visible.map((row) => row.role).sort()).toEqual(['admin', 'viewer']);
+    expect(visible.map((row) => row.tenant_id).sort()).toEqual(
+      [...tenants].sort(),
+    );
+  });
+
+  it('returns another person only their own, from the same tenant', async () => {
+    const { other } = await twoPeopleAcrossTenants();
+
+    const visible = await membershipsSeenBy(other);
+
+    // The discriminating half. Without it, a policy of `USING (true)` would
+    // satisfy the assertion above while exposing every membership on the
+    // platform — and these two people share a tenant, so a confinement keyed
+    // on the wrong column would still pass.
+    expect(visible).toHaveLength(1);
+    expect(visible[0].person_id).toBe(other);
+    expect(visible[0].role).toBe('editor');
+  });
+
+  it('returns nothing at all when nobody is published', async () => {
+    await twoPeopleAcrossTenants();
+
+    // How a query that escaped the unit of work reaches the database.
+    // `current_person_id()` is NULL, and a NULL comparison matches no row, so
+    // the failure mode is an empty answer rather than every answer.
+    const visible = await asAuthenticator(async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        'SELECT id FROM memberships',
+      );
+      return rows;
+    });
+
+    expect(visible).toHaveLength(0);
+  });
+
+  it('may not write a membership, whoever is published', async () => {
+    const { caller, tenants } = await twoPeopleAcrossTenants();
+
+    // The grant is SELECT alone. Requirement 5.3 asks that this capability add
+    // no way to reach a tenant's records from outside it, and a read-only
+    // grant is a stronger statement than a policy: there is no published
+    // person that would make this succeed.
+    const attempt = asAuthenticatorForPerson(caller, (client) =>
+      client.query(
+        'INSERT INTO memberships (id, tenant_id, person_id, role) VALUES ($1, $2, $3, $4)',
+        [randomUUID(), tenants[0], caller, 'admin'],
+      ),
+    );
+
+    await expect(attempt).rejects.toThrow(/permission denied/);
+  });
+
+  it('leaves the tenant-scoped identity seeing exactly what it saw', async () => {
+    const { tenants } = await twoPeopleAcrossTenants();
+    const [acme] = tenants;
+
+    // Requirement 5.3, asserted rather than assumed: the new policy is
+    // additive and names a different role, so publishing a person must change
+    // nothing about what `cubeforge_app` reads inside one tenant — both of
+    // Acme's memberships, and neither of Globex's.
+    const visible = await asPersonInTenant(acme, async (client) => {
+      const { rows } = await client.query<{ tenant_id: string }>(
+        'SELECT tenant_id FROM memberships',
+      );
+      return rows;
+    });
+
+    expect(visible).toHaveLength(2);
+    expect(visible.every((row) => row.tenant_id === acme)).toBe(true);
   });
 });
 

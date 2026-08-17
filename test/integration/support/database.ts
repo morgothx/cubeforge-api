@@ -153,6 +153,31 @@ export async function asAuthenticator<T>(
   return inTransaction('authenticator', work);
 }
 
+/**
+ * Acts as the authenticating identity with a person published, which is how a
+ * caller's own memberships are read across every tenant they belong to.
+ *
+ * The person is published with the transaction-local form of `set_config`, for
+ * the reason the tenant is: connections are pooled, and a session-level setting
+ * would carry the person into whatever request took the connection next.
+ *
+ * Raw SQL rather than the unit of work on purpose. What this proves is a
+ * property of the database — that the policy confines the read whatever the
+ * query says — so the test must not route through the adapter whose correctness
+ * is the thing in question.
+ */
+export async function asAuthenticatorForPerson<T>(
+  personId: string,
+  work: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return inTransaction('authenticator', work, async (client) => {
+    await client.query('SELECT set_config($1, $2, true)', [
+      'app.current_person',
+      personId,
+    ]);
+  });
+}
+
 /** Acts as the platform operator, which holds no grant on memberships at all. */
 export async function asOperator<T>(
   work: (client: PoolClient) => Promise<T>,

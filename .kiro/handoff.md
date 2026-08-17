@@ -11,29 +11,29 @@ this, then `.kiro/specs/caller-identity/tasks.md`.
   `implemented`.
 - **Feature 3 `rbac-authorization-guards`: complete.** 19/19 tasks, spec phase
   `implemented`.
-- **Feature 4 `caller-identity`: in progress.** 4/10 tasks. `spec.json` phase
+- **Feature 4 `caller-identity`: in progress.** 5/10 tasks. `spec.json` phase
   `tasks-generated`, all three approvals `true`. Delivers `GET /me`, which the
   frontend cannot start without — a client that just signed in has no way to
   learn its own tenants or role.
-- Tarea activa: **2.2 complete and VERIFIED**, which finishes section 2. Next
-  actionable is **3.1**, the `current_person_id()` function, grant and policy —
-  the first migration this feature adds.
-- Último commit: task 2.1 of `caller-identity`. **Uncommitted in the tree:**
-  task 2.2. One earlier commit, tasks 4.1–4.4 of
+- Tarea activa: **3.1 complete and VERIFIED** — migration
+  `0011_authenticator_person_scope`. Next actionable is **3.2**, `runAsPerson`
+  and the standing repository, in Postgres and in memory.
+- Último commit: task 2.2 of `caller-identity`. **Uncommitted in the tree:**
+  task 3.1. One earlier commit, tasks 4.1–4.4 of
   feature 3, has a typo'd subject: `eat(...)`.
-- Ciclo TDD: 2.2 VERIFIED — RED from the describe 2.1 left behind (3 failing),
-  GREEN, then three probes: admitting every kind, admitting machines, admitting
-  tenant members, each caught by the test written for it. 3.1 NOT_STARTED.
-- **3.1 is a migration and needs the database.** `docker compose up -d postgres`,
-  and `pnpm db:bootstrap` once on a fresh volume. It is the first task in this
-  feature that `pnpm test` alone cannot verify.
-- Tests corridos: `pnpm test` 319 passing, `pnpm test:integration` 125 passing,
+- Ciclo TDD: 3.1 VERIFIED by breaking rather than by RED — the migration was
+  written before its test and global setup had already applied it, so the suite
+  passed first time. Three probes stand in: `USING (true)` fails three tests,
+  dropping the policy two, revoking the grant three. 3.2 NOT_STARTED.
+- **Integration work needs the database up.** `docker compose up -d postgres`,
+  and `pnpm db:bootstrap` once on a fresh volume.
+- Tests corridos: `pnpm test` 319 passing, `pnpm test:integration` 130 passing,
   `pnpm lint`, `pnpm typecheck` and `pnpm build` clean. Last run: all green.
 - **`pnpm typecheck` is new** (`tsc --noEmit`) and reports zero errors. It was
   added after 1.2 because nothing in this repo type-checked a spec file; the 34
   errors it first found are all repaired. Run it at every checkpoint — in 2.1 it
   was half the RED, catching a declaration shape the union did not yet carry.
-- Próximo paso exacto: `/kiro-impl caller-identity 3.1`.
+- Próximo paso exacto: `/kiro-impl caller-identity 3.2`.
 - When a task run resumes: `/kiro-impl <feature> <numbers>` — **with the task
   numbers**, which is what selects manual mode. Manual mode has no commit step
   at all; without numbers it commits per task and breaks the rule below.
@@ -57,8 +57,11 @@ actor union, the resolver, the access declaration and its guard, and the
 persistence layer, because none of those could express "a person acting in no
 tenant". Section 1 built the principal and the resolver and section 2 the
 declaration and its guard branch, so **a route can now be declared open to any
-authenticated person and the guard enforces it**. What remains is the
-person-confined read (3.x), the use case and route (4.x), and validation (5.1).
+authenticated person and the guard enforces it**. Task 3.1 added the database
+half: `current_person_id()`, a `SELECT` for `cubeforge_authenticator` on
+`memberships`, and a policy confining it to the published person. What remains
+is the repository over it (3.2), the use case and route (4.x), and validation
+(5.1).
 
 The platform's entrance is unchanged:
 
@@ -121,6 +124,10 @@ DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
   undeclared name creates a global instead of throwing, so a spec can reference
   variables that do not exist and still pass. `pnpm typecheck` is what catches
   it; three such names lived in `access.guard.spec.ts`.
+- **A test can freeze the *absence* of a grant.** Adding `SELECT ON memberships`
+  for `cubeforge_authenticator` turned red a test asserting `permission denied`
+  on that exact table — the boundary had been written down as a guarantee.
+  Before adding any grant, grep the integration suites for the table name.
 - **`isOperator` means "an active operator", so `false` covers two very
   different people.** A deactivated operator and an ordinary member are the same
   answer. Branching on it alone to choose between principals resolved a

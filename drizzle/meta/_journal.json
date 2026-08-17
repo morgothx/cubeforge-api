@@ -78,6 +78,13 @@
       "when": 1786814949879,
       "tag": "0010_migrator_setup_token_bootstrap",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786991278494,
+      "tag": "0011_authenticator_person_scope",
+      "breakpoints": true
     }
   ]
 }
