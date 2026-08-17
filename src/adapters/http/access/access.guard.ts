@@ -63,6 +63,21 @@ export class AccessGuard implements CanActivate {
       return true;
     }
 
+    if ('person' in declaration) {
+      // Refused for now, and deliberately: task 2.2 of `caller-identity` gives
+      // this branch its rule. Widening the declaration union made the compiler
+      // name every site that reads a declaration — this one included — because
+      // the guard narrows the union positively and the residual changed shape.
+      //
+      // Until the rule exists, the declaration is one this guard cannot
+      // evaluate, and the guard's founding rule is that such a route is
+      // refused rather than admitted. A half-built branch that let callers
+      // through would look like protection.
+      throw refusal(
+        'this route admits any person, a shape this guard cannot yet evaluate',
+      );
+    }
+
     if (actor.kind === 'machine') {
       if (declaration.machines !== true) {
         // The key may well carry the role the route names. Holding the role is

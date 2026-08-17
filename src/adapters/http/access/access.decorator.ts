@@ -21,6 +21,16 @@ export type AccessDeclaration =
   /** Reachable only by a platform operator, which is not a tenant role. */
   | { readonly operator: true }
   /**
+   * Reachable by any caller whose credential names a person — a person acting
+   * in no tenant, or an operator. Not a machine, which names a credential
+   * rather than a person, and not a tenant member, whose request named a tenant
+   * and is therefore not the kind of request this shape describes.
+   *
+   * The widest thing a route can say short of `public`, and the only shape that
+   * neither names a tenant nor demands standing in one.
+   */
+  | { readonly person: true }
+  /**
    * Reachable by a person holding one of these roles in the tenant the request
    * names. `machines` additionally admits an API key carrying one of them; no
    * shipped route sets it, and the guard confines an admitted key to its own
@@ -71,12 +81,19 @@ export function assertUsable(declaration: AccessDeclaration): void {
   const shape = declaration as {
     public?: unknown;
     operator?: unknown;
+    person?: unknown;
     roles?: unknown;
     machines?: unknown;
   };
   const names = shape.roles !== undefined;
+  const anyPerson = shape.person === true;
 
   if (shape.public === true) {
+    if (anyPerson) {
+      refuse(
+        'makes a route public and also demands a person, which is a restriction on a route that has none',
+      );
+    }
     if (names || shape.operator === true || shape.machines === true) {
       refuse('makes a route public and also restricts it, naming roles');
     }
@@ -84,6 +101,11 @@ export function assertUsable(declaration: AccessDeclaration): void {
   }
 
   if (shape.operator === true) {
+    if (anyPerson) {
+      refuse(
+        'gives a route to an operator and also to any person, which are different admissions: the wider one would decide every request',
+      );
+    }
     if (shape.machines === true) {
       refuse(
         'gives a route to an operator and also admits machines, which hold no operator status',
@@ -91,6 +113,20 @@ export function assertUsable(declaration: AccessDeclaration): void {
     }
     if (names) {
       refuse('mixes operator with roles, which are held by people');
+    }
+    return;
+  }
+
+  if (anyPerson) {
+    if (shape.machines === true) {
+      refuse(
+        'admits any person and also machines, which name a credential rather than a person',
+      );
+    }
+    if (names) {
+      refuse(
+        'admits any person and also names roles, which are held inside a tenant this shape does not name',
+      );
     }
     return;
   }

@@ -11,26 +11,30 @@ this, then `.kiro/specs/caller-identity/tasks.md`.
   `implemented`.
 - **Feature 3 `rbac-authorization-guards`: complete.** 19/19 tasks, spec phase
   `implemented`.
-- **Feature 4 `caller-identity`: in progress.** 2/10 tasks. `spec.json` phase
+- **Feature 4 `caller-identity`: in progress.** 3/10 tasks. `spec.json` phase
   `tasks-generated`, all three approvals `true`. Delivers `GET /me`, which the
   frontend cannot start without — a client that just signed in has no way to
   learn its own tenants or role.
-- Tarea activa: **1.2 complete and VERIFIED**; next actionable is **2.1**, "Add
-  the declaration shape". Section 3 is marked `(P)` and may be taken instead —
-  it shares no file with section 2.
-- Último commit: task 1.1 of `caller-identity`. **Uncommitted in the tree:** the
-  spec files for `caller-identity` (a `docs(...)` commit of their own) and task
-  1.2. One earlier commit, tasks 4.1–4.4 of feature 3, has a typo'd subject:
-  `eat(...)`.
-- Ciclo TDD: 1.2 VERIFIED — RED from a new `principal-resolver.spec.ts`, GREEN,
-  then verified by breaking (deleting the active check fails two of its tests).
-  2.1 NOT_STARTED.
-- Tests corridos: `pnpm test` 308 passing, `pnpm test:integration` 125 passing,
+- Tarea activa: **2.1 complete and VERIFIED**; next actionable is **2.2**,
+  "Enforce it" — the guard branch. Section 3 is marked `(P)` and may be taken
+  instead; it shares no file with section 2.
+- Último commit: the repo-wide type-error repair that added `pnpm typecheck`.
+  **Uncommitted in the tree:** task 2.1. One earlier commit, tasks 4.1–4.4 of
+  feature 3, has a typo'd subject: `eat(...)`.
+- Ciclo TDD: 2.1 VERIFIED — RED in `access.decorator.spec.ts` (5 failing) plus
+  a failing `pnpm typecheck`, GREEN, then verified by breaking (blanking the
+  four refusal reasons fails the four tests). 2.2 NOT_STARTED.
+- **2.2 has a block waiting for it.** The guard refuses `{ person: true }`
+  outright, and `access.guard.spec.ts` has a describe pinning that refusal for
+  all four principals. 2.2 replaces both — that describe turning red is the RED,
+  not a regression.
+- Tests corridos: `pnpm test` 317 passing, `pnpm test:integration` 125 passing,
   `pnpm lint`, `pnpm typecheck` and `pnpm build` clean. Last run: all green.
 - **`pnpm typecheck` is new** (`tsc --noEmit`) and reports zero errors. It was
   added after 1.2 because nothing in this repo type-checked a spec file; the 34
-  errors it first found are all repaired. Run it at every checkpoint.
-- Próximo paso exacto: `/kiro-impl caller-identity 2.1`.
+  errors it first found are all repaired. Run it at every checkpoint — in 2.1 it
+  was half the RED, catching a declaration shape the union did not yet carry.
+- Próximo paso exacto: `/kiro-impl caller-identity 2.2`.
 - When a task run resumes: `/kiro-impl <feature> <numbers>` — **with the task
   numbers**, which is what selects manual mode. Manual mode has no commit step
   at all; without numbers it commits per task and breaks the rule below.
@@ -52,9 +56,9 @@ Features 1–3 are `implemented` and nothing in them is outstanding. Feature 4
 delivers one route, `GET /me`, and is larger than that sounds: it touches the
 actor union, the resolver, the access declaration and its guard, and the
 persistence layer, because none of those could express "a person acting in no
-tenant". Sections 1.1 and 1.2 built the principal and the resolver; what remains
-is the declaration shape (2.x), the person-confined read (3.x), the use case and
-route (4.x), and validation (5.1).
+tenant". Tasks 1.1 and 1.2 built the principal and the resolver, and 2.1 the
+declaration shape; what remains is the guard branch (2.2), the person-confined
+read (3.x), the use case and route (4.x), and validation (5.1).
 
 The platform's entrance is unchanged:
 
@@ -71,7 +75,8 @@ that guard is task 2.3's, and widening it would have removed the only protection
 against a typo creating a stray operator. The two commands are deliberately
 separate: one creates, the other does not.
 
-The next feature is Camilo's call; the roadmap has step 3 after this one.
+After this feature the roadmap's next step is `frontend-shell`, which needs its
+own `.kiro/` inside `cubeforge-web` — that repo still holds only an `.nvmrc`.
 
 Composition itself is done: `AuthenticationModule` binds the crypto ports and
 the throttler, `PersistenceModule` the two units of work, `SystemModule` the
@@ -107,6 +112,11 @@ DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
   returned a bare `string` where the port promises a branded `AccessToken` for
   as long as that declaration was missing, and `accessToken()` was called
   nowhere in the repository — a nominal type nothing produced.
+- **An error message that echoes its input can answer for its own reason.**
+  `assertUsable` appends the declaration JSON to every message, so a test
+  matching `/person.*machines/` matches `{"person":true,"machines":true}`
+  whatever the check concluded — one such test passed before the branch it was
+  written for existed. Assert against the reason with the echo stripped.
 - **`ts-jest` emits CommonJS, which is not strict mode.** An assignment to an
   undeclared name creates a global instead of throwing, so a spec can reference
   variables that do not exist and still pass. `pnpm typecheck` is what catches

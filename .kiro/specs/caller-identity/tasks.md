@@ -45,7 +45,7 @@ anywhere for it to live, and each is useful to state on its own.
 
 ## 2. A route that admits any authenticated person
 
-- [ ] 2.1 Add the declaration shape
+- [x] 2.1 Add the declaration shape
   - A fourth shape saying a route admits any caller who names a person,
     alongside public, operator and roles
   - Refuse it combined with anything else, the way every other illegal
@@ -233,3 +233,26 @@ inherits them rather than rediscovering them.
   also lists it: 1.2 is what changes the message, so deferring would have left
   the tree red at a checkpoint. It now looks for `this route is for operators;
   this caller is a person`, which is still a line only the guard produces.
+- **The declaration union *does* make the compiler name every site — the exact
+  opposite of the actor union in 1.1, and for a reason worth keeping.** Adding
+  `{ person: true }` broke `access.guard.ts` in three places immediately. The
+  difference is how each union is read: the guard narrows the declaration
+  **positively** (`'public' in declaration`, `'operator' in declaration`) and
+  then uses the residual, so a new member changes that residual's type. The
+  actor union is read through **negative** comparisons (`!== 'tenant-member'`),
+  which keep compiling whatever is added. Positive narrowing is what buys the
+  compiler's help; that is a design lever, not a property of unions.
+- **The guard had to say something about the new shape in 2.1, before 2.2 gives
+  it a rule.** It refuses, which is the rule this guard was built under, and
+  `access.guard.spec.ts` pins the refusal for all four principals. **Task 2.2
+  replaces that block**; it is there so the interval between the two tasks is
+  closed rather than merely short.
+- **The refusal tests in `access.decorator.spec.ts` were being satisfied by the
+  error's own echo, not by its reason.** Every message ends with the JSON that
+  was written, so `/person.*machines/` matches
+  `{"person":true,"machines":true}` regardless of what the check concluded —
+  and one of the four new tests passed before the branch it was written for
+  existed. They now assert against the reason with the echo stripped, and the
+  pre-existing tests in that block had the same weakness and were converted too.
+  One test still asserts the echo, deliberately, because reporting what was
+  written is the only clue an import-time failure has.

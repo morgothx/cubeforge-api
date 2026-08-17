@@ -60,6 +60,7 @@ describe('the access declaration', () => {
       const shapes: AccessDeclaration[] = [
         { public: true },
         { operator: true },
+        { person: true },
         { roles: ['admin'] },
         { roles: ['admin', 'editor', 'viewer'] },
         { roles: ['editor'], machines: true },
@@ -92,32 +93,84 @@ describe('the access declaration', () => {
       return () => Access(declaration as AccessDeclaration);
     }
 
+    /**
+     * The reason alone, with the echoed declaration cut off the end.
+     *
+     * Asserting against the whole message would let the echo answer for the
+     * reason: every message ends with the JSON that was written, so a pattern
+     * naming two properties — `/person.*machines/` — matches
+     * `{"person":true,"machines":true}` no matter what the check concluded, or
+     * whether it concluded anything. One of these tests passed that way before
+     * the branch it was written for existed.
+     */
+    function reasonFor(declaration: unknown): string {
+      try {
+        Access(declaration as AccessDeclaration);
+      } catch (error) {
+        return (error as Error).message.replace(/: \{.*\}$/, '');
+      }
+      throw new Error(
+        `this declaration was accepted: ${JSON.stringify(declaration)}`,
+      );
+    }
+
     it('refuses a declaration that permits nobody', () => {
-      expect(attaching({ roles: [] })).toThrow(/permits nobody/);
+      expect(reasonFor({ roles: [] })).toMatch(/permits nobody/);
     });
 
     it('refuses a declaration that states nothing at all', () => {
-      expect(attaching({})).toThrow(/states nothing/);
+      expect(reasonFor({})).toMatch(/states nothing/);
     });
 
     it('refuses a public route that also names roles', () => {
-      expect(attaching({ public: true, roles: ['admin'] })).toThrow(
+      expect(reasonFor({ public: true, roles: ['admin'] })).toMatch(
         /public.*roles/i,
       );
     });
 
     it('refuses an operator route that also admits machines', () => {
-      expect(attaching({ operator: true, machines: true })).toThrow(
+      expect(reasonFor({ operator: true, machines: true })).toMatch(
         /operator.*machines/i,
       );
     });
 
     it('refuses machines without the roles they would have to carry', () => {
-      expect(attaching({ machines: true })).toThrow(/machines.*roles/i);
+      expect(reasonFor({ machines: true })).toMatch(/machines.*roles/i);
+    });
+
+    /**
+     * `person` says "any caller who names a person", which is the widest thing
+     * a route can say short of `public`. Every combination below narrows or
+     * contradicts it, and each failure has to name which one it was: these are
+     * read at import time, with no request and no route to point at.
+     */
+    it.each([
+      [
+        'a public route that also asks for a person',
+        { public: true, person: true },
+        /public.*person/i,
+      ],
+      [
+        'an operator route that also admits any person',
+        { operator: true, person: true },
+        /operator.*person/i,
+      ],
+      [
+        'a person route that also names roles',
+        { person: true, roles: ['admin'] },
+        /person.*roles/i,
+      ],
+      [
+        'a person route that also admits machines',
+        { person: true, machines: true },
+        /person.*machines/i,
+      ],
+    ])('refuses %s', (_case, declaration, named) => {
+      expect(reasonFor(declaration)).toMatch(named);
     });
 
     it('refuses a role outside the permitted set', () => {
-      expect(attaching({ roles: ['superuser'] })).toThrow(
+      expect(reasonFor({ roles: ['superuser'] })).toMatch(
         /admin, editor, viewer/,
       );
     });

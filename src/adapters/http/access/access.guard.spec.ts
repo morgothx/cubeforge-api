@@ -87,6 +87,21 @@ class MachineAdmittingController {
   }
 }
 
+/**
+ * The shape task 2.1 added. The guard does not evaluate it yet — 2.2 is what
+ * gives it a rule — so every principal is refused here for now, which is the
+ * rule this guard was built under rather than a gap in it.
+ */
+@Controller('standing')
+class PersonController {
+  @Get()
+  @Access({ person: true })
+  show(): string {
+    entered.add('standing');
+    return 'reached';
+  }
+}
+
 @Controller('operators')
 class OperatorController {
   @Get()
@@ -119,8 +134,9 @@ class ActorFromHeader implements NestMiddleware {
 }
 
 const ACTORS: Record<string, ActorContext> = {
-  // Authenticated, acting in no tenant. No declaration admits this kind yet —
-  // the shape that will is task 2.1 — so every route must refuse it.
+  // Authenticated, acting in no tenant. The `{ person: true }` shape exists as
+  // of task 2.1, and task 2.2 is what teaches the guard to admit this kind
+  // through it; until then every route refuses it.
   person: {
     kind: 'person',
     personId: personId('018f2c00-0000-7000-8000-00000000000e'),
@@ -149,6 +165,7 @@ const ACTORS: Record<string, ActorContext> = {
     RestrictedController,
     OperatorController,
     MachineAdmittingController,
+    PersonController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AccessGuard },
@@ -235,6 +252,40 @@ describe('the access guard', () => {
       // behind it did not execute". A route that ran and then failed to answer
       // would pass the assertions above and have already done its work.
       expect(entered.has('undeclared')).toBe(false);
+    });
+  });
+
+  /**
+   * Task 2.1 gave the declaration this shape and stopped there. Widening the
+   * union made the compiler name every site that reads a declaration, this
+   * guard included, so the shape could not be added without the guard saying
+   * something about it — and the only honest thing to say before 2.2 writes the
+   * rule is no.
+   *
+   * **Task 2.2 replaces this whole block.** It is here so the interval between
+   * the two is closed rather than merely short: a shape a route can attach and
+   * a guard cannot judge must fail closed, and that has to be asserted while it
+   * is true.
+   */
+  describe('a route that admits any person, before the guard can judge one', () => {
+    it.each(['person', 'operator', 'member', 'machine'])(
+      'refuses a %s, because the rule does not exist yet',
+      async (actor) => {
+        const response = await request(app.getHttpServer())
+          .get('/standing')
+          .set({ 'x-test-actor': actor });
+
+        expect(response.status).toBe(404);
+        expect(response.body).toEqual(ABSENCE);
+      },
+    );
+
+    it('never lets the handler run', async () => {
+      await request(app.getHttpServer())
+        .get('/standing')
+        .set({ 'x-test-actor': 'person' });
+
+      expect(entered.has('standing')).toBe(false);
     });
   });
 
