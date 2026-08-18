@@ -104,7 +104,7 @@ The two can be built in either order.
 
 ## 4. The answer itself
 
-- [ ] 4.1 Describe a caller's standing
+- [x] 4.1 Describe a caller's standing
   - Report the person's identifier, their own address, whether the platform
     records them as an operator, and the tenants they belong to with the role
     held in each
@@ -340,3 +340,26 @@ inherits them rather than rediscovering them.
   wiring that caused it. It is typed as a read-only structural `InMemoryDirectory`
   rather than as `InMemoryIdentityStore`, so the repository cannot write through
   it.
+- **A refusal test passed for the wrong reason, and the probe is what said so.**
+  "Refuses a tenant member" used an invented person identifier, so the read
+  found nobody and threw `not-found` — the assertion was `DomainViolation`, and
+  a use case that admitted every kind but a machine satisfied it. Admitting
+  tenant members failed nothing. Fixed by seeding a real member and asserting
+  `forbidden` specifically. Third time this feature has hit the same shape: a
+  test satisfied by an absence, by an echo, or by a blanket refusal. **Assert
+  which refusal, never that there was one.**
+- **The granted role comes from `decideAccess`'s decision, not from the
+  membership.** They are the same value today, and taking it from the decision
+  is what keeps them the same value: a rule that ever adjusts an effective role
+  changes one place. Same reasoning as reading the tenant name from the tenant
+  rather than carrying it alongside.
+- **`DescribeCallerQuery` takes an `ActorContext`, and there is no overload
+  taking a `PersonId`.** Requirement 2.3 forbids an operation that reports
+  another person's standing; a use case whose input is a bare identifier would
+  be exactly that operation, waiting for a caller. Refusing a tenant member and
+  a machine here is not redundant with the guard: it makes the answer
+  independent of which declaration a future route happens to carry.
+- **Probes for 4.1**: reporting every membership fails two tests, passing an
+  always-active tenant into `decideAccess` fails one, turning the absent person
+  into an empty standing fails one, and admitting tenant members fails one —
+  after the fix above, and not before it.

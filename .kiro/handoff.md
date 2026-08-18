@@ -11,30 +11,28 @@ this, then `.kiro/specs/caller-identity/tasks.md`.
   `implemented`.
 - **Feature 3 `rbac-authorization-guards`: complete.** 19/19 tasks, spec phase
   `implemented`.
-- **Feature 4 `caller-identity`: in progress.** 6/10 tasks. `spec.json` phase
+- **Feature 4 `caller-identity`: in progress.** 7/10 tasks. `spec.json` phase
   `tasks-generated`, all three approvals `true`. Delivers `GET /me`, which the
   frontend cannot start without — a client that just signed in has no way to
   learn its own tenants or role.
-- Tarea activa: **3.2 complete and VERIFIED** — `runAsPerson` and the standing
-  repository, in Postgres and in memory, held to one shared contract suite.
-  Next actionable is **4.1**, `DescribeCallerUseCase`.
-- Último commit: task 3.1 of `caller-identity`. **Uncommitted in the tree:**
-  task 3.2. One earlier commit, tasks 4.1–4.4 of
+- Tarea activa: **4.1 complete and VERIFIED** — `DescribeCallerUseCase`, which
+  filters the standing with `decideAccess`. Next actionable is **4.2**, the
+  route `GET /me` and its bindings.
+- Último commit: task 3.2 of `caller-identity`. **Uncommitted in the tree:**
+  task 4.1. One earlier commit, tasks 4.1–4.4 of
   feature 3, has a typo'd subject: `eat(...)`.
-- Ciclo TDD: 3.2 RED (7 failing, `runAsPerson is not a function`) → GREEN →
-  VERIFIED by five probes: `USING (true)` on the policy, dropping the
-  `set_config`, filtering revoked/inactive in SQL, dropping the double's person
-  predicate, and dropping its person-status check. Each fails exactly what it
-  should. 4.1 NOT_STARTED.
+- Ciclo TDD: 4.1 RED (module not found) → GREEN → VERIFIED by four probes.
+  One of them found a test passing for the wrong reason and it was repaired
+  before the task closed; see the notes in `tasks.md`. 4.2 NOT_STARTED.
 - **Integration work needs the database up.** `docker compose up -d postgres`,
   and `pnpm db:bootstrap` once on a fresh volume.
-- Tests corridos: `pnpm test` 327 passing, `pnpm test:integration` 138 passing,
+- Tests corridos: `pnpm test` 337 passing, `pnpm test:integration` 138 passing,
   `pnpm lint`, `pnpm typecheck` and `pnpm build` clean. Last run: all green.
 - **`pnpm typecheck` is new** (`tsc --noEmit`) and reports zero errors. It was
   added after 1.2 because nothing in this repo type-checked a spec file; the 34
   errors it first found are all repaired. Run it at every checkpoint — in 2.1 it
   was half the RED, catching a declaration shape the union did not yet carry.
-- Próximo paso exacto: `/kiro-impl caller-identity 4.1`.
+- Próximo paso exacto: `/kiro-impl caller-identity 4.2`.
 - When a task run resumes: `/kiro-impl <feature> <numbers>` — **with the task
   numbers**, which is what selects manual mode. Manual mode has no commit step
   at all; without numbers it commits per task and breaks the rule below.
@@ -62,8 +60,9 @@ authenticated person and the guard enforces it**. Task 3.1 added the database
 half: `current_person_id()`, a `SELECT` for `cubeforge_authenticator` on
 `memberships`, and a policy confining it to the published person, and 3.2 the
 repository over it — `runAsPerson`, `StandingRepository`, and one contract suite
-both implementations pass. What remains is the use case and route (4.x) and
-validation (5.1).
+both implementations pass. Task 4.1 added `DescribeCallerUseCase`, which drops
+every membership `decideAccess` does not grant. What remains is the route
+(4.2), the suites that enumerate routes (4.3), and validation (5.1).
 
 The platform's entrance is unchanged:
 
@@ -143,6 +142,12 @@ DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
 - **`isolatedModules` forbids ambient const enums.** `@node-rs/argon2`'s
   `Algorithm` is one: unit tests pass while `pnpm build` fails, because ts-jest
   transpiles without type-checking. Run the build.
+- **Assert *which* refusal, never that there was one.** Three tasks in this
+  feature have now had a test pass for the wrong reason: satisfied by an error's
+  own echo (2.1), by a branch that refused everything (2.2), and by a caller who
+  simply did not exist (4.1). `rejects.toBeInstanceOf(DomainViolation)` proves
+  almost nothing — match on `{ error: { kind } }`, and seed the fixture so the
+  cheaper refusal cannot fire first.
 - **The standing read returns domain entities, not the response shape.**
   `decideAccess` needs a `Tenant`, a `Person` and a `Membership`, and task 4.1
   filters with it — so `CallerStandingRecord` carries revoked memberships and
