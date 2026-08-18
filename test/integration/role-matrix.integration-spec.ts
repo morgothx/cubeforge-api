@@ -130,7 +130,7 @@ describe('the role matrix', () => {
   const server = () => app.getHttpServer();
 
   /**
-   * The twelve routes whose status distinguishes admission from refusal.
+   * The thirteen routes whose status distinguishes admission from refusal.
    *
    * The four credential endpoints are not here: they are public, and every one
    * of their failures is a 404 too, so a status cannot tell a guard refusal
@@ -167,6 +167,16 @@ describe('the role matrix', () => {
         request(server())
           .post(`/platform/people/${world.personId}/setup-tokens`)
           .set(headers),
+    },
+    {
+      // The first route in the matrix that admits more than one *kind* of
+      // caller: the path names no tenant, so every credentialed person reaches
+      // it as a person or an operator, whatever role they hold elsewhere. Only
+      // the anonymous caller is refused, and a machine — which this suite has
+      // no principal for; `caller.controller.spec.ts` covers that one.
+      key: 'GET /me',
+      admits: ['admin', 'editor', 'viewer', 'stranger', 'operator'],
+      call: (_, headers) => request(server()).get('/me').set(headers),
     },
     {
       key: 'GET /tenants/:tenantId/members',

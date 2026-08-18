@@ -1,5 +1,9 @@
 import type { IssuedApiKey } from '../../../application/api-key/issue-api-key.use-case';
 import type { IssuedSession } from '../../../application/authentication/sign-in.use-case';
+import type {
+  CallerStanding,
+  StandingMembership,
+} from '../../../application/identity/describe-caller.use-case';
 import type { CreateTenantMemberResult } from '../../../application/membership/create-tenant-member.use-case';
 import type { ApiKeySummary } from '../../../application/ports/api-key.repository';
 import type { ListedMember } from '../../../application/membership/list-tenant-members.use-case';
@@ -152,5 +156,46 @@ export function toApiKeyResponse(key: ApiKeySummary): ApiKeyResponse {
     createdAt: key.createdAt.toISOString(),
     lastUsedAt: key.lastUsedAt?.toISOString() ?? null,
     revokedAt: key.revokedAt?.toISOString() ?? null,
+  };
+}
+
+export interface CallerMembershipResponse {
+  readonly tenantId: string;
+  readonly tenantName: string;
+  readonly role: string;
+}
+
+export interface CallerResponse {
+  readonly personId: string;
+  readonly email: string;
+  readonly isOperator: boolean;
+  readonly memberships: readonly CallerMembershipResponse[];
+}
+
+/**
+ * The caller's own standing, and the only response in the API that carries an
+ * email address to somebody who is not an administrator of the tenant the
+ * address belongs to. It is theirs — requirement 1.5 — and they typed it to
+ * sign in.
+ *
+ * Named field by field, like every other mapping here, so that a field added
+ * to `CallerStanding` cannot become a published field by accident.
+ */
+export function toCallerResponse(standing: CallerStanding): CallerResponse {
+  return {
+    personId: standing.personId,
+    email: standing.email,
+    isOperator: standing.isOperator,
+    memberships: standing.memberships.map(toCallerMembershipResponse),
+  };
+}
+
+function toCallerMembershipResponse(
+  membership: StandingMembership,
+): CallerMembershipResponse {
+  return {
+    tenantId: membership.tenantId,
+    tenantName: membership.tenantName,
+    role: membership.role,
   };
 }

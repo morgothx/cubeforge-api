@@ -11,28 +11,29 @@ this, then `.kiro/specs/caller-identity/tasks.md`.
   `implemented`.
 - **Feature 3 `rbac-authorization-guards`: complete.** 19/19 tasks, spec phase
   `implemented`.
-- **Feature 4 `caller-identity`: in progress.** 7/10 tasks. `spec.json` phase
+- **Feature 4 `caller-identity`: in progress.** 9/10 tasks. `spec.json` phase
   `tasks-generated`, all three approvals `true`. Delivers `GET /me`, which the
   frontend cannot start without — a client that just signed in has no way to
   learn its own tenants or role.
-- Tarea activa: **4.1 complete and VERIFIED** — `DescribeCallerUseCase`, which
-  filters the standing with `decideAccess`. Next actionable is **4.2**, the
-  route `GET /me` and its bindings.
-- Último commit: task 3.2 of `caller-identity`. **Uncommitted in the tree:**
-  task 4.1. One earlier commit, tasks 4.1–4.4 of
+- Tarea activa: **4.2 and 4.3 complete and VERIFIED** — `GET /me` exists, is
+  declared `{ person: true }`, and every suite that enumerates routes accounts
+  for it. Next actionable is **5.1**, the last task: end-to-end validation
+  against the real database.
+- Último commit: task 4.1 of `caller-identity`. **Uncommitted in the tree:**
+  tasks 4.2 and 4.3. One earlier commit, tasks 4.1–4.4 of
   feature 3, has a typo'd subject: `eat(...)`.
-- Ciclo TDD: 4.1 RED (module not found) → GREEN → VERIFIED by four probes.
-  One of them found a test passing for the wrong reason and it was repaired
-  before the task closed; see the notes in `tasks.md`. 4.2 NOT_STARTED.
+- Ciclo TDD: 4.2 RED (3 of 5 failing; the two expecting 404 passed because the
+  route did not exist) → GREEN → 4.3 → VERIFIED by four probes. 5.1
+  NOT_STARTED.
 - **Integration work needs the database up.** `docker compose up -d postgres`,
   and `pnpm db:bootstrap` once on a fresh volume.
-- Tests corridos: `pnpm test` 337 passing, `pnpm test:integration` 138 passing,
+- Tests corridos: `pnpm test` 344 passing, `pnpm test:integration` 139 passing,
   `pnpm lint`, `pnpm typecheck` and `pnpm build` clean. Last run: all green.
 - **`pnpm typecheck` is new** (`tsc --noEmit`) and reports zero errors. It was
   added after 1.2 because nothing in this repo type-checked a spec file; the 34
   errors it first found are all repaired. Run it at every checkpoint — in 2.1 it
   was half the RED, catching a declaration shape the union did not yet carry.
-- Próximo paso exacto: `/kiro-impl caller-identity 4.2`.
+- Próximo paso exacto: `/kiro-impl caller-identity 5.1`.
 - When a task run resumes: `/kiro-impl <feature> <numbers>` — **with the task
   numbers**, which is what selects manual mode. Manual mode has no commit step
   at all; without numbers it commits per task and breaks the rule below.
@@ -61,8 +62,9 @@ half: `current_person_id()`, a `SELECT` for `cubeforge_authenticator` on
 `memberships`, and a policy confining it to the published person, and 3.2 the
 repository over it — `runAsPerson`, `StandingRepository`, and one contract suite
 both implementations pass. Task 4.1 added `DescribeCallerUseCase`, which drops
-every membership `decideAccess` does not grant. What remains is the route
-(4.2), the suites that enumerate routes (4.3), and validation (5.1).
+every membership `decideAccess` does not grant, and 4.2/4.3 the route itself
+and the suites that enumerate routes. **`GET /me` now works end to end.** What
+remains is validation (5.1).
 
 The platform's entrance is unchanged:
 
@@ -98,6 +100,7 @@ POST   /auth/sign-out                             204
 POST   /auth/credentials                          204  (redeem a setup token)
 POST   /platform/people/:personId/setup-tokens    201 {setupToken}   operator only
 POST   /tenants/:tenantId/api-keys                201 {id, secret}   tenant admin
+GET    /me                                        200 {personId, email, isOperator, memberships[]}
 GET    /tenants/:tenantId/api-keys                200 summaries, never a secret
 DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
 ```
@@ -142,6 +145,11 @@ DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
 - **`isolatedModules` forbids ambient const enums.** `@node-rs/argon2`'s
   `Algorithm` is one: unit tests pass while `pnpm build` fails, because ts-jest
   transpiles without type-checking. Run the build.
+- **A new declaration shape needs its own pairing in `declaration-drift.spec.ts`.**
+  Both existing pairings filter on `roles` and on `operator`, so `GET /me`
+  declaring `{ person: true }` sailed past the one file written to make that
+  impossible. `PERSON_ROUTES` now closes it. Adding a fifth shape later will
+  have the same hole until somebody adds the fourth pairing.
 - **Assert *which* refusal, never that there was one.** Three tasks in this
   feature have now had a test pass for the wrong reason: satisfied by an error's
   own echo (2.1), by a branch that refused everything (2.2), and by a caller who

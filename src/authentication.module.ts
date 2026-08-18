@@ -11,6 +11,7 @@ import {
 import { RandomSecretGenerator } from './adapters/crypto/random-secret-generator';
 import { ApiKeysController } from './adapters/http/api-keys.controller';
 import { AuthenticationController } from './adapters/http/authentication.controller';
+import { CallerController } from './adapters/http/caller.controller';
 import { CredentialSetupController } from './adapters/http/credential-setup.controller';
 import {
   CredentialThrottlerGuard,
@@ -27,6 +28,7 @@ import { RefreshSessionUseCase } from './application/authentication/refresh-sess
 import { SignInUseCase } from './application/authentication/sign-in.use-case';
 import { SignOutUseCase } from './application/authentication/sign-out.use-case';
 import { IssueSetupTokenUseCase } from './application/credential/issue-setup-token.use-case';
+import { DescribeCallerUseCase } from './application/identity/describe-caller.use-case';
 import { RedeemSetupTokenUseCase } from './application/credential/redeem-setup-token.use-case';
 import { PrincipalResolver } from './application/principal-resolver';
 import { ACCESS_TOKEN_ISSUER } from './application/ports/access-token-issuer';
@@ -59,6 +61,7 @@ import { PersistenceModule } from './persistence.module';
     AuthenticationController,
     CredentialSetupController,
     ApiKeysController,
+    CallerController,
   ],
   providers: [
     {
@@ -87,6 +90,7 @@ import { PersistenceModule } from './persistence.module';
     IssueApiKeyUseCase,
     ListApiKeysUseCase,
     RevokeApiKeyUseCase,
+    DescribeCallerUseCase,
   ],
   exports: [
     ACCESS_TOKEN_ISSUER,

@@ -71,6 +71,21 @@ describe('the declared roles and the enforced roles', () => {
       'credential/issue-setup-token.use-case.ts',
   };
 
+  /**
+   * Route → the use case that must refuse any actor naming no person acting
+   * alone. A presence check against the source, like the operator one: there
+   * is no value to compare, only a call.
+   *
+   * Added in `caller-identity` task 4.3, and the task predicted this file would
+   * fail when `GET /me` appeared. It did not — both pairings below filter on
+   * `roles` and on `operator`, so a route declaring `{ person: true }` escaped
+   * the drift check entirely, which is precisely the hole this file exists to
+   * close. The new declaration needed a pairing of its own, not an exemption.
+   */
+  const PERSON_ROUTES: Readonly<Record<string, string>> = {
+    'GET /me': 'identity/describe-caller.use-case.ts',
+  };
+
   let app: INestApplication<App>;
   let routes: readonly DeclaredRoute[];
 
@@ -130,6 +145,32 @@ describe('the declared roles and the enforced roles', () => {
       expect(source).toContain('requirePlatformOperator(');
     },
   );
+
+  it.each(Object.keys(PERSON_ROUTES))(
+    'declares %s for any person, and its use case still refuses the other kinds',
+    (route) => {
+      expect(declarationOf(route)).toEqual({ person: true });
+
+      const source = readFileSync(
+        join(__dirname, '../../../application', PERSON_ROUTES[route]),
+        'utf8',
+      );
+      // The guard admits a person and an operator. The use case must not
+      // simply trust that: a machine or a tenant member reaching it through
+      // some later route would otherwise be answered.
+      expect(source).toContain('callerPersonOf(');
+    },
+  );
+
+  it('pairs every route declared for any person with a use case', () => {
+    const anyPerson = routes
+      .filter(
+        (route) => route.declaration !== null && 'person' in route.declaration,
+      )
+      .map((route) => `${route.method} ${route.path}`);
+
+    expect(anyPerson.sort()).toEqual(Object.keys(PERSON_ROUTES).sort());
+  });
 
   it('pairs every route that names roles with a use case', () => {
     // Otherwise a route added later could name roles and quietly escape the

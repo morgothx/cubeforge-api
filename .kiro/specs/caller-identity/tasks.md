@@ -121,7 +121,7 @@ The two can be built in either order.
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.2, 2.4_
   - _Boundary: Application use case_
 
-- [ ] 4.2 Serve it
+- [x] 4.2 Serve it
   - One route, declaring that it admits any authenticated person
   - Bind the use case and the controller where the feature's other bindings
     live, so the route exists in the assembled application rather than only in
@@ -133,7 +133,7 @@ The two can be built in either order.
   - _Requirements: 1.1, 2.3_
   - _Boundary: Caller controller_
 
-- [ ] 4.3 Bring the new route into the suites that enumerate routes
+- [x] 4.3 Bring the new route into the suites that enumerate routes
   - Four existing suites list or count every route: the inventory's declaration
     table, its undeclared-route check, the drift check's two pairings, and the
     role matrix's coverage assertion. Each was written to fail when a route
@@ -363,3 +363,31 @@ inherits them rather than rediscovering them.
   always-active tenant into `decideAccess` fails one, turning the absent person
   into an empty standing fails one, and admitting tenant members fails one —
   after the fix above, and not before it.
+- **4.2 and 4.3 were done as one checkpoint, which is what the tasks intend.**
+  4.3 exists because 4.2 turns the route-enumerating suites red the moment the
+  route exists; committing 4.2 alone would have left the tree red at a
+  checkpoint, which is the thing 4.3's own note says it is there to prevent.
+- **Only three of the four predicted suites went red, and the fourth not going
+  red was the finding.** The inventory's route list and declaration table
+  failed, and the role matrix's coverage assertion failed. The **drift check did
+  not**: both of its pairings filter on `roles` and on `operator`, so a route
+  declaring `{ person: true }` escaped it entirely — the one file whose whole
+  purpose is that a route cannot escape. It now has a third pairing,
+  `PERSON_ROUTES`, mapping `GET /me` to its use case and asserting the source
+  still calls `callerPersonOf(`. A new declaration shape needs a pairing of its
+  own; the file does not extend itself.
+- **`GET /me` is the first route in the role matrix admitting more than one kind
+  of caller.** The path names no tenant, so every credentialed person reaches it
+  as a person or an operator whatever role they hold elsewhere: `admits` is five
+  of the six principals, and only the anonymous one is refused. The matrix has
+  no machine principal, so `caller.controller.spec.ts` carries that case,
+  issuing a real key through the API and presenting it.
+- **Two of the five controller tests passed before the route existed** — the
+  ones expecting 404, satisfied by there being no route at all. The same shape
+  as 2.2. Declaring the route `{ public: true }` fails three tests, which is
+  what makes them load-bearing; declaring nothing, or leaving the controller
+  unregistered, fails seven across the two files.
+- **The route takes no parameter, and one test asserts that rather than assuming
+  it.** `GET /me?personId=<other>` answers the caller, and `GET /me/<other>` is
+  404 — requirement 2.3 checked at the edge, where a future maintainer would add
+  the segment.
