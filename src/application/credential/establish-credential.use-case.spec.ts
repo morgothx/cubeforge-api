@@ -29,6 +29,7 @@ describe('establishing a credential', () => {
     authenticator = new InMemoryAuthenticatorUnitOfWork(
       context.credentials,
       new InMemoryApiKeyStore(),
+      context.store,
     );
     secrets = new RandomSecretGenerator();
     const hasher = new Argon2PasswordHasher({

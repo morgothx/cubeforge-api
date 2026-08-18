@@ -86,7 +86,7 @@ The two can be built in either order.
   - _Requirements: 5.1, 5.2, 5.3_
   - _Boundary: Schema_
 
-- [ ] 3.2 Read a caller's standing through it
+- [x] 3.2 Read a caller's standing through it
   - Add the entry point that opens an authenticating transaction with a person
     published, leaving the existing one untouched — signing in runs before any
     person is known and has nobody to publish
@@ -295,3 +295,48 @@ inherits them rather than rediscovering them.
   wrong key still fails.** Both people in the fixture share a tenant, so a
   policy accidentally written against `tenant_id` would satisfy "the caller
   sees two rows" and be caught by "the other person sees one".
+
+- **The design's `CallerStanding` was the response, not the read, and 3.2 is
+  where that had to be settled.** It flattened a membership to `tenantId`,
+  `tenantName` and `role` — but task 4.1 drops every membership that does not
+  currently grant access by asking `decideAccess`, which takes a `Tenant`, a
+  `Person` and a `Membership` and needs all three statuses. A repository
+  answering the flattened shape would have had to decide that itself, in SQL,
+  duplicating a domain rule the guard also applies. The port now returns
+  `CallerStandingRecord`, carrying the entities intact, and the flattening moves
+  to the use case. Probe: filtering revoked memberships and inactive tenants in
+  the query fails one contract test in both worlds.
+- **`standing` is reached only through `runAsPerson`, and that is the whole
+  reason there are two bundles.** The design put it among
+  `AuthenticatorRepositories`, where
+  `runAuthenticating(({ standing }) => standing.describeCaller())` would compile
+  and answer `null` — a read silently confined to nobody, which looks exactly
+  like a caller who belongs nowhere. `AuthenticatingPersonRepositories` is
+  yielded by `runAsPerson` alone, so that call does not type-check. Same
+  principle as `describeCaller()` taking no person, one level up.
+- **The two implementations share one suite, not two.** `describesCallerStanding`
+  in `src/adapters/testing/` is parameterized by a harness that seeds and reads;
+  the in-memory spec and `caller-standing.integration-spec.ts` supply the
+  seeding and nothing else. The double exists to stand in for the adapter in
+  use-case tests, so two suites written separately would drift precisely where
+  it matters — and a shared one costs one extra interface.
+- **The query has no predicate at all, and that is the assertion.**
+  `readMemberships` selects every membership row it can see; what confines it is
+  migration 0011's policy over `current_person_id()`. Probe: `USING (true)` on
+  the policy fails "describes no membership belonging to anyone else" with the
+  repository untouched. Dropping the `set_config` in `runAsPerson` fails seven
+  of the eight.
+- **`isOperator` had to mean the same thing here as everywhere else.** The
+  platform settled in feature 2 that it means "recorded, *and* still an active
+  person"; answering the bare record here would have re-created the escalation
+  task 1.2 removed, one layer down. A contract test covers it — a deactivated
+  person with an operator record reports `false` — and dropping the status check
+  in the double fails it.
+- **The in-memory unit of work's directory is a required argument, not an
+  optional one.** Eight construction sites had to be touched, which is the price
+  of `runAsPerson` behaving the same in every wiring; an optional directory
+  would have made it answer `null` in the six specs that pass an empty store and
+  work in the two that do not, and that difference surfaces long after the
+  wiring that caused it. It is typed as a read-only structural `InMemoryDirectory`
+  rather than as `InMemoryIdentityStore`, so the repository cannot write through
+  it.

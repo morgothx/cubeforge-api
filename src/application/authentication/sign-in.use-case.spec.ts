@@ -37,6 +37,7 @@ describe('signing in', () => {
       new InMemoryAuthenticatorUnitOfWork(
         context.credentials,
         new InMemoryApiKeyStore(),
+        context.store,
       ),
       hasher,
       new JwtAccessTokenIssuer({

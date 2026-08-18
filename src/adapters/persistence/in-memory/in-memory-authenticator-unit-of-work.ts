@@ -3,6 +3,7 @@ import type {
   ResolvedApiKey,
 } from '../../../application/ports/api-key.repository';
 import type {
+  AuthenticatingPersonRepositories,
   AuthenticatorRepositories,
   AuthenticatorUnitOfWork,
   OperatorStatusRepository,
@@ -28,6 +29,10 @@ import type {
 } from '../../../domain/identifiers';
 import type { PersonStatus } from '../../../domain/person/person.entity';
 import { InMemoryCredentialStore } from './in-memory-credential-store';
+import {
+  InMemoryStandingRepository,
+  type InMemoryDirectory,
+} from './in-memory-standing.repository';
 
 /** The API keys a test has arranged, keyed by digest for resolution. */
 export interface InMemoryApiKeys {
@@ -43,9 +48,16 @@ export interface InMemoryApiKeys {
  * double that kept them would let that through.
  */
 export class InMemoryAuthenticatorUnitOfWork implements AuthenticatorUnitOfWork {
+  /**
+   * The directory is required rather than optional. An optional one would make
+   * `runAsPerson` work in some wirings and answer `null` in others, which is
+   * the sort of difference a test discovers long after the wiring that caused
+   * it — tests with nothing to read pass `new InMemoryIdentityStore()`.
+   */
   constructor(
     private readonly store: InMemoryCredentialStore,
     private readonly apiKeys: InMemoryApiKeys,
+    private readonly directory: InMemoryDirectory,
   ) {}
 
   async runAuthenticating<T>(
@@ -69,6 +81,23 @@ export class InMemoryAuthenticatorUnitOfWork implements AuthenticatorUnitOfWork 
       replace(this.store.refreshTokens, snapshot.refreshTokens);
       throw error;
     }
+  }
+
+  /**
+   * Read-only, so there is nothing to roll back: a standing read is the whole
+   * of what a person-published transaction may do.
+   */
+  runAsPerson<T>(
+    personId: PersonId,
+    work: (repositories: AuthenticatingPersonRepositories) => Promise<T>,
+  ): Promise<T> {
+    return work({
+      standing: new InMemoryStandingRepository(
+        personId,
+        this.directory,
+        this.store.operators,
+      ),
+    });
   }
 }
 

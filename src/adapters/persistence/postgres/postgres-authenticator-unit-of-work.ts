@@ -5,6 +5,7 @@ import type {
   ResolvedApiKey,
 } from '../../../application/ports/api-key.repository';
 import type {
+  AuthenticatingPersonRepositories,
   AuthenticatorRepositories,
   AuthenticatorUnitOfWork,
   OperatorStatusRepository,
@@ -35,6 +36,7 @@ import {
 } from '../../../domain/identifiers';
 import { parseRole } from '../../../domain/membership/role';
 import { AUTHENTICATOR_DATABASE, type Database } from './drizzle.module';
+import { PostgresStandingRepository } from './postgres-standing.repository';
 import type { Transaction } from './postgres-tenant-scoped-unit-of-work';
 import { narrowPersonStatus } from './row-mapping';
 import {
@@ -72,6 +74,29 @@ export class PostgresAuthenticatorUnitOfWork implements AuthenticatorUnitOfWork 
         operators: new PostgresOperatorStatusRepository(tx),
       }),
     );
+  }
+
+  /**
+   * The same identity, with one person published so the policy on
+   * `memberships` — added in migration 0011 — confines the read to their rows.
+   *
+   * `set_config(..., true)` is transaction-local, for the reason the tenant is:
+   * connections are pooled, and a session-level setting would carry the person
+   * into whatever request took the connection next. The bundle is deliberately
+   * narrow — nothing that writes belongs in a transaction opened to answer a
+   * question about the caller.
+   */
+  runAsPerson<T>(
+    personId: PersonId,
+    work: (repositories: AuthenticatingPersonRepositories) => Promise<T>,
+  ): Promise<T> {
+    return this.database.transaction(async (tx) => {
+      await tx.execute(
+        sql`select set_config('app.current_person', ${personId}, true)`,
+      );
+
+      return work({ standing: new PostgresStandingRepository(tx) });
+    });
   }
 }
 

@@ -80,6 +80,7 @@ describe('managing API keys', () => {
     const authenticator = new InMemoryAuthenticatorUnitOfWork(
       context.credentials,
       context.apiKeys,
+      context.store,
     );
     const resolved = await authenticator.runAuthenticating(({ apiKeys }) =>
       apiKeys.resolve(secrets.digest(issued.secret)),
@@ -150,6 +151,7 @@ describe('managing API keys', () => {
     const authenticator = new InMemoryAuthenticatorUnitOfWork(
       context.credentials,
       context.apiKeys,
+      context.store,
     );
     await expect(
       authenticator.runAuthenticating(({ apiKeys }) =>

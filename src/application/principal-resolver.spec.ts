@@ -14,6 +14,7 @@ import { FixedClock } from '../adapters/testing/fixed-clock';
 import type { AccessTokenIssuer } from './ports/access-token-issuer';
 import type { SecretGenerator } from './ports/secret-generator';
 import { PrincipalResolver } from './principal-resolver';
+import { InMemoryIdentityStore } from '../adapters/persistence/in-memory/in-memory-identity-store';
 
 const NOW = new Date('2026-01-01T00:00:00.000Z');
 
@@ -63,7 +64,11 @@ describe('resolving a principal from an access token', () => {
     }
     return new PrincipalResolver(
       tokens,
-      new InMemoryAuthenticatorUnitOfWork(store, new InMemoryApiKeyStore()),
+      new InMemoryAuthenticatorUnitOfWork(
+        store,
+        new InMemoryApiKeyStore(),
+        new InMemoryIdentityStore(),
+      ),
       secrets,
       new FixedClock(NOW),
     );

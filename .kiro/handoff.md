@@ -1,6 +1,6 @@
 # Handoff — cubeforge-api
 
-Written 2026-08-17. Receiver: the next agent session (Claude or Codex). Read
+Written 2026-08-18. Receiver: the next agent session (Claude or Codex). Read
 this, then `.kiro/specs/caller-identity/tasks.md`.
 
 ## Where things stand
@@ -11,29 +11,30 @@ this, then `.kiro/specs/caller-identity/tasks.md`.
   `implemented`.
 - **Feature 3 `rbac-authorization-guards`: complete.** 19/19 tasks, spec phase
   `implemented`.
-- **Feature 4 `caller-identity`: in progress.** 5/10 tasks. `spec.json` phase
+- **Feature 4 `caller-identity`: in progress.** 6/10 tasks. `spec.json` phase
   `tasks-generated`, all three approvals `true`. Delivers `GET /me`, which the
   frontend cannot start without — a client that just signed in has no way to
   learn its own tenants or role.
-- Tarea activa: **3.1 complete and VERIFIED** — migration
-  `0011_authenticator_person_scope`. Next actionable is **3.2**, `runAsPerson`
-  and the standing repository, in Postgres and in memory.
-- Último commit: task 2.2 of `caller-identity`. **Uncommitted in the tree:**
-  task 3.1. One earlier commit, tasks 4.1–4.4 of
+- Tarea activa: **3.2 complete and VERIFIED** — `runAsPerson` and the standing
+  repository, in Postgres and in memory, held to one shared contract suite.
+  Next actionable is **4.1**, `DescribeCallerUseCase`.
+- Último commit: task 3.1 of `caller-identity`. **Uncommitted in the tree:**
+  task 3.2. One earlier commit, tasks 4.1–4.4 of
   feature 3, has a typo'd subject: `eat(...)`.
-- Ciclo TDD: 3.1 VERIFIED by breaking rather than by RED — the migration was
-  written before its test and global setup had already applied it, so the suite
-  passed first time. Three probes stand in: `USING (true)` fails three tests,
-  dropping the policy two, revoking the grant three. 3.2 NOT_STARTED.
+- Ciclo TDD: 3.2 RED (7 failing, `runAsPerson is not a function`) → GREEN →
+  VERIFIED by five probes: `USING (true)` on the policy, dropping the
+  `set_config`, filtering revoked/inactive in SQL, dropping the double's person
+  predicate, and dropping its person-status check. Each fails exactly what it
+  should. 4.1 NOT_STARTED.
 - **Integration work needs the database up.** `docker compose up -d postgres`,
   and `pnpm db:bootstrap` once on a fresh volume.
-- Tests corridos: `pnpm test` 319 passing, `pnpm test:integration` 130 passing,
+- Tests corridos: `pnpm test` 327 passing, `pnpm test:integration` 138 passing,
   `pnpm lint`, `pnpm typecheck` and `pnpm build` clean. Last run: all green.
 - **`pnpm typecheck` is new** (`tsc --noEmit`) and reports zero errors. It was
   added after 1.2 because nothing in this repo type-checked a spec file; the 34
   errors it first found are all repaired. Run it at every checkpoint — in 2.1 it
   was half the RED, catching a declaration shape the union did not yet carry.
-- Próximo paso exacto: `/kiro-impl caller-identity 3.2`.
+- Próximo paso exacto: `/kiro-impl caller-identity 4.1`.
 - When a task run resumes: `/kiro-impl <feature> <numbers>` — **with the task
   numbers**, which is what selects manual mode. Manual mode has no commit step
   at all; without numbers it commits per task and breaks the rule below.
@@ -59,9 +60,10 @@ tenant". Section 1 built the principal and the resolver and section 2 the
 declaration and its guard branch, so **a route can now be declared open to any
 authenticated person and the guard enforces it**. Task 3.1 added the database
 half: `current_person_id()`, a `SELECT` for `cubeforge_authenticator` on
-`memberships`, and a policy confining it to the published person. What remains
-is the repository over it (3.2), the use case and route (4.x), and validation
-(5.1).
+`memberships`, and a policy confining it to the published person, and 3.2 the
+repository over it — `runAsPerson`, `StandingRepository`, and one contract suite
+both implementations pass. What remains is the use case and route (4.x) and
+validation (5.1).
 
 The platform's entrance is unchanged:
 
@@ -141,6 +143,24 @@ DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
 - **`isolatedModules` forbids ambient const enums.** `@node-rs/argon2`'s
   `Algorithm` is one: unit tests pass while `pnpm build` fails, because ts-jest
   transpiles without type-checking. Run the build.
+- **The standing read returns domain entities, not the response shape.**
+  `decideAccess` needs a `Tenant`, a `Person` and a `Membership`, and task 4.1
+  filters with it — so `CallerStandingRecord` carries revoked memberships and
+  inactive tenants intact and the use case flattens. A repository that filtered
+  would be a second copy of a domain rule. The design said otherwise and has
+  been corrected.
+- **`standing` is reachable only from `runAsPerson`.** It is not a field on
+  `AuthenticatorRepositories`: there, the read would compile with nobody
+  published and answer `null`, which is indistinguishable from a caller who
+  belongs nowhere. Two bundles, and the mistake does not type-check.
+- **One contract suite, two implementations.** `describesCallerStanding` in
+  `src/adapters/testing/standing-repository.contract.ts` is parameterized by a
+  seeding harness; the in-memory spec and `caller-standing.integration-spec.ts`
+  supply only the seeding. Add a case there, not in one of them.
+- **`InMemoryAuthenticatorUnitOfWork` now takes a third argument**, the identity
+  store as a read-only directory. Required on purpose — an optional one would
+  make `runAsPerson` behave differently per wiring. Specs with nothing to read
+  pass `new InMemoryIdentityStore()`.
 - **Adding a field to a repository bundle obliges every adapter**, including the
   Postgres ones. That is how a slice of task 5.1 landed inside 4.1.
 - **A refusal that writes something cannot `throw` inside the transaction.** The

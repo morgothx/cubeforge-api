@@ -93,6 +93,7 @@ export async function createInMemoryApplication(
     // The same store the tenant-scoped unit of work writes to, so a key issued
     // through a route is a key that can then authenticate.
     context.apiKeys,
+    context.store,
   );
 
   const moduleRef = await Test.createTestingModule({

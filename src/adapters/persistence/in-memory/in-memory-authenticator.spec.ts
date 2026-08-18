@@ -13,6 +13,7 @@ import {
 import { InMemoryApiKeyStore } from './in-memory-api-key-store';
 import { InMemoryAuthenticatorUnitOfWork } from './in-memory-authenticator-unit-of-work';
 import { InMemoryCredentialStore } from './in-memory-credential-store';
+import { InMemoryIdentityStore } from './in-memory-identity-store';
 
 const NOW = new Date('2026-01-01T00:00:00.000Z');
 const LATER = new Date('2026-01-02T00:00:00.000Z');
@@ -34,7 +35,11 @@ describe('the in-memory authenticating adapters', () => {
       byId: (id) => (id === person ? known : null),
     });
     keys = new InMemoryApiKeyStore();
-    unitOfWork = new InMemoryAuthenticatorUnitOfWork(store, keys);
+    unitOfWork = new InMemoryAuthenticatorUnitOfWork(
+      store,
+      keys,
+      new InMemoryIdentityStore(),
+    );
   });
 
   describe('credentials', () => {
@@ -296,6 +301,7 @@ describe('the in-memory authenticating adapters', () => {
       const answer = await new InMemoryAuthenticatorUnitOfWork(
         store,
         keys,
+        new InMemoryIdentityStore(),
       ).runAuthenticating(({ operators }) => operators.isOperator(person));
 
       expect(answer).toBe(false);

@@ -202,27 +202,44 @@ known, and most of feature 2 has no person to publish.
 ### `StandingRepository`
 
 ```typescript
-export interface CallerStanding {
-  readonly personId: PersonId;
-  readonly email: EmailAddress;
-  readonly isOperator: boolean;
-  readonly memberships: readonly StandingMembership[];
+export interface StandingMembershipRecord {
+  readonly tenant: Tenant;
+  readonly membership: Membership;
 }
 
-export interface StandingMembership {
-  readonly tenantId: TenantId;
-  readonly tenantName: string;
-  readonly role: Role;
+export interface CallerStandingRecord {
+  readonly person: Person;
+  readonly isOperator: boolean;
+  readonly memberships: readonly StandingMembershipRecord[];
 }
 
 export interface StandingRepository {
   /** Of the published person, and of nobody else — the policy sees to that. */
-  describeCaller(): Promise<CallerStanding | null>;
+  describeCaller(): Promise<CallerStandingRecord | null>;
 }
 ```
 
 The method takes no person. It cannot: the person is whoever the transaction
 published, which removes the shape of the mistake requirement 2.1 forbids.
+
+**Corrected in task 3.2: the record carries domain entities, not a flattened
+answer.** The shape first written here — `personId`, `email`, `tenantId`,
+`tenantName`, `role` — is the *response*, and it cannot be what the repository
+returns, because the very next task drops every membership that does not
+currently grant access by asking `decideAccess`, which needs the tenant's
+status, the person's status and the membership's own. A repository answering
+the flattened shape would have had to make that decision itself, in SQL, which
+is a second copy of a domain rule free to drift from the one the guard applies.
+So the read returns the facts intact — revoked memberships and inactive tenants
+included — and `DescribeCallerUseCase` builds the flattened answer.
+
+**Also corrected in 3.2: `standing` is not a field on
+`AuthenticatorRepositories`.** Had it been, `runAuthenticating(({ standing }) =>
+standing.describeCaller())` would compile and answer `null` with nobody
+published — the read silently confined to nobody. `runAsPerson` yields its own
+bundle, `AuthenticatingPersonRepositories`, so that call does not compile. It is
+the same principle as the method taking no person, applied one level up: remove
+the shape of the mistake rather than forbid it by convention.
 
 ### `DescribeCallerUseCase`
 
@@ -319,7 +336,7 @@ that has a legitimate signed-in user with nothing yet.
 
 | Path | Responsibility |
 |---|---|
-| `src/application/ports/standing.repository.ts` | `CallerStanding`, `StandingMembership`, `StandingRepository` |
+| `src/application/ports/standing.repository.ts` | `CallerStandingRecord`, `StandingMembershipRecord`, `StandingRepository` |
 | `src/application/identity/describe-caller.use-case.ts` | Reads the standing, drops what does not grant access |
 | `src/application/identity/describe-caller.use-case.spec.ts` | Its rules |
 | `src/adapters/persistence/postgres/postgres-standing.repository.ts` | The three-table read under the published person |
@@ -334,9 +351,10 @@ that has a legitimate signed-in user with nothing yet.
 |---|---|
 | `src/application/actor-context.ts` | The `person` kind |
 | `src/application/principal-resolver.ts` | Produces it; checks the person is active |
-| `src/application/ports/authenticator-unit-of-work.ts` | `runAsPerson`, and `standing` among the repositories |
+| `src/application/ports/authenticator-unit-of-work.ts` | `runAsPerson`, and `AuthenticatingPersonRepositories` — a separate bundle, **not** `standing` among the existing repositories; see below |
 | `src/adapters/persistence/postgres/postgres-authenticator-unit-of-work.ts` | Publishes the person; provides the repository |
-| `src/adapters/persistence/in-memory/in-memory-authenticator-unit-of-work.ts` | The same |
+| `src/adapters/persistence/in-memory/in-memory-authenticator-unit-of-work.ts` | The same, and takes the identity store as a directory |
+| `src/adapters/testing/standing-repository.contract.ts` | Added: one suite, run against both implementations |
 | `src/adapters/http/access/access.decorator.ts` | The `person` shape and its rule in `assertUsable` |
 | `src/adapters/http/access/access.guard.ts` | The `person` branch |
 | `src/adapters/http/dto/responses.ts` | `CallerResponse` |

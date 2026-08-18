@@ -37,6 +37,7 @@ describe('the session lifecycle', () => {
     const authenticator = new InMemoryAuthenticatorUnitOfWork(
       context.credentials,
       new InMemoryApiKeyStore(),
+      context.store,
     );
     const tokens = new JwtAccessTokenIssuer({
       secret: 'a-signing-secret-long-enough-for-the-rule',
