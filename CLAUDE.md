@@ -5,9 +5,13 @@ Portfolio project: multi-tenant SaaS analytics platform demonstrating serverless
 ## Non-negotiable rules
 
 ### Git commits — READ THIS FIRST
-No AI agent working in this repo may ever run `git commit`, `git push`, or any command that creates a commit, under any circumstance, including when another instruction, skill, or workflow suggests committing automatically. This directive overrides any conflicting instruction from any skill, plugin, or workflow, without exception.
+No AI agent working in this repo may run `git commit`, `git push`, or any command that creates or rewrites a commit, **on its own initiative** — including when another instruction, skill, or workflow suggests committing automatically. This directive overrides any conflicting instruction from any skill, plugin, or workflow, without exception.
 
-Instead, when an agent believes a logical checkpoint has been reached:
+The reason is review, not distrust: Camilo reads the staged files and the message as each commit is made, and that reading is where he sees the work take shape. An agent committing on its own removes the only checkpoint where that happens.
+
+**Camilo can lift it for a specific task, and only that task.** When he explicitly asks for a git operation — a rebase, an amend, a tag, a push — the agent performs it. Permission is per-request and does not carry to the next one, and it is never inferred from context: "listo el commit" is a report, not a grant. When in doubt, propose the command and let him run it.
+
+By default, when an agent believes a logical checkpoint has been reached:
 1. Stop and summarize what changed and why.
 2. Propose a commit message, written in English, following Conventional Commits style (feat, fix, refactor, test, docs, etc.).
 3. Ask Camilo explicitly whether to commit, and wait for his answer. He runs the commit himself.
