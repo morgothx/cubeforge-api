@@ -155,7 +155,7 @@ The two can be built in either order.
 
 ## 5. Validation
 
-- [ ] 5.1 Prove it end to end, against the real database
+- [x] 5.1 Prove it end to end, against the real database
   - A member, an operator, and a person holding different roles in two tenants
     each receive the right standing
   - A machine key and a caller with no credential are refused identically
@@ -391,3 +391,21 @@ inherits them rather than rediscovering them.
   it.** `GET /me?personId=<other>` answers the caller, and `GET /me/<other>` is
   404 — requirement 2.3 checked at the edge, where a future maintainer would add
   the segment.
+- **The freshness tests only meant anything once each asked *before* its
+  change.** Caching the standing against the caller — the exact failure
+  requirement 4.1 exists to forbid — failed just one of the three, because the
+  other two never made a first call to populate a cache. A before-and-after
+  assertion needs the before. With it, the same probe fails all three, which is
+  the task's own done criterion.
+- **The machine and the anonymous caller are refused by the same code, which is
+  why their answers are identical.** Both come from the guard, not from the
+  error filter — a probe on the filter alone changed nothing. Breaking the guard
+  *and* the filter together is what fails the assertion, and it is worth knowing
+  that if the guard ever admitted a machine the use case would still refuse it:
+  a machine actor names no person, so there is nothing to describe.
+- **`PATCH /tenants/:tenantId/members/:membershipId` answers 204, not 200.** One
+  test asserted 200 and failed for that reason alone. Noted because the role
+  matrix reads statuses generically and never pins this one.
+- **Feature complete: 10/10, `spec.json` phase `implemented`.** `GET /me` works
+  end to end against the real database, from a session obtained the way a person
+  actually obtains one.

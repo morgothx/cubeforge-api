@@ -11,29 +11,28 @@ this, then `.kiro/specs/caller-identity/tasks.md`.
   `implemented`.
 - **Feature 3 `rbac-authorization-guards`: complete.** 19/19 tasks, spec phase
   `implemented`.
-- **Feature 4 `caller-identity`: in progress.** 9/10 tasks. `spec.json` phase
-  `tasks-generated`, all three approvals `true`. Delivers `GET /me`, which the
-  frontend cannot start without — a client that just signed in has no way to
-  learn its own tenants or role.
-- Tarea activa: **4.2 and 4.3 complete and VERIFIED** — `GET /me` exists, is
-  declared `{ person: true }`, and every suite that enumerates routes accounts
-  for it. Next actionable is **5.1**, the last task: end-to-end validation
-  against the real database.
-- Último commit: task 4.1 of `caller-identity`. **Uncommitted in the tree:**
-  tasks 4.2 and 4.3. One earlier commit, tasks 4.1–4.4 of
+- **Feature 4 `caller-identity`: complete.** 10/10 tasks, spec phase
+  `implemented`. Delivers `GET /me`, which the frontend could not start
+  without — a client that just signed in now learns its own tenants and role.
+- Tarea activa: **ninguna.** The four backend features on the roadmap through
+  `caller-identity` are done. Next is `frontend-shell`, which needs its own
+  `.kiro/` inside `cubeforge-web` — that repo still holds only an `.nvmrc`.
+- Último commit: tasks 4.2 and 4.3 of `caller-identity`. **Uncommitted in the
+  tree:** task 5.1. One earlier commit, tasks 4.1–4.4 of
   feature 3, has a typo'd subject: `eat(...)`.
-- Ciclo TDD: 4.2 RED (3 of 5 failing; the two expecting 404 passed because the
-  route did not exist) → GREEN → 4.3 → VERIFIED by four probes. 5.1
-  NOT_STARTED.
+- Ciclo TDD: 5.1 RED (one test, on a status the task did not pin) → GREEN →
+  VERIFIED by three probes. One of them showed the freshness tests were not
+  yet load-bearing and they were repaired before the task closed.
 - **Integration work needs the database up.** `docker compose up -d postgres`,
   and `pnpm db:bootstrap` once on a fresh volume.
-- Tests corridos: `pnpm test` 344 passing, `pnpm test:integration` 139 passing,
+- Tests corridos: `pnpm test` 344 passing, `pnpm test:integration` 149 passing,
   `pnpm lint`, `pnpm typecheck` and `pnpm build` clean. Last run: all green.
 - **`pnpm typecheck` is new** (`tsc --noEmit`) and reports zero errors. It was
   added after 1.2 because nothing in this repo type-checked a spec file; the 34
   errors it first found are all repaired. Run it at every checkpoint — in 2.1 it
   was half the RED, catching a declaration shape the union did not yet carry.
-- Próximo paso exacto: `/kiro-impl caller-identity 5.1`.
+- Próximo paso exacto: scaffold `cubeforge-web` (Vite + React + TS + its own
+  `.kiro/`), outside the Kiro cycle, then spec `frontend-shell`.
 - When a task run resumes: `/kiro-impl <feature> <numbers>` — **with the task
   numbers**, which is what selects manual mode. Manual mode has no commit step
   at all; without numbers it commits per task and breaks the rule below.
@@ -49,10 +48,10 @@ summarize, propose a Conventional Commits message in English, and wait.
 `/kiro-impl` autonomous mode commits per task, so it is banned. Use **manual mode,
 block by block**. This was decided in an earlier session and reaffirmed.
 
-## Next: `caller-identity`, sections 2 and 3
+## Next: `frontend-shell`
 
-Features 1–3 are `implemented` and nothing in them is outstanding. Feature 4
-delivers one route, `GET /me`, and is larger than that sounds: it touches the
+Features 1–4 are `implemented` and nothing in them is outstanding. Feature 4
+delivered one route, `GET /me`, and was larger than that sounds: it touches the
 actor union, the resolver, the access declaration and its guard, and the
 persistence layer, because none of those could express "a person acting in no
 tenant". Section 1 built the principal and the resolver and section 2 the
@@ -62,9 +61,10 @@ half: `current_person_id()`, a `SELECT` for `cubeforge_authenticator` on
 `memberships`, and a policy confining it to the published person, and 3.2 the
 repository over it — `runAsPerson`, `StandingRepository`, and one contract suite
 both implementations pass. Task 4.1 added `DescribeCallerUseCase`, which drops
-every membership `decideAccess` does not grant, and 4.2/4.3 the route itself
-and the suites that enumerate routes. **`GET /me` now works end to end.** What
-remains is validation (5.1).
+every membership `decideAccess` does not grant, 4.2/4.3 the route itself and
+the suites that enumerate routes, and 5.1 the end-to-end proof against the real
+database. **`GET /me` works end to end**, from a session obtained the way a
+person actually obtains one.
 
 The platform's entrance is unchanged:
 
@@ -176,6 +176,10 @@ DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
   pass `new InMemoryIdentityStore()`.
 - **Adding a field to a repository bundle obliges every adapter**, including the
   Postgres ones. That is how a slice of task 5.1 landed inside 4.1.
+- **A before-and-after test needs the before.** Three freshness tests in 5.1
+  asserted the state after a change and only one of them asked beforehand — so a
+  cache keyed on the caller, the exact thing requirement 4.1 forbids, failed
+  only that one. Make the first call, assert the old value, then change.
 - **A refusal that writes something cannot `throw` inside the transaction.** The
   rollback discards the write. Refresh invalidates a token family and then
   rejects; throwing undid the invalidation. Return a verdict from the
