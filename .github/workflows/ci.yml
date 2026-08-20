@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: lint, types, tests, build
+    runs-on: ubuntu-latest
+
+    # The integration suite reaches a real PostgreSQL, on purpose: row-level
+    # security is most of what this backend guarantees, and nothing but the
+    # database can enforce it. Floci and AWS are not involved — no test in this
+    # repository touches either.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: cubeforge
+          POSTGRES_PASSWORD: cubeforge
+          POSTGRES_DB: cubeforge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cubeforge -d cubeforge"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      # Throwaway values for a container that lives for one job. The roles are
+      # named canonically because `bootstrap-roles` refuses anything else — the
+      # migrations grant to these names literally.
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: '5432'
+      POSTGRES_DB: cubeforge
+      POSTGRES_USER: cubeforge
+      POSTGRES_PASSWORD: cubeforge
+      POSTGRES_MIGRATOR_USER: cubeforge_migrator
+      POSTGRES_MIGRATOR_PASSWORD: ci-only-migrator
+      POSTGRES_APP_USER: cubeforge_app
+      POSTGRES_APP_PASSWORD: ci-only-app
+      POSTGRES_OPERATOR_USER: cubeforge_operator
+      POSTGRES_OPERATOR_PASSWORD: ci-only-operator
+      POSTGRES_AUTHENTICATOR_USER: cubeforge_authenticator
+      POSTGRES_AUTHENTICATOR_PASSWORD: ci-only-authenticator
+      AUTH_TOKEN_SECRET: ci-only-signing-secret-not-used-anywhere-else
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `lint:check`, not `lint`: the everyday script carries `--fix`, and a
+      # gate that repairs the violation it was meant to catch reports success
+      # for work nobody did.
+      - run: pnpm lint:check
+
+      - run: pnpm typecheck
+
+      - run: pnpm test
+
+      # Roles before migrations, and in that order for a reason: the migrations
+      # `GRANT` to the four identities by name, so they have to exist first.
+      # Bootstrapping runs as the container superuser because creating roles
+      # requires it — and because migrations deliberately do not.
+      - run: pnpm db:bootstrap
+
+      - run: pnpm db:migrate
+
+      - run: pnpm test:integration
+
+      - run: pnpm build

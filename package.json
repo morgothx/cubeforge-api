@@ -16,6 +16,7 @@
     "start:debug": "node --env-file-if-exists=.env ./node_modules/@nestjs/cli/bin/nest.js start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,scripts,test}/**/*.ts\" --fix",
+    "lint:check": "eslint \"{src,apps,libs,scripts,test}/**/*.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest",
     "test:watch": "jest --watch",
