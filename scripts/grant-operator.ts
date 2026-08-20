@@ -16,9 +16,7 @@ import { loadDatabaseConfig } from '../src/adapters/persistence/postgres/databas
 async function main(): Promise<void> {
   const [email, flag] = process.argv.slice(2);
   if (!email) {
-    throw new Error(
-      'usage: pnpm ops:grant-operator <email> [--withdraw]',
-    );
+    throw new Error('usage: pnpm ops:grant-operator <email> [--withdraw]');
   }
   const withdrawing = flag === '--withdraw';
   if (flag !== undefined && !withdrawing) {

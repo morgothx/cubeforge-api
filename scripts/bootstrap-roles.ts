@@ -61,7 +61,9 @@ async function main(): Promise<void> {
     );
     const { role, database } = rows[0];
 
-    await client.query(`GRANT CREATE, CONNECT ON DATABASE ${database} TO ${role}`);
+    await client.query(
+      `GRANT CREATE, CONNECT ON DATABASE ${database} TO ${role}`,
+    );
     await client.query(`GRANT CREATE, USAGE ON SCHEMA public TO ${role}`);
 
     process.stdout.write(
@@ -91,9 +93,10 @@ async function grantLogin(
   );
   const { role, secret } = rows[0];
 
-  const existing = await client.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [
-    identity.user,
-  ]);
+  const existing = await client.query(
+    'SELECT 1 FROM pg_roles WHERE rolname = $1',
+    [identity.user],
+  );
   if (existing.rowCount === 0) {
     await client.query(`CREATE ROLE ${role} NOLOGIN`);
   }
