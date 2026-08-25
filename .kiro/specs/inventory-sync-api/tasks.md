@@ -88,7 +88,7 @@ project exists to demonstrate stop being framework behaviour.
   - Not parallel with 2.1: a submitted movement is expressed in the identifier
     types that task defines
 
-- [ ] 2.3 Declare what persistence must offer, without providing it yet
+- [x] 2.3 Declare what persistence must offer, without providing it yet
   - Three port interfaces: one shape shared by the catalogue and the places —
     declare, replace, answer which of a set exist — and one for movements,
     covering the insert that skips what is already recorded and the sum
@@ -109,7 +109,7 @@ project exists to demonstrate stop being framework behaviour.
 Two entities of one shape. The interface is shared; the implementations stay
 two small concrete repositories rather than a base class.
 
-- [ ] 3.1 (P) Keep a tenant's product catalogue
+- [x] 3.1 (P) Keep a tenant's product catalogue
   - Declaring a product that is not present records it; declaring one that is
     replaces its describable attributes, and the caller is told which happened
   - Answer which of a set of SKUs are declared, returning membership rather than
@@ -125,7 +125,7 @@ two small concrete repositories rather than a base class.
   - _Depends: 2.3_
   - _Boundary: ProductRepository_
 
-- [ ] 3.2 (P) Keep a tenant's places
+- [x] 3.2 (P) Keep a tenant's places
   - The same shape as the catalogue: declare, replace, answer membership, never
     delete
   - Done when re-declaring reports an update, and the membership answer is what
@@ -426,3 +426,39 @@ Seven rules, seven probes, each removing exactly one and each turning a
 different test red. `occurred-not-a-moment` was not in the design's list of
 reasons; an invalid `Date` is reachable from a payload, so it was added and the
 design updated to match.
+
+### A port that was already speculative when written
+
+`MovementRepository` was drafted with a `list()` "for the export feature". It
+serves nothing here, and every implementation would have had to write it for
+nothing. Removed — it is the exact abstraction the design's own simplification
+rule exists to prevent, and writing the justification into a doc comment did
+not make it less so.
+
+### `xmax = 0` reports which half of an upsert happened
+
+Declaring is one statement, because a read followed by a write is a race two
+synchronisations declaring the same product would both lose. A single upsert
+cannot normally say whether it inserted or replaced; `xmax` is zero on a row the
+statement inserted and non-zero on one it updated, which recovers the answer
+without a second query. Probe A makes it always claim `created` and the test
+bites.
+
+### The tenant predicate needed its own suite to be testable at all
+
+Dropping the `where` clause from the Postgres repository changed **nothing**
+observable — row-level security still held. That is the two-layer design working
+exactly as intended, and it is also why the platform already has a
+`first-isolation-layer` suite that connects as a superuser, whom policies do not
+apply to.
+
+These repositories cannot join that suite until the unit of work carries them
+(4.2), so the same claim is made locally for now. With it, the probe bites.
+
+**A predicate with a policy behind it is untested by every ordinary test.**
+
+### Two `useIntegrationDatabase` blocks in one file share a teardown
+
+The second block captured a connection pool at module load, and the first
+block's teardown had already closed it. Asked for per call instead. Worth
+knowing before the remaining integration specs are written.

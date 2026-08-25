@@ -1,0 +1,110 @@
+import type { ProductAttributes } from '../../../application/ports/product.repository';
+import { tenantId } from '../../../domain/identifiers';
+import { sku } from '../../../domain/inventory/identifiers';
+import type { Sku } from '../../../domain/inventory/identifiers';
+import {
+  InMemoryInventoryStore,
+  InMemoryReferenceRepository,
+} from './in-memory-inventory-store';
+
+const acme = tenantId('018f2c00-0000-7000-8000-000000000001');
+const globex = tenantId('018f2c00-0000-7000-8000-000000000002');
+
+describe('the catalogue double', () => {
+  let store: InMemoryInventoryStore;
+  let clock: Date;
+
+  const catalogueOf = (tenant: typeof acme) =>
+    new InMemoryReferenceRepository<Sku, ProductAttributes>(
+      store.products,
+      tenant,
+      () => clock,
+    );
+
+  beforeEach(() => {
+    store = new InMemoryInventoryStore();
+    clock = new Date('2026-08-25T10:00:00.000Z');
+  });
+
+  const widget: ProductAttributes = { name: 'A widget', category: 'tools' };
+
+  it('records a product that was not there', async () => {
+    await expect(
+      catalogueOf(acme).declare(sku('ACME-001'), widget),
+    ).resolves.toBe('created');
+  });
+
+  it('replaces one that was, rather than keeping two', async () => {
+    const catalogue = catalogueOf(acme);
+    await catalogue.declare(sku('ACME-001'), widget);
+
+    await expect(
+      catalogue.declare(sku('ACME-001'), {
+        name: 'A better widget',
+        category: null,
+      }),
+    ).resolves.toBe('updated');
+
+    const listed = await catalogue.list();
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.name).toBe('A better widget');
+  });
+
+  it('keeps the moment it was first declared when replacing it', async () => {
+    const catalogue = catalogueOf(acme);
+    await catalogue.declare(sku('ACME-001'), widget);
+
+    clock = new Date('2026-08-26T10:00:00.000Z');
+    await catalogue.declare(sku('ACME-001'), widget);
+
+    const [product] = await catalogue.list();
+    expect(product?.createdAt).toEqual(new Date('2026-08-25T10:00:00.000Z'));
+    expect(product?.updatedAt).toEqual(new Date('2026-08-26T10:00:00.000Z'));
+  });
+
+  it('lets two tenants hold the same SKU, meaning different things', async () => {
+    await catalogueOf(acme).declare(sku('ACME-001'), widget);
+    await catalogueOf(globex).declare(sku('ACME-001'), {
+      name: 'Something else entirely',
+      category: null,
+    });
+
+    const [mine] = await catalogueOf(acme).list();
+    const [theirs] = await catalogueOf(globex).list();
+    expect(mine?.name).toBe('A widget');
+    expect(theirs?.name).toBe('Something else entirely');
+  });
+
+  it('shows one tenant nothing of another', async () => {
+    // The double is keyed by tenant and code, never code alone, so a use case
+    // that forgets its scope fails here exactly as it would fail against the
+    // database. A more permissive double lets through the bug it exists to
+    // catch.
+    await catalogueOf(globex).declare(sku('GLOBEX-9'), widget);
+
+    await expect(catalogueOf(acme).list()).resolves.toEqual([]);
+    await expect(
+      catalogueOf(acme).declared([sku('GLOBEX-9')]),
+    ).resolves.toEqual(new Set());
+  });
+
+  it('answers membership for exactly the codes asked about', async () => {
+    const catalogue = catalogueOf(acme);
+    await catalogue.declare(sku('ACME-001'), widget);
+    await catalogue.declare(sku('ACME-002'), widget);
+
+    await expect(
+      catalogue.declared([sku('ACME-002'), sku('ACME-404')]),
+    ).resolves.toEqual(new Set([sku('ACME-002')]));
+  });
+
+  it('asks nothing when asked about nothing', async () => {
+    await expect(catalogueOf(acme).declared([])).resolves.toEqual(new Set());
+  });
+
+  it('offers no way to delete', () => {
+    // Movements point at these rows, and the database grants no deletion
+    // either. Two absences, so restoring one by accident is not enough.
+    expect('delete' in catalogueOf(acme)).toBe(false);
+  });
+});
