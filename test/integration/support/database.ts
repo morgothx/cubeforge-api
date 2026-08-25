@@ -202,7 +202,8 @@ export async function resetDatabase(): Promise<void> {
   // from `people`, so adding a table without adding it here fails visibly the
   // first time a test leaks a row instead of silently much later.
   await poolFor('superuser').query(
-    `TRUNCATE refresh_tokens, credential_setup_tokens, person_credentials,
+    `TRUNCATE stock_movements, inventory_products, inventory_locations,
+              refresh_tokens, credential_setup_tokens, person_credentials,
               platform_operators, api_keys, memberships, people, tenants CASCADE`,
   );
 }

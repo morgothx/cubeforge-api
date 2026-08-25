@@ -85,6 +85,20 @@
       "when": 1786991278494,
       "tag": "0011_authenticator_person_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787690123873,
+      "tag": "0012_inventory_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787690124873,
+      "tag": "0013_inventory_roles_and_rls",
+      "breakpoints": true
     }
   ]
 }

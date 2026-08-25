@@ -11,7 +11,7 @@ The tables, the rules the database itself enforces, and the one shared seam.
 Section 1.3 touches a file every later section reads, so it goes first and
 nothing waits on it afterwards.
 
-- [ ] 1.1 Give a tenant somewhere to keep products, places and movements
+- [x] 1.1 Give a tenant somewhere to keep products, places and movements
   - Three tenant-owned tables, each carrying its tenant explicitly rather than
     reaching it through a join, because that is the column both the repository
     predicate and the isolation policy key on
@@ -33,7 +33,7 @@ nothing waits on it afterwards.
   - _Requirements: 1.3, 3.2, 3.4, 5.1, 7.6_
   - _Boundary: Persistence schema_
 
-- [ ] 1.2 Make the history impossible to rewrite
+- [x] 1.2 Make the history impossible to rewrite
   - Enable and force row-level security on all three tables, following the
     pattern the identity and credential tables already use
   - Scope every policy to the tenant published for the transaction
@@ -307,3 +307,49 @@ assertions are.
   - _Depends: 5.5_
   - _Boundary: Integration suite_
 
+## Implementation Notes
+
+### 1.1 and 1.2 could not land separately
+
+The platform has a standing test asserting that **every** table has row-level
+security enabled and forced, and at least one policy. Adding three tables
+turned it red, which is exactly what it was built to do. So 1.1 alone leaves
+the suite failing; the two are one checkpoint, not two.
+
+Worth keeping in mind for the remaining foundation work: a task is only
+independently completable if the suite is green at its end.
+
+### The composite foreign key earns its keep immediately
+
+`stock_movements` references `(tenant_id, sku)` rather than `sku`. The first
+version of the cross-tenant test passed for the wrong reason — the helper gave
+both tenants the same SKU, so the movement resolved against the *other* tenant's
+identically named product and the foreign key was never tested. Giving each
+tenant distinct codes turned it red, and then it failed again for a second
+reason: the row named the other tenant's place as well, so Postgres refused on
+the location key first. Naming the tenant's own place isolates the claim.
+
+Two wrong greens in one test. Both were found by running probes rather than by
+reading it.
+
+### `FORCE` cannot be observed from the application identity
+
+Probing `NO FORCE ROW LEVEL SECURITY` broke nothing in this feature's tests, and
+that is correct rather than a gap: `FORCE` only affects the table **owner**, and
+`cubeforge_app` is not the owner. What guards it is the existing policy-coverage
+test, which reads `pg_class` directly. Both `NO FORCE` and `DISABLE ROW LEVEL
+SECURITY` fail it.
+
+The probe that appeared to find nothing was measuring the wrong identity.
+
+### Append-only is two absences, on purpose
+
+No `UPDATE` or `DELETE` grant on `stock_movements`, **and** no policy that would
+permit either. Stated twice so restoring one by accident is not enough. Probes F
+and G restore the grant *and* add a matching policy, and both tests bite.
+
+### `resetDatabase` names its tables by hand
+
+It does, with a comment explaining that forgetting one fails visibly later. All
+three new tables were added to it. Truncation order matters: movements first,
+then the two reference tables.

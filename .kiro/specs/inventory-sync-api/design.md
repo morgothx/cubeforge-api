@@ -547,10 +547,11 @@ test would be measuring the machine it runs on.
 | `src/inventory.module.ts` | Binds these ports to these adapters |
 | `drizzle/0012_inventory_schema.sql` | Tables, indexes, constraints |
 | `drizzle/0013_inventory_roles_and_rls.sql` | `ENABLE` + `FORCE`, policies, grants without `DELETE` |
-| `test/inventory-machine-access.e2e-spec.ts` | Every route reached by a real API key |
-| `test/inventory-isolation.e2e-spec.ts` | Cross-tenant invisibility and the disclosure rules |
-| `test/inventory-replay.e2e-spec.ts` | Concurrent submission of one batch |
-| `test/inventory-append-only.e2e-spec.ts` | Grants refuse update and delete |
+| `test/integration/inventory-machine-access.integration-spec.ts` | Every route reached by a real API key |
+| `test/integration/inventory-isolation.integration-spec.ts` | Cross-tenant invisibility and the disclosure rules |
+| `test/integration/inventory-replay.integration-spec.ts` | Concurrent submission of one batch |
+| `test/integration/inventory-append-only.integration-spec.ts` | Grants refuse update and delete |
+| `test/integration/inventory-schema.integration-spec.ts` | The constraints of task 1.1, against a real database |
 
 ### Modified
 
