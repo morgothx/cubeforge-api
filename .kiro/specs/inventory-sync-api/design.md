@@ -541,12 +541,16 @@ test would be measuring the machine it runs on.
 | `src/adapters/http/inventory-locations.controller.ts` | Two routes |
 | `src/adapters/http/inventory-movements.controller.ts` | Single and batch |
 | `src/adapters/http/inventory-stock.controller.ts` | One route |
-| `src/adapters/http/dto/inventory.dto.ts` | Payload shapes, including the 500-row array limit |
+| `src/adapters/http/dto/inventory-catalogue.dto.ts` | Product and location payload shapes |
+| `src/adapters/http/dto/inventory-movements.dto.ts` | Movement payloads, including the 500-row array limit |
 | `src/adapters/http/inventory-throttling.ts` | `InventoryThrottlerGuard` |
 | `src/inventory.module.ts` | Binds these ports to these adapters |
 | `drizzle/0012_inventory_schema.sql` | Tables, indexes, constraints |
 | `drizzle/0013_inventory_roles_and_rls.sql` | `ENABLE` + `FORCE`, policies, grants without `DELETE` |
-| `test/inventory.e2e-spec.ts` | The integration tier above |
+| `test/inventory-machine-access.e2e-spec.ts` | Every route reached by a real API key |
+| `test/inventory-isolation.e2e-spec.ts` | Cross-tenant invisibility and the disclosure rules |
+| `test/inventory-replay.e2e-spec.ts` | Concurrent submission of one batch |
+| `test/inventory-append-only.e2e-spec.ts` | Grants refuse update and delete |
 
 ### Modified
 
@@ -564,13 +568,18 @@ The one shared file with a real chance of conflict is
 `tenant-scoped-unit-of-work.ts`, on both sides. It is a three-line addition and
 should be the first task, so nothing else waits on it.
 
+Payload shapes are split by resource, and each integration concern writes its
+own spec file, so the controller tasks and the validation tasks can genuinely
+run alongside each other. One file per concern is also why they can: four tasks
+appending to one spec file are not parallel however unrelated their assertions.
+
 ## Requirements Traceability
 
 | Requirement | Where it lives |
 |---|---|
 | 1.1, 1.2 | `declareProduct`, `ReferenceRepository.declare` |
 | 1.3 | unique `(tenant_id, sku)`; integration test across two tenants |
-| 1.4 | `inventory.dto.ts`, `identifiers.ts` constructors |
+| 1.4 | `inventory-catalogue.dto.ts`, `identifiers.ts` constructors |
 | 1.5 | no `DELETE` grant in `0013`; no repository method |
 | 2.1, 2.2 | `declareLocation` |
 | 2.3 | `declared()` check in `recordMovements`; `unknown-location` |
@@ -581,7 +590,7 @@ should be the first task, so nothing else waits on it.
 | 3.7 | no mechanism needed — an offsetting movement is an ordinary one |
 | 3.8 | absence of a transfer route; `MovementKind` has three members |
 | 4.1, 4.2 | `RecordMovementsReport`, positional `outcomes` |
-| 4.3 | array-size constraint in `inventory.dto.ts` |
+| 4.3 | array-size constraint in `inventory-movements.dto.ts` |
 | 4.4 | in-batch duplicate pass in `recordMovements` |
 | 4.5 | single route submits a batch of one |
 | 5.1 | unique `(tenant_id, external_id)` |
