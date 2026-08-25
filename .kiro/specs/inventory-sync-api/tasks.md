@@ -177,7 +177,7 @@ two small concrete repositories rather than a base class.
   - _Depends: 4.2_
   - _Boundary: declareProduct, declareLocation use cases_
 
-- [ ] 4.4 Turn a batch into an answer about every row
+- [x] 4.4 Turn a batch into an answer about every row
   - Decide everything decidable without the database first — the per-movement
     judgement, then identifiers duplicated within this same batch — so a batch
     that is entirely malformed costs one round trip and no writes
@@ -575,3 +575,38 @@ caller. With it, the probe bites.
 
 Neither `DeclareProductCommand` nor `DeclareLocationCommand` has a tenant field.
 "A caller in Acme declaring into Globex" is not refused — it is not expressible.
+
+### The use case parses; the edge does not
+
+`SubmittedRow` carries strings, and the identifiers are parsed inside the use
+case rather than at the controller. That is the whole reason a per-row report is
+possible: a constructor throwing at the edge makes one malformed code the
+*request's* failure, and this feature's entire premise is that it is one row's.
+
+It is also why `parse*` exists beside the throwing constructors. The two forms
+are not redundant — they serve callers with and without a per-row answer to
+give.
+
+### The report is positional, and that is load-bearing
+
+A caller correlates outcomes to submitted rows by index, so the report must have
+exactly one entry per row, in order. `summarise` throws if any row is missing an
+outcome rather than returning a shorter list, because a shorter list does not
+fail — it silently describes the wrong movements from the gap onwards.
+
+Two probes: grouping the report by status, and dropping one row's outcome. Both
+bite.
+
+### A duplicate in one batch is not a retry
+
+Both mean "I have seen this identifier before", and they are told apart on
+purpose. A caller retrying a request is expected and answered
+`already-recorded`; a caller that put one document into a batch twice has a bug
+in how it batches, and giving it the reassuring answer would hide that bug
+forever.
+
+### Five stages, five probes
+
+Duplicate detection, replay reporting, reference checking, the standalone
+invariants, and judging against the clock rather than a constant. Each removed
+on its own, each turning a different test red.
