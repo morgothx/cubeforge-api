@@ -246,14 +246,14 @@ two small concrete repositories rather than a base class.
   - _Depends: 4.4_
   - _Boundary: HTTP inventory controllers_
 
-- [ ] 5.3 (P) Expose stock on hand
+- [x] 5.3 (P) Expose stock on hand
   - One read route, admitting a viewer and a machine credential
   - Done when a viewer's credential can read it and cannot write anything
   - _Requirements: 6.1, 7.4_
   - _Depends: 4.5_
   - _Boundary: HTTP inventory controllers_
 
-- [ ] 5.4 (P) Slow a caller synchronising too eagerly
+- [x] 5.4 (P) Slow a caller synchronising too eagerly
   - Limit requests per credential over a window, extending the throttling
     approach the credential endpoints already use rather than building a second
     limiter
@@ -748,3 +748,49 @@ rows and getting `recorded`.
 evaluated. In the application Nest has already loaded the shim; a test importing
 the DTO module directly has not. The spec imports it first, with a comment
 saying why — the alternative was an import in every DTO to serve one caller.
+
+### `ThrottlerModule` is `@Global`, and a second `forRoot` replaces rather than adds
+
+Registering the inventory buckets in `InventoryModule` would have **deleted the
+credential limits** — sign-in throttling, the thing that stops password
+guessing — and nothing would have failed. The module is decorated `@Global` in
+the library, which the comment in `AuthenticationModule` did not know: it said
+*"registered here rather than globally"*, which was never true.
+
+Moved to the composition root, one registration holding every bucket. Each
+throttled handler now skips the buckets that are not its own, in both
+directions, because a global bucket applies to every throttled handler by
+default — an inventory route would otherwise be counted by `sign-in-address`,
+whose tracker reads an email out of a body it does not have.
+
+### The stock allowance was sixty per *route*
+
+`ThrottlerGuard.generateKey` includes the controller and the handler, so a
+caller got sixty reads **and** sixty writes **and** sixty batches — four hundred
+and twenty a minute against a limit that says sixty. Nothing about the
+configuration looked wrong.
+
+Found by the test that exhausts the allowance with reads and then writes
+successfully. `generateKey` is overridden to the bucket and the tracker alone.
+
+### `Retry-After-inventory-credential` is not a header anyone honours
+
+For a *named* bucket the library suffixes the header with the bucket's name. No
+HTTP client, proxy or retry library reads that — a caller would have to know
+this platform's internal bucket names to find the wait. The plain `Retry-After`
+is set alongside it.
+
+### A test that compared two tenants to prove something about credentials
+
+The first draft of "counts a second credential separately" seeded a **second
+tenant**. Two tenants differ in both respects at once, so it could not tell
+per-credential from per-tenant apart — and the probe that switched the tracker
+to the tenant passed. Rewritten with two members of one tenant; the probe now
+bites.
+
+### A probe that could not be run
+
+Raising the allowance to a hundred thousand made the exhausting loop take longer
+than the timeout. The probe was unrunnable rather than uninformative — worth
+recording so it is not mistaken for a gap. The limit's effect is covered by the
+other four.

@@ -250,6 +250,14 @@ describe('the role matrix', () => {
           }),
     },
     {
+      key: 'GET /tenants/:tenantId/inventory/stock',
+      admits: ['admin', 'editor', 'viewer'],
+      call: (world, headers) =>
+        request(server())
+          .get(`/tenants/${world.acme.id}/inventory/stock`)
+          .set(headers),
+    },
+    {
       key: 'GET /tenants/:tenantId/inventory/locations',
       admits: ['admin', 'editor', 'viewer'],
       call: (world, headers) =>

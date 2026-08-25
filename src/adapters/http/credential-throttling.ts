@@ -2,7 +2,7 @@ import { Injectable, Logger, type ExecutionContext } from '@nestjs/common';
 import {
   ThrottlerGuard,
   type ThrottlerLimitDetail,
-  type ThrottlerModuleOptions,
+  type ThrottlerOptions,
 } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { createHash } from 'node:crypto';
@@ -33,9 +33,7 @@ export const REDEMPTION_BY_ORIGIN = 'redemption-origin';
  * window, and exceeding the count costs the caller the cooling period, which is
  * the longer of the two.
  */
-export function throttlerOptions(
-  config: ThrottlingConfig,
-): ThrottlerModuleOptions {
+export function throttlerOptions(config: ThrottlingConfig): ThrottlerOptions[] {
   const window = {
     ttl: config.windowSeconds * 1000,
     blockDuration: config.cooldownSeconds * 1000,

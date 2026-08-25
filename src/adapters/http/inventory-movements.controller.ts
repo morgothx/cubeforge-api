@@ -5,11 +5,14 @@ import {
   HttpStatus,
   Post,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import type { MovementOutcome } from '../../application/inventory/record-movements.use-case';
 import { RecordMovementsUseCase } from '../../application/inventory/record-movements.use-case';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Access } from './access/access.decorator';
+import { InventoryThrottlerGuard, OTHER_BUCKETS } from './inventory-throttling';
 import {
   MovementRow,
   RecordMovementsBatchRequest,
@@ -33,6 +36,8 @@ import { actorOf } from './principal.middleware';
  * here, including the one where nothing was wrong.
  */
 @Controller('tenants/:tenantId/inventory/movements')
+@UseGuards(InventoryThrottlerGuard)
+@SkipThrottle(OTHER_BUCKETS)
 export class InventoryMovementsController {
   constructor(private readonly record: RecordMovementsUseCase) {}
 

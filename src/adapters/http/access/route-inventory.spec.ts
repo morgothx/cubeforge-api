@@ -211,6 +211,7 @@ describe('the route inventory, against the real application', () => {
       'GET /tenants/:tenantId/api-keys',
       'GET /tenants/:tenantId/inventory/locations',
       'GET /tenants/:tenantId/inventory/products',
+      'GET /tenants/:tenantId/inventory/stock',
       'GET /tenants/:tenantId/members',
       'PATCH /tenants/:tenantId/members/:membershipId',
       'POST /auth/credentials',
@@ -264,6 +265,10 @@ describe('the route inventory, against the real application', () => {
         machines: true,
       },
       'GET /tenants/:tenantId/inventory/products': {
+        roles: ['admin', 'editor', 'viewer'],
+        machines: true,
+      },
+      'GET /tenants/:tenantId/inventory/stock': {
         roles: ['admin', 'editor', 'viewer'],
         machines: true,
       },
@@ -353,6 +358,7 @@ describe('the route inventory, against the real application', () => {
       '/tenants/:tenantId/inventory/movements/batch',
       '/tenants/:tenantId/inventory/products',
       '/tenants/:tenantId/inventory/products/:sku',
+      '/tenants/:tenantId/inventory/stock',
     ]);
   });
 

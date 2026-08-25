@@ -228,4 +228,35 @@ describe('recording movements over HTTP', () => {
     // the SKU might exist.
     expect(JSON.stringify(outcome)).not.toContain('tenant');
   });
+
+  it('reports the stock that the recorded movements add up to', async () => {
+    await submit([
+      movement({ externalId: 'ERP-IN', kind: 'receipt', quantity: 10 }),
+      movement({ externalId: 'ERP-OUT', kind: 'sale', quantity: -4 }),
+      // Rejected, and therefore absent from the total. A row that was refused
+      // must not reach the sum, which is the one way a partial batch could
+      // still corrupt the answer.
+      movement({ externalId: 'ERP-BAD', sku: 'NOT-DECLARED', quantity: 999 }),
+    ]);
+
+    const response = await request(server())
+      .get(`/tenants/${acme.id}/inventory/stock`)
+      .set(acme.headers);
+
+    expect(response.status).toBe(200);
+    expect(body(response)).toEqual([
+      { sku: 'ACME-001', location: 'WH-1', onHand: 6 },
+    ]);
+  });
+
+  it('reports nothing for a tenant that has recorded nothing', async () => {
+    const empty = await seedTenantWithAdministrator(app, 'Empty');
+
+    const response = await request(server())
+      .get(`/tenants/${empty.id}/inventory/stock`)
+      .set(empty.headers);
+
+    expect(response.status).toBe(200);
+    expect(body(response)).toEqual([]);
+  });
 });

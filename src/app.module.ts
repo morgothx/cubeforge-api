@@ -3,8 +3,15 @@ import {
   type MiddlewareConsumer,
   type NestModule,
 } from '@nestjs/common';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { CorrelationMiddleware } from './adapters/http/correlation.middleware';
+import { throttlerOptions } from './adapters/http/credential-throttling';
+import {
+  inventoryThrottlerOptions,
+  loadInventoryThrottlingConfig,
+} from './adapters/http/inventory-throttling';
 import { PrincipalMiddleware } from './adapters/http/principal.middleware';
+import { loadThrottlingConfig } from './adapters/http/throttling.config';
 import { AuthenticationModule } from './authentication.module';
 import { AuthorizationModule } from './authorization.module';
 import { SystemModule } from './system.module';
@@ -18,6 +25,19 @@ import { InventoryModule } from './inventory.module';
  */
 @Module({
   imports: [
+    /**
+     * One registration, here, because `ThrottlerModule` is `@Global` — a second
+     * `forRoot` anywhere would not add buckets, it would replace them, and the
+     * credential limits would disappear without a single test noticing.
+     *
+     * Every bucket is therefore visible to every throttled handler, and each
+     * one skips the buckets that are not its own. That is explicit rather than
+     * clever, and it is why the bucket names are exported constants.
+     */
+    ThrottlerModule.forRoot([
+      ...throttlerOptions(loadThrottlingConfig(process.env)),
+      ...inventoryThrottlerOptions(loadInventoryThrottlingConfig(process.env)),
+    ]),
     SystemModule,
     AuthenticationModule,
     AuthorizationModule,

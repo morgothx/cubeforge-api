@@ -1,10 +1,20 @@
-import { Body, Controller, Get, Param, Put, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Put,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { DeclareLocationUseCase } from '../../application/inventory/declare-location.use-case';
 import { ListLocationsUseCase } from '../../application/inventory/list-locations.use-case';
 import { DomainViolation } from '../../domain/errors';
 import { parseLocationCode } from '../../domain/inventory/identifiers';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Access } from './access/access.decorator';
+import { InventoryThrottlerGuard, OTHER_BUCKETS } from './inventory-throttling';
 import {
   DeclareLocationRequest,
   type CatalogueEntryResponse,
@@ -14,6 +24,8 @@ import { actorOf } from './principal.middleware';
 
 /** Where a tenant keeps stock. The catalogue's twin, route for route. */
 @Controller('tenants/:tenantId/inventory/locations')
+@UseGuards(InventoryThrottlerGuard)
+@SkipThrottle(OTHER_BUCKETS)
 export class InventoryLocationsController {
   constructor(
     private readonly declare: DeclareLocationUseCase,

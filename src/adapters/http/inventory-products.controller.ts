@@ -1,10 +1,20 @@
-import { Body, Controller, Get, Param, Put, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Put,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { DeclareProductUseCase } from '../../application/inventory/declare-product.use-case';
 import { ListProductsUseCase } from '../../application/inventory/list-products.use-case';
 import { DomainViolation } from '../../domain/errors';
 import { parseSku } from '../../domain/inventory/identifiers';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Access } from './access/access.decorator';
+import { InventoryThrottlerGuard, OTHER_BUCKETS } from './inventory-throttling';
 import {
   DeclareProductRequest,
   type CatalogueEntryResponse,
@@ -24,6 +34,8 @@ import { actorOf } from './principal.middleware';
  * These are the first routes on the platform to declare `machines: true`.
  */
 @Controller('tenants/:tenantId/inventory/products')
+@UseGuards(InventoryThrottlerGuard)
+@SkipThrottle(OTHER_BUCKETS)
 export class InventoryProductsController {
   constructor(
     private readonly declare: DeclareProductUseCase,

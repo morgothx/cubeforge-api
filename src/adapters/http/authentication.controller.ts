@@ -7,6 +7,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
+import { INVENTORY_BY_CREDENTIAL } from './inventory-throttling';
 import { RefreshSessionUseCase } from '../../application/authentication/refresh-session.use-case';
 import { SignInUseCase } from '../../application/authentication/sign-in.use-case';
 import { SignOutUseCase } from '../../application/authentication/sign-out.use-case';
@@ -60,7 +61,10 @@ export class AuthenticationController {
   @Post('sign-in')
   @Access({ public: true })
   @UseGuards(CredentialThrottlerGuard)
-  @SkipThrottle({ [REDEMPTION_BY_ORIGIN]: true })
+  @SkipThrottle({
+    [REDEMPTION_BY_ORIGIN]: true,
+    [INVENTORY_BY_CREDENTIAL]: true,
+  })
   @HttpCode(HttpStatus.OK)
   async store(@Body() body: SignInRequest): Promise<SessionResponse> {
     return toSessionResponse(
@@ -99,7 +103,11 @@ export class AuthenticationController {
   @UseGuards(CredentialThrottlerGuard)
   // Counted by origin only: a setup token names nobody until it is looked up,
   // so there is no address to count by.
-  @SkipThrottle({ [SIGN_IN_BY_ORIGIN]: true, [SIGN_IN_BY_ADDRESS]: true })
+  @SkipThrottle({
+    [SIGN_IN_BY_ORIGIN]: true,
+    [SIGN_IN_BY_ADDRESS]: true,
+    [INVENTORY_BY_CREDENTIAL]: true,
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
   async establish(@Body() body: RedeemSetupTokenRequest): Promise<void> {
     await this.redeem.execute({

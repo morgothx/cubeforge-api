@@ -2,10 +2,12 @@ import { Module } from '@nestjs/common';
 import { InventoryLocationsController } from './adapters/http/inventory-locations.controller';
 import { InventoryMovementsController } from './adapters/http/inventory-movements.controller';
 import { InventoryProductsController } from './adapters/http/inventory-products.controller';
+import { InventoryStockController } from './adapters/http/inventory-stock.controller';
 import { DeclareLocationUseCase } from './application/inventory/declare-location.use-case';
 import { DeclareProductUseCase } from './application/inventory/declare-product.use-case';
 import { ListLocationsUseCase } from './application/inventory/list-locations.use-case';
 import { ListProductsUseCase } from './application/inventory/list-products.use-case';
+import { ReadStockOnHandUseCase } from './application/inventory/read-stock-on-hand.use-case';
 import { RecordMovementsUseCase } from './application/inventory/record-movements.use-case';
 import { PersistenceModule } from './persistence.module';
 
@@ -24,6 +26,7 @@ import { PersistenceModule } from './persistence.module';
     InventoryProductsController,
     InventoryLocationsController,
     InventoryMovementsController,
+    InventoryStockController,
   ],
   providers: [
     DeclareProductUseCase,
@@ -31,6 +34,7 @@ import { PersistenceModule } from './persistence.module';
     ListProductsUseCase,
     ListLocationsUseCase,
     RecordMovementsUseCase,
+    ReadStockOnHandUseCase,
   ],
 })
 export class InventoryModule {}

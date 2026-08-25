@@ -10,6 +10,7 @@ import { REVOKE_API_KEY_ROLES } from '../../../application/api-key/revoke-api-ke
 import { DECLARE_LOCATION_ROLES } from '../../../application/inventory/declare-location.use-case';
 import { DECLARE_PRODUCT_ROLES } from '../../../application/inventory/declare-product.use-case';
 import { LIST_LOCATIONS_ROLES } from '../../../application/inventory/list-locations.use-case';
+import { READ_STOCK_ROLES } from '../../../application/inventory/read-stock-on-hand.use-case';
 import { RECORD_MOVEMENTS_ROLES } from '../../../application/inventory/record-movements.use-case';
 import { LIST_PRODUCTS_ROLES } from '../../../application/inventory/list-products.use-case';
 import { CHANGE_MEMBER_ROLE_ROLES } from '../../../application/membership/change-member-role.use-case';
@@ -55,6 +56,7 @@ describe('the declared roles and the enforced roles', () => {
     'GET /tenants/:tenantId/members': LIST_TENANT_MEMBERS_ROLES,
     'PUT /tenants/:tenantId/inventory/products/:sku': DECLARE_PRODUCT_ROLES,
     'GET /tenants/:tenantId/inventory/products': LIST_PRODUCTS_ROLES,
+    'GET /tenants/:tenantId/inventory/stock': READ_STOCK_ROLES,
     'PUT /tenants/:tenantId/inventory/locations/:code': DECLARE_LOCATION_ROLES,
     'GET /tenants/:tenantId/inventory/locations': LIST_LOCATIONS_ROLES,
     'POST /tenants/:tenantId/inventory/movements': RECORD_MOVEMENTS_ROLES,
