@@ -9,12 +9,7 @@ import {
   sku,
 } from '../../src/domain/inventory/identifiers';
 import type { SubmittedMovement } from '../../src/domain/inventory/movement';
-import {
-  asPersonInTenant,
-  policyBypassingPool,
-  runtimePool,
-  seed,
-} from './support/database';
+import { asPersonInTenant, runtimePool, seed } from './support/database';
 import { seedTenant, useIntegrationDatabase } from './support/fixtures';
 
 const occurredAt = new Date('2026-08-25T10:00:00.000Z');
@@ -253,61 +248,5 @@ describe('the movement stream, against PostgreSQL', () => {
     await expect(
       inTenant(tenant, (movements) => movements.record([])),
     ).resolves.toEqual(new Set());
-  });
-});
-
-/**
- * The stream's own tenant predicate, with the database's protection removed.
- *
- * With policies in force, deleting the `where` clause from the sum breaks
- * nothing observable and every test above still passes. Connecting as a
- * superuser leaves only the predicate, so neither layer can be credited for the
- * other's work.
- */
-describe('the movement predicate, with policies bypassed', () => {
-  useIntegrationDatabase();
-
-  const bypassing = () => drizzle(policyBypassingPool());
-
-  async function streamOf<T>(
-    tenant: TenantId,
-    work: (movements: PostgresMovementRepository) => Promise<T>,
-  ): Promise<T> {
-    return bypassing().transaction(async (tx) =>
-      work(new PostgresMovementRepository(tx, tenant)),
-    );
-  }
-
-  async function catalogueFor(tenant: TenantId): Promise<void> {
-    await seed(async (client) => {
-      await client.query(
-        `INSERT INTO inventory_products (id, tenant_id, sku, name)
-         VALUES (gen_random_uuid(), $1, 'ACME-001', 'A widget')`,
-        [tenant],
-      );
-      await client.query(
-        `INSERT INTO inventory_locations (id, tenant_id, code, name)
-         VALUES (gen_random_uuid(), $1, 'WH-1', 'Main')`,
-        [tenant],
-      );
-    });
-  }
-
-  it('sums only its own tenant, unaided', async () => {
-    const acme = tenantId((await seedTenant()).id);
-    const globex = tenantId((await seedTenant()).id);
-    await catalogueFor(acme);
-    await catalogueFor(globex);
-
-    await streamOf(globex, (movements) =>
-      movements.record([movement('ERP-THEIRS', { quantity: 100 })]),
-    );
-    await streamOf(acme, (movements) =>
-      movements.record([movement('ERP-MINE', { quantity: 7 })]),
-    );
-
-    await expect(
-      streamOf(acme, (movements) => movements.stockOnHand()),
-    ).resolves.toEqual([{ sku: 'ACME-001', location: 'WH-1', onHand: 7 }]);
   });
 });

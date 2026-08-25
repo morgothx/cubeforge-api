@@ -22,7 +22,15 @@ import type { Role } from '../../../domain/membership/role';
 import { createPerson } from '../../../domain/person/person.entity';
 import type { Person } from '../../../domain/person/person.entity';
 import type { Tenant } from '../../../domain/tenant/tenant.entity';
+import type { ProductAttributes } from '../../../application/ports/product.repository';
+import type { LocationAttributes } from '../../../application/ports/location.repository';
+import type { LocationCode, Sku } from '../../../domain/inventory/identifiers';
 import type { InMemoryApiKeyStore } from './in-memory-api-key-store';
+import {
+  InMemoryInventoryStore,
+  InMemoryMovementRepository,
+  InMemoryReferenceRepository,
+} from './in-memory-inventory-store';
 import { InMemoryIdentityStore } from './in-memory-identity-store';
 
 /**
@@ -38,6 +46,13 @@ export class InMemoryTenantScopedUnitOfWork implements TenantScopedUnitOfWork {
   constructor(
     private readonly store: InMemoryIdentityStore,
     private readonly keys: InMemoryApiKeyStore,
+    /**
+     * Defaulted, so every existing test that builds this with two stores keeps
+     * working. A test that never touches inventory still gets a real one rather
+     * than a hole, because a use case reaching for `movements` in a context
+     * that forgot to pass a store should fail on what it did, not on `undefined`.
+     */
+    private readonly inventory: InMemoryInventoryStore = new InMemoryInventoryStore(),
   ) {}
 
   async runInTenant<T>(
@@ -45,15 +60,29 @@ export class InMemoryTenantScopedUnitOfWork implements TenantScopedUnitOfWork {
     work: (repositories: TenantScopedRepositories) => Promise<T>,
   ): Promise<T> {
     const snapshot = this.store.snapshot();
+    const inventorySnapshot = this.inventory.snapshot();
     try {
       return await work({
         tenants: new InMemoryTenantReadRepository(this.store, tenantId),
         people: new InMemoryPersonRepository(this.store, tenantId),
         memberships: new InMemoryMembershipRepository(this.store, tenantId),
         apiKeys: this.keys.scopedTo(tenantId),
+        products: new InMemoryReferenceRepository<Sku, ProductAttributes>(
+          this.inventory.products,
+          tenantId,
+          () => new Date(),
+        ),
+        locations: new InMemoryReferenceRepository<
+          LocationCode,
+          LocationAttributes
+        >(this.inventory.locations, tenantId, () => new Date()),
+        movements: new InMemoryMovementRepository(this.inventory, tenantId),
       });
     } catch (error) {
+      // Both stores, or a use case that rejects after writing inventory would
+      // leave it behind — which is the bug this rollback exists to catch.
       this.store.restore(snapshot);
+      this.inventory.restore(inventorySnapshot);
       throw error;
     }
   }

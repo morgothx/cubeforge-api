@@ -151,7 +151,7 @@ two small concrete repositories rather than a base class.
   - _Requirements: 5.1, 5.2_
   - _Boundary: MovementRepository_
 
-- [ ] 4.2 Widen the tenant-scoped seam to carry inventory
+- [x] 4.2 Widen the tenant-scoped seam to carry inventory
   - Add the three repositories to the set handed to work running inside a
     tenant, in both the real and the in-memory implementations
   - An explicit integration task because it is the one place three boundaries
@@ -504,3 +504,34 @@ bite.
 `STOCK_ON_HAND_IS_DERIVED` — a `sql` fragment exported "beside the query it
 explains", used by nothing. Deleted. Second time this feature; the reflex is
 apparently to leave a landmark next to anything interesting.
+
+### The local isolation blocks were temporary, and were removed
+
+3.1 and 4.1 each carried their own policy-bypassed block, because the claim had
+nowhere else to live until the seam carried these repositories. It does now, so
+inventory joined `first-isolation-layer.integration-spec.ts` and the two local
+blocks were deleted rather than left as a second copy.
+
+That suite is the better home for a reason worth stating: it answers "does the
+application scope its own reads" for **every** tenant-owned table in one place,
+so a table added later without a predicate is a gap somebody notices. Both
+probes — dropping the product predicate, dropping the movement sum's predicate —
+bite from there.
+
+### Rolling back one store is rolling back none
+
+The in-memory seam restores a snapshot when work rejects, so a use case that
+refuses a request leaves nothing behind. Inventory is a **second** store, and
+restoring only the first would let exactly that bug through. Both are named, and
+the probe removing the inventory half bites.
+
+The real adapter gets this for free — one transaction, one rollback — which is
+precisely why the double has to be told.
+
+### The seam takes the inventory store with a default
+
+Every existing caller builds it with two stores. A third parameter without a
+default would have been a mechanical edit across files this task has no business
+touching; a real store rather than an optional one means a use case reaching for
+`movements` in a context that forgot to pass one fails on what it did rather
+than on `undefined`.

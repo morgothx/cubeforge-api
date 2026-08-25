@@ -1,7 +1,10 @@
 import type { TenantId } from '../../domain/identifiers';
 import type { ApiKeyRepository } from './api-key.repository';
+import type { LocationRepository } from './location.repository';
+import type { MovementRepository } from './movement.repository';
 import type { MembershipRepository } from './membership.repository';
 import type { PersonRepository } from './person.repository';
+import type { ProductRepository } from './product.repository';
 import type { TenantReadRepository } from './tenant.repository';
 
 export const TENANT_SCOPED_UNIT_OF_WORK = Symbol('TENANT_SCOPED_UNIT_OF_WORK');
@@ -17,6 +20,15 @@ export interface TenantScopedRepositories {
    * what the answer will say.
    */
   readonly apiKeys: ApiKeyRepository;
+
+  /**
+   * A tenant's inventory. Here rather than behind a second unit of work for the
+   * reason the comment above gives: one construction path that cannot skip the
+   * tenant is worth exactly as much as the number of ways around it.
+   */
+  readonly products: ProductRepository;
+  readonly locations: LocationRepository;
+  readonly movements: MovementRepository;
 }
 
 /**

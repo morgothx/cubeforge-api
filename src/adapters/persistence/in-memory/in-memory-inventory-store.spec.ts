@@ -1,5 +1,8 @@
 import type { ProductAttributes } from '../../../application/ports/product.repository';
 import { tenantId } from '../../../domain/identifiers';
+import { InMemoryApiKeyStore } from './in-memory-api-key-store';
+import { InMemoryIdentityStore } from './in-memory-identity-store';
+import { InMemoryTenantScopedUnitOfWork } from './in-memory-tenant-scoped-unit-of-work';
 import {
   externalMovementId,
   locationCode,
@@ -205,5 +208,64 @@ describe('the movement stream double', () => {
     await streamOf(globex).record([movement('ERP-1')]);
 
     await expect(streamOf(acme).stockOnHand()).resolves.toEqual([]);
+  });
+});
+
+describe('the tenant-scoped seam, carrying inventory', () => {
+  const acmeId = tenantId('018f2c00-0000-7000-8000-000000000001');
+
+  function seam(): InMemoryTenantScopedUnitOfWork {
+    return new InMemoryTenantScopedUnitOfWork(
+      new InMemoryIdentityStore(),
+      new InMemoryApiKeyStore(),
+      new InMemoryInventoryStore(),
+    );
+  }
+
+  it('hands out all three inside a tenant', async () => {
+    const named = await seam().runInTenant(acmeId, (repositories) =>
+      Promise.resolve(Object.keys(repositories)),
+    );
+
+    expect(named).toEqual(
+      expect.arrayContaining(['products', 'locations', 'movements']),
+    );
+  });
+
+  it('leaves nothing behind when the work rejects', async () => {
+    // A use case that refuses a request must leave the tenant as it found it.
+    // Inventory is a second store, and restoring only the first would let
+    // exactly that bug through — the reason the rollback names both.
+    const unitOfWork = seam();
+
+    await expect(
+      unitOfWork.runInTenant(acmeId, async ({ products, movements }) => {
+        await products.declare(sku('ACME-001'), {
+          name: 'A widget',
+          category: null,
+        });
+        await movements.record([
+          {
+            externalId: externalMovementId('ERP-1'),
+            sku: sku('ACME-001'),
+            location: locationCode('WH-1'),
+            kind: 'receipt',
+            quantity: 5,
+            occurredAt: new Date('2026-08-25T10:00:00.000Z'),
+          },
+        ]);
+        throw new Error('the use case refused');
+      }),
+    ).rejects.toThrow('the use case refused');
+
+    const after = await unitOfWork.runInTenant(
+      acmeId,
+      async ({ products, movements }) => ({
+        products: await products.list(),
+        stock: await movements.stockOnHand(),
+      }),
+    );
+
+    expect(after).toEqual({ products: [], stock: [] });
   });
 });

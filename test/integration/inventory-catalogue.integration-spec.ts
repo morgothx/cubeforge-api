@@ -5,7 +5,7 @@ import type { Transaction } from '../../src/adapters/persistence/postgres/postgr
 import { tenantId } from '../../src/domain/identifiers';
 import type { TenantId } from '../../src/domain/identifiers';
 import { locationCode, sku } from '../../src/domain/inventory/identifiers';
-import { asPersonInTenant, policyBypassingPool } from './support/database';
+import { asPersonInTenant } from './support/database';
 import { seedTenant, useIntegrationDatabase } from './support/fixtures';
 
 /**
@@ -144,61 +144,5 @@ describe('the catalogue, against PostgreSQL', () => {
     expect(listed).toEqual([
       expect.objectContaining({ code: 'WH-1', name: 'Main warehouse' }),
     ]);
-  });
-});
-
-/**
- * The catalogue's own tenant predicate, with the database's protection removed.
- *
- * The mirror of `first-isolation-layer.integration-spec.ts`, and here for the
- * same reason: with policies in force, deleting a repository's `where` clause
- * breaks nothing observable, so every test above would still pass. Connecting
- * as a superuser — whom policies do not apply to — leaves only the predicate,
- * so neither layer can be credited for the other's work.
- *
- * These repositories join that suite proper once the unit of work carries them.
- */
-describe('the catalogue predicate, with policies bypassed', () => {
-  useIntegrationDatabase();
-
-  // Asked for per call, not once at module load. Two `useIntegrationDatabase`
-  // blocks in one file means the first one's teardown closes every pool while
-  // this block is still to run, and a pool captured up here would already be
-  // ended by then. The helper hands back a fresh one after a close.
-  const bypassing = () => drizzle(policyBypassingPool());
-
-  async function catalogueOf<T>(
-    tenant: TenantId,
-    work: (products: PostgresProductRepository) => Promise<T>,
-  ): Promise<T> {
-    return bypassing().transaction(async (tx) =>
-      work(new PostgresProductRepository(tx, tenant)),
-    );
-  }
-
-  it('lists only its own tenant, unaided', async () => {
-    const acme = tenantId((await seedTenant()).id);
-    const globex = tenantId((await seedTenant()).id);
-    await catalogueOf(globex, (products) =>
-      products.declare(sku('GLOBEX-9'), { name: 'Theirs', category: null }),
-    );
-    await catalogueOf(acme, (products) =>
-      products.declare(sku('ACME-1'), { name: 'Mine', category: null }),
-    );
-
-    const listed = await catalogueOf(acme, (products) => products.list());
-    expect(listed.map((product) => product.code)).toEqual(['ACME-1']);
-  });
-
-  it('answers membership only for its own tenant, unaided', async () => {
-    const acme = tenantId((await seedTenant()).id);
-    const globex = tenantId((await seedTenant()).id);
-    await catalogueOf(globex, (products) =>
-      products.declare(sku('GLOBEX-9'), { name: 'Theirs', category: null }),
-    );
-
-    await expect(
-      catalogueOf(acme, (products) => products.declared([sku('GLOBEX-9')])),
-    ).resolves.toEqual(new Set());
   });
 });

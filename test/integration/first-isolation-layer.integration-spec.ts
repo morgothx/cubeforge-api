@@ -6,6 +6,11 @@ import {
   personId as toPersonId,
   tenantId as toTenantId,
 } from '../../src/domain/identifiers';
+import {
+  externalMovementId,
+  locationCode,
+  sku,
+} from '../../src/domain/inventory/identifiers';
 import { policyBypassingPool, seed } from './support/database';
 import { useIntegrationDatabase } from './support/fixtures';
 
@@ -127,5 +132,91 @@ describe('the first isolation layer, on its own', () => {
     );
 
     expect(current?.name).toBe('Acme');
+  });
+
+  /**
+   * Inventory joins this suite now that the unit of work carries it.
+   *
+   * Until it did, these repositories asserted the same claim in their own
+   * files. This is where it belongs: one place that answers "does the
+   * application scope its own reads" for every tenant-owned table at once, so a
+   * table added later without a predicate is a gap somebody notices here.
+   */
+  describe('inventory', () => {
+    async function twoTenantsWithStock(): Promise<{
+      acme: string;
+      globex: string;
+    }> {
+      const { acme, globex } = await twoTenantsWithMembers();
+      for (const [tenant, code] of [
+        [acme, 'ACME-1'],
+        [globex, 'GLOBEX-9'],
+      ] as const) {
+        await unitOfWork.runInTenant(
+          toTenantId(tenant),
+          async ({ products, locations, movements }) => {
+            await products.declare(sku(code), { name: code, category: null });
+            await locations.declare(locationCode('WH-1'), { name: 'Main' });
+            await movements.record([
+              {
+                externalId: externalMovementId(`ERP-${code}`),
+                sku: sku(code),
+                location: locationCode('WH-1'),
+                kind: 'receipt',
+                quantity: 5,
+                occurredAt: new Date('2026-08-25T10:00:00.000Z'),
+              },
+            ]);
+          },
+        );
+      }
+      return { acme, globex };
+    }
+
+    it('lists only this tenant products with policies switched off', async () => {
+      const { acme } = await twoTenantsWithStock();
+
+      const listed = await unitOfWork.runInTenant(
+        toTenantId(acme),
+        ({ products }) => products.list(),
+      );
+
+      expect(listed.map((product) => product.code)).toEqual(['ACME-1']);
+    });
+
+    it('does not admit that another tenant declared a SKU', async () => {
+      const { acme } = await twoTenantsWithStock();
+
+      const known = await unitOfWork.runInTenant(
+        toTenantId(acme),
+        ({ products }) => products.declared([sku('GLOBEX-9')]),
+      );
+
+      expect(known).toEqual(new Set());
+    });
+
+    it('lists only this tenant places', async () => {
+      const { acme } = await twoTenantsWithStock();
+
+      const listed = await unitOfWork.runInTenant(
+        toTenantId(acme),
+        ({ locations }) => locations.list(),
+      );
+
+      // Both tenants declared `WH-1`. Counting theirs would be the same failure
+      // as counting their administrators.
+      expect(listed).toHaveLength(1);
+    });
+
+    it('sums only this tenant movements', async () => {
+      const { acme } = await twoTenantsWithStock();
+
+      const stock = await unitOfWork.runInTenant(
+        toTenantId(acme),
+        ({ movements }) => movements.stockOnHand(),
+      );
+
+      expect(stock).toEqual([{ sku: 'ACME-1', location: 'WH-1', onHand: 5 }]);
+    });
   });
 });
