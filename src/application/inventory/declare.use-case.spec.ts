@@ -1,44 +1,57 @@
-import { apiKeyId, personId, tenantId } from '../../domain/identifiers';
+import {
+  createIdentityTestContext,
+  type IdentityTestContext,
+} from '../../adapters/testing/identity-test-context';
+import type { TenantId } from '../../domain/identifiers';
 import { locationCode, sku } from '../../domain/inventory/identifiers';
-import { InMemoryApiKeyStore } from '../../adapters/persistence/in-memory/in-memory-api-key-store';
-import { InMemoryIdentityStore } from '../../adapters/persistence/in-memory/in-memory-identity-store';
-import { InMemoryInventoryStore } from '../../adapters/persistence/in-memory/in-memory-inventory-store';
-import { InMemoryTenantScopedUnitOfWork } from '../../adapters/persistence/in-memory/in-memory-tenant-scoped-unit-of-work';
+import type { Role } from '../../domain/membership/role';
 import type { ActorContext } from '../actor-context';
 import { DeclareLocationUseCase } from './declare-location.use-case';
 import { DeclareProductUseCase } from './declare-product.use-case';
+import { ListProductsUseCase } from './list-products.use-case';
 
-const acme = tenantId('018f2c00-0000-7000-8000-000000000001');
-const globex = tenantId('018f2c00-0000-7000-8000-000000000002');
-
-const machineIn = (tenant: typeof acme): ActorContext => ({
-  kind: 'machine',
-  apiKeyId: apiKeyId('018f2c00-0000-7000-8000-00000000000a'),
-  tenantId: tenant,
-  role: 'editor',
-});
-
-const personIn = (tenant: typeof acme): ActorContext => ({
-  kind: 'tenant-member',
-  personId: personId('018f2c00-0000-7000-8000-00000000000b'),
-  tenantId: tenant,
-});
-
+/**
+ * Built on the real test context rather than on bare stores.
+ *
+ * The first draft of this suite wired the unit of work by hand and used actors
+ * naming tenants that had never been provisioned. Every test passed, because
+ * nothing then resolved a tenant or a role — which is exactly what those tests
+ * were failing to cover.
+ */
 describe('declaring what a tenant tracks', () => {
-  let unitOfWork: InMemoryTenantScopedUnitOfWork;
+  let context: IdentityTestContext;
+  let acme: TenantId;
+  let globex: TenantId;
   let products: DeclareProductUseCase;
   let locations: DeclareLocationUseCase;
-  let inventory: InMemoryInventoryStore;
+  let catalogue: ListProductsUseCase;
 
-  beforeEach(() => {
-    inventory = new InMemoryInventoryStore();
-    unitOfWork = new InMemoryTenantScopedUnitOfWork(
-      new InMemoryIdentityStore(),
-      new InMemoryApiKeyStore(),
-      inventory,
-    );
-    products = new DeclareProductUseCase(unitOfWork);
-    locations = new DeclareLocationUseCase(unitOfWork);
+  const machineIn = (
+    tenant: TenantId,
+    role: Role = 'editor',
+  ): ActorContext => ({
+    kind: 'machine',
+    apiKeyId: context.identifiers.apiKeyId(),
+    tenantId: tenant,
+    role,
+  });
+
+  async function personIn(tenant: TenantId, role: Role): Promise<ActorContext> {
+    const personId = await context.seedMember({
+      tenantId: tenant,
+      role,
+      email: `${role}-${tenant.slice(0, 8)}@example.com`,
+    });
+    return context.actingAs(tenant, personId);
+  }
+
+  beforeEach(async () => {
+    context = createIdentityTestContext();
+    acme = await context.seedTenant('Acme');
+    globex = await context.seedTenant('Globex');
+    products = new DeclareProductUseCase(context.tenantScoped);
+    locations = new DeclareLocationUseCase(context.tenantScoped);
+    catalogue = new ListProductsUseCase(context.tenantScoped);
   });
 
   const widget = { sku: sku('ACME-001'), name: 'A widget', category: 'tools' };
@@ -64,20 +77,56 @@ describe('declaring what a tenant tracks', () => {
       }),
     ).resolves.toBe('updated');
 
-    const listed = await unitOfWork.runInTenant(acme, ({ products: all }) =>
-      all.list(),
-    );
-    expect(listed).toEqual([
+    await expect(
+      catalogue.execute({ actor: machineIn(acme) }),
+    ).resolves.toEqual([
       expect.objectContaining({ code: 'ACME-001', name: 'A better widget' }),
     ]);
   });
 
-  it('admits a person as readily as a machine', async () => {
-    // Both reach these routes. The difference between them is which roles they
-    // may hold, and that is decided before a use case runs.
+  it('admits an editor who is a person as readily as one that is a key', async () => {
     await expect(
-      products.execute({ actor: personIn(acme), ...widget }),
+      products.execute({ actor: await personIn(acme, 'editor'), ...widget }),
     ).resolves.toBe('created');
+  });
+
+  describe('roles, enforced here and not only at the edge', () => {
+    it('refuses a viewer who is a person', async () => {
+      await expect(
+        products.execute({ actor: await personIn(acme, 'viewer'), ...widget }),
+      ).rejects.toMatchObject({ error: { kind: 'forbidden' } });
+    });
+
+    it('refuses a key carrying viewer', async () => {
+      // A key's role is a claim its credential carries rather than a membership
+      // to resolve, so it needs its own comparison — and it gets one, or a
+      // read-only integration could write.
+      await expect(
+        products.execute({ actor: machineIn(acme, 'viewer'), ...widget }),
+      ).rejects.toMatchObject({ error: { kind: 'forbidden' } });
+    });
+
+    it('admits an administrator', async () => {
+      await expect(
+        products.execute({ actor: machineIn(acme, 'admin'), ...widget }),
+      ).resolves.toBe('created');
+    });
+  });
+
+  it('refuses a key whose tenant has since been deactivated', async () => {
+    // A credential outliving the thing it was issued for. The membership path
+    // already refuses this for people; a key has no membership, so the tenant
+    // has to be checked on its own.
+    const doomed = await context.seedTenant('Doomed');
+    await context.platform.runAsOperator(async ({ tenants }) => {
+      const tenant = await tenants.findById(doomed);
+      await tenants.updateStatus(doomed, 'inactive');
+      expect(tenant).not.toBeNull();
+    });
+
+    await expect(
+      products.execute({ actor: machineIn(doomed), ...widget }),
+    ).rejects.toMatchObject({ error: { kind: 'not-found' } });
   });
 
   it('declares into the caller tenant, never one the payload names', async () => {
@@ -85,33 +134,20 @@ describe('declaring what a tenant tracks', () => {
     // Globex" is not expressible rather than merely refused.
     await products.execute({ actor: machineIn(acme), ...widget });
 
-    const inGlobex = await unitOfWork.runInTenant(globex, ({ products: all }) =>
-      all.list(),
-    );
-    expect(inGlobex).toEqual([]);
+    await expect(
+      catalogue.execute({ actor: machineIn(globex) }),
+    ).resolves.toEqual([]);
   });
 
   it('refuses an operator, who acts in no tenant', async () => {
     await expect(
-      products.execute({
-        actor: {
-          kind: 'platform-operator',
-          personId: personId('018f2c00-0000-7000-8000-00000000000c'),
-        },
-        ...widget,
-      }),
+      products.execute({ actor: context.operator, ...widget }),
     ).rejects.toMatchObject({ error: { kind: 'not-found' } });
   });
 
   it('refuses a person acting in no tenant', async () => {
     await expect(
-      products.execute({
-        actor: {
-          kind: 'person',
-          personId: personId('018f2c00-0000-7000-8000-00000000000d'),
-        },
-        ...widget,
-      }),
+      products.execute({ actor: context.person, ...widget }),
     ).rejects.toMatchObject({ error: { kind: 'not-found' } });
   });
 

@@ -97,6 +97,47 @@ export function tenantOf(actor: ActorContext): TenantId {
 }
 
 /**
+ * Authorizes a caller of either kind inside the tenant transaction.
+ *
+ * A person's role is a membership, resolved from stored records. A machine's is
+ * carried by its credential, and there is no membership to resolve — but the
+ * *tenant* still has to be checked, because a key issued into a tenant that was
+ * later deactivated must stop working. Skipping that would leave a credential
+ * outliving the thing it was issued for, which is precisely the failure the
+ * membership path already refuses for people.
+ *
+ * A second layer, not the only one. The guard refuses these callers at the
+ * edge; this refuses them again from anywhere else — a queue consumer, a
+ * scheduled job, a later feature calling a use case directly.
+ */
+export async function authorizeCallerInTenant(
+  repositories: TenantScopedRepositories,
+  actor: ActorContext,
+  permitted: readonly Role[],
+): Promise<{ readonly role: Role }> {
+  if (actor.kind !== 'machine') {
+    return authorizeInTenant(repositories, actor, permitted);
+  }
+
+  const tenant = await repositories.tenants.findCurrent();
+  if (tenant === null || tenant.status !== 'active') {
+    throw new DomainViolation(
+      { kind: 'not-found' },
+      tenant === null ? 'no such tenant' : 'tenant is inactive',
+    );
+  }
+
+  if (!permitted.includes(actor.role)) {
+    throw new DomainViolation(
+      { kind: 'forbidden' },
+      `this key carries ${actor.role}; the operation permits ${permitted.join(', ')}`,
+    );
+  }
+
+  return { role: actor.role };
+}
+
+/**
  * The tenant a request runs in, admitting a machine as well as a person.
  *
  * A sibling of `tenantOf` rather than a loosening of it, and the reason is

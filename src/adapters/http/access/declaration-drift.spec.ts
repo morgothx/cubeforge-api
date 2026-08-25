@@ -7,6 +7,10 @@ import type { App } from 'supertest/types';
 import { ISSUE_API_KEY_ROLES } from '../../../application/api-key/issue-api-key.use-case';
 import { LIST_API_KEYS_ROLES } from '../../../application/api-key/list-api-keys.use-case';
 import { REVOKE_API_KEY_ROLES } from '../../../application/api-key/revoke-api-key.use-case';
+import { DECLARE_LOCATION_ROLES } from '../../../application/inventory/declare-location.use-case';
+import { DECLARE_PRODUCT_ROLES } from '../../../application/inventory/declare-product.use-case';
+import { LIST_LOCATIONS_ROLES } from '../../../application/inventory/list-locations.use-case';
+import { LIST_PRODUCTS_ROLES } from '../../../application/inventory/list-products.use-case';
 import { CHANGE_MEMBER_ROLE_ROLES } from '../../../application/membership/change-member-role.use-case';
 import { CREATE_TENANT_MEMBER_ROLES } from '../../../application/membership/create-tenant-member.use-case';
 import { LIST_TENANT_MEMBERS_ROLES } from '../../../application/membership/list-tenant-members.use-case';
@@ -48,6 +52,10 @@ describe('the declared roles and the enforced roles', () => {
   /** Route → the roles the use case behind it enforces. */
   const ENFORCED: Readonly<Record<string, readonly Role[]>> = {
     'GET /tenants/:tenantId/members': LIST_TENANT_MEMBERS_ROLES,
+    'PUT /tenants/:tenantId/inventory/products/:sku': DECLARE_PRODUCT_ROLES,
+    'GET /tenants/:tenantId/inventory/products': LIST_PRODUCTS_ROLES,
+    'PUT /tenants/:tenantId/inventory/locations/:code': DECLARE_LOCATION_ROLES,
+    'GET /tenants/:tenantId/inventory/locations': LIST_LOCATIONS_ROLES,
     'POST /tenants/:tenantId/members': CREATE_TENANT_MEMBER_ROLES,
     'PATCH /tenants/:tenantId/members/:membershipId': CHANGE_MEMBER_ROLE_ROLES,
     'DELETE /tenants/:tenantId/members/:membershipId': REVOKE_MEMBERSHIP_ROLES,
@@ -126,7 +134,20 @@ describe('the declared roles and the enforced roles', () => {
   it.each(Object.keys(ENFORCED))(
     'declares on %s exactly what its use case enforces',
     (route) => {
-      expect(declarationOf(route)).toEqual({ roles: [...ENFORCED[route]] });
+      const declaration = declarationOf(route);
+
+      // The roles compared exactly — that is the drift this suite exists to
+      // catch. `machines` is a separate admission a route makes, and comparing
+      // the whole object would have meant no machine route could ever be paired
+      // here. Which keys may appear at all is settled by `assertUsable`, and
+      // that nothing but inventory sets `machines` is settled by the route
+      // inventory; this asserts the one thing neither of those does.
+      expect(declaration).toMatchObject({ roles: [...ENFORCED[route]] });
+
+      const keys = Object.keys(declaration ?? {}).sort();
+      expect(keys).toEqual(
+        keys.includes('machines') ? ['machines', 'roles'] : ['roles'],
+      );
     },
   );
 

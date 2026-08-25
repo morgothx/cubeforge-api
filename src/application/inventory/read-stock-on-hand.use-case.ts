@@ -1,11 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { Role } from '../../domain/membership/role';
 import type { ActorContext } from '../actor-context';
 import type { StockLevel } from '../ports/movement.repository';
 import {
   TENANT_SCOPED_UNIT_OF_WORK,
   type TenantScopedUnitOfWork,
 } from '../ports/tenant-scoped-unit-of-work';
-import { tenantActedIn } from '../tenant-authorization';
+import {
+  authorizeCallerInTenant,
+  tenantActedIn,
+} from '../tenant-authorization';
 
 export interface ReadStockOnHandQuery {
   readonly actor: ActorContext;
@@ -21,6 +25,13 @@ export interface ReadStockOnHandQuery {
  * build that feature twice, in the place with the least information about how
  * the numbers are actually asked for.
  */
+/** Reading stock is reading; every member may. */
+export const READ_STOCK_ROLES = [
+  'admin',
+  'editor',
+  'viewer',
+] as const satisfies readonly Role[];
+
 @Injectable()
 export class ReadStockOnHandUseCase {
   constructor(
@@ -31,8 +42,14 @@ export class ReadStockOnHandUseCase {
   async execute(query: ReadStockOnHandQuery): Promise<readonly StockLevel[]> {
     const tenantId = tenantActedIn(query.actor);
 
-    return this.tenants.runInTenant(tenantId, ({ movements }) =>
-      movements.stockOnHand(),
-    );
+    return this.tenants.runInTenant(tenantId, async (repositories) => {
+      await authorizeCallerInTenant(
+        repositories,
+        query.actor,
+        READ_STOCK_ROLES,
+      );
+
+      return repositories.movements.stockOnHand();
+    });
   }
 }

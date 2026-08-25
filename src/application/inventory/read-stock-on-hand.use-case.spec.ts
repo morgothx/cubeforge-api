@@ -1,10 +1,10 @@
-import { InMemoryApiKeyStore } from '../../adapters/persistence/in-memory/in-memory-api-key-store';
-import { InMemoryIdentityStore } from '../../adapters/persistence/in-memory/in-memory-identity-store';
-import { InMemoryInventoryStore } from '../../adapters/persistence/in-memory/in-memory-inventory-store';
-import { InMemoryTenantScopedUnitOfWork } from '../../adapters/persistence/in-memory/in-memory-tenant-scoped-unit-of-work';
-import { FixedClock } from '../../adapters/testing/fixed-clock';
-import { apiKeyId, personId, tenantId } from '../../domain/identifiers';
+import {
+  createIdentityTestContext,
+  type IdentityTestContext,
+} from '../../adapters/testing/identity-test-context';
+import type { TenantId } from '../../domain/identifiers';
 import { locationCode, sku } from '../../domain/inventory/identifiers';
+import type { Role } from '../../domain/membership/role';
 import type { ActorContext } from '../actor-context';
 import { DeclareLocationUseCase } from './declare-location.use-case';
 import { DeclareProductUseCase } from './declare-product.use-case';
@@ -14,23 +14,6 @@ import {
   type SubmittedRow,
 } from './record-movements.use-case';
 
-const acme = tenantId('018f2c00-0000-7000-8000-000000000001');
-const globex = tenantId('018f2c00-0000-7000-8000-000000000002');
-const NOW = new Date('2026-08-25T12:00:00.000Z');
-
-const machineIn = (tenant: typeof acme): ActorContext => ({
-  kind: 'machine',
-  apiKeyId: apiKeyId('018f2c00-0000-7000-8000-00000000000a'),
-  tenantId: tenant,
-  role: 'editor',
-});
-
-const viewerIn = (tenant: typeof acme): ActorContext => ({
-  kind: 'tenant-member',
-  personId: personId('018f2c00-0000-7000-8000-00000000000b'),
-  tenantId: tenant,
-});
-
 function row(overrides: Partial<SubmittedRow> = {}): SubmittedRow {
   return {
     externalId: `ERP-${Math.random()}`,
@@ -38,25 +21,37 @@ function row(overrides: Partial<SubmittedRow> = {}): SubmittedRow {
     location: 'WH-1',
     kind: 'receipt',
     quantity: 5,
-    occurredAt: '2026-08-25T10:00:00.000Z',
+    occurredAt: '2025-12-25T10:00:00.000Z',
     ...overrides,
   };
 }
 
 describe('reading what is on hand', () => {
-  let unitOfWork: InMemoryTenantScopedUnitOfWork;
+  let context: IdentityTestContext;
+  let acme: TenantId;
+  let globex: TenantId;
   let record: RecordMovementsUseCase;
   let stock: ReadStockOnHandUseCase;
 
-  async function catalogueFor(tenant: typeof acme): Promise<void> {
-    await new DeclareProductUseCase(unitOfWork).execute({
+  const machineIn = (
+    tenant: TenantId,
+    role: Role = 'editor',
+  ): ActorContext => ({
+    kind: 'machine',
+    apiKeyId: context.identifiers.apiKeyId(),
+    tenantId: tenant,
+    role,
+  });
+
+  async function catalogueFor(tenant: TenantId): Promise<void> {
+    await new DeclareProductUseCase(context.tenantScoped).execute({
       actor: machineIn(tenant),
       sku: sku('ACME-001'),
       name: 'A widget',
       category: null,
     });
     for (const code of ['WH-1', 'WH-2']) {
-      await new DeclareLocationUseCase(unitOfWork).execute({
+      await new DeclareLocationUseCase(context.tenantScoped).execute({
         actor: machineIn(tenant),
         code: locationCode(code),
         name: code,
@@ -65,13 +60,11 @@ describe('reading what is on hand', () => {
   }
 
   beforeEach(async () => {
-    unitOfWork = new InMemoryTenantScopedUnitOfWork(
-      new InMemoryIdentityStore(),
-      new InMemoryApiKeyStore(),
-      new InMemoryInventoryStore(),
-    );
-    record = new RecordMovementsUseCase(unitOfWork, new FixedClock(NOW));
-    stock = new ReadStockOnHandUseCase(unitOfWork);
+    context = createIdentityTestContext();
+    acme = await context.seedTenant('Acme');
+    globex = await context.seedTenant('Globex');
+    record = new RecordMovementsUseCase(context.tenantScoped, context.clock);
+    stock = new ReadStockOnHandUseCase(context.tenantScoped);
     await catalogueFor(acme);
   });
 
@@ -137,12 +130,23 @@ describe('reading what is on hand', () => {
     );
   });
 
-  it('answers a person as readily as a machine', async () => {
+  it('answers a viewer, who may read but not record', async () => {
     await submit([row({ quantity: 4 })]);
+    const viewer = context.actingAs(
+      acme,
+      await context.seedMember({
+        tenantId: acme,
+        role: 'viewer',
+        email: 'viewer@example.com',
+      }),
+    );
 
-    await expect(stock.execute({ actor: viewerIn(acme) })).resolves.toEqual([
+    await expect(stock.execute({ actor: viewer })).resolves.toEqual([
       { sku: 'ACME-001', location: 'WH-1', onHand: 4 },
     ]);
+    await expect(
+      record.execute({ actor: viewer, movements: [row()] }),
+    ).rejects.toMatchObject({ error: { kind: 'forbidden' } });
   });
 
   it('shows one tenant nothing of another', async () => {
@@ -156,12 +160,7 @@ describe('reading what is on hand', () => {
 
   it('refuses a caller who acts in no tenant', async () => {
     await expect(
-      stock.execute({
-        actor: {
-          kind: 'platform-operator',
-          personId: personId('018f2c00-0000-7000-8000-00000000000f'),
-        },
-      }),
+      stock.execute({ actor: context.operator }),
     ).rejects.toMatchObject({ error: { kind: 'not-found' } });
   });
 });

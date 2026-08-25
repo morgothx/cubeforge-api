@@ -9,6 +9,7 @@ import { AuthenticationModule } from './authentication.module';
 import { AuthorizationModule } from './authorization.module';
 import { SystemModule } from './system.module';
 import { IdentityModule } from './identity.module';
+import { InventoryModule } from './inventory.module';
 
 /**
  * Composition root. Ports declared in `application/ports` are bound to their
@@ -21,6 +22,7 @@ import { IdentityModule } from './identity.module';
     AuthenticationModule,
     AuthorizationModule,
     IdentityModule,
+    InventoryModule,
   ],
 })
 export class AppModule implements NestModule {

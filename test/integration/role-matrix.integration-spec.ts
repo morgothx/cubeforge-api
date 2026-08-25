@@ -179,6 +179,44 @@ describe('the role matrix', () => {
       call: (_, headers) => request(server()).get('/me').set(headers),
     },
     {
+      // The inventory routes admit machines too, which this suite has no
+      // principal for — `inventory-machine-access` covers that half. What the
+      // matrix answers here is the other half: a key is not the only way in,
+      // and a person's role decides the same way it does everywhere else.
+      key: 'PUT /tenants/:tenantId/inventory/products/:sku',
+      admits: ['admin', 'editor'],
+      call: (world, headers) =>
+        request(server())
+          .put(`/tenants/${world.acme.id}/inventory/products/ACME-001`)
+          .set(headers)
+          .send({ name: 'A widget' }),
+    },
+    {
+      key: 'GET /tenants/:tenantId/inventory/products',
+      admits: ['admin', 'editor', 'viewer'],
+      call: (world, headers) =>
+        request(server())
+          .get(`/tenants/${world.acme.id}/inventory/products`)
+          .set(headers),
+    },
+    {
+      key: 'PUT /tenants/:tenantId/inventory/locations/:code',
+      admits: ['admin', 'editor'],
+      call: (world, headers) =>
+        request(server())
+          .put(`/tenants/${world.acme.id}/inventory/locations/WH-1`)
+          .set(headers)
+          .send({ name: 'Main warehouse' }),
+    },
+    {
+      key: 'GET /tenants/:tenantId/inventory/locations',
+      admits: ['admin', 'editor', 'viewer'],
+      call: (world, headers) =>
+        request(server())
+          .get(`/tenants/${world.acme.id}/inventory/locations`)
+          .set(headers),
+    },
+    {
       key: 'GET /tenants/:tenantId/members',
       admits: ['admin', 'editor', 'viewer'],
       call: (world, headers) =>

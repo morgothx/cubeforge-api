@@ -374,15 +374,21 @@ real API key and not only with a person's token.
 
 Routes:
 
+All under `/tenants/:tenantId/`, which is **not** cosmetic. A person's tenant is
+read from the path by the middleware; a machine's comes from its key, and the
+guard refuses a key on any route that names no tenant because it has nothing to
+confine the key against. A route at `/inventory/products` would have been
+unreachable by machines — the audience this feature exists for.
+
 | Method | Path | Access |
 |---|---|---|
-| `PUT` | `/inventory/products/:sku` | admin, editor |
-| `GET` | `/inventory/products` | admin, editor, viewer |
-| `PUT` | `/inventory/locations/:code` | admin, editor |
-| `GET` | `/inventory/locations` | admin, editor, viewer |
-| `POST` | `/inventory/movements` | admin, editor |
-| `POST` | `/inventory/movements/batch` | admin, editor |
-| `GET` | `/inventory/stock` | admin, editor, viewer |
+| `PUT` | `/tenants/:tenantId/inventory/products/:sku` | admin, editor, machines |
+| `GET` | `/tenants/:tenantId/inventory/products` | admin, editor, viewer, machines |
+| `PUT` | `/tenants/:tenantId/inventory/locations/:code` | admin, editor, machines |
+| `GET` | `/tenants/:tenantId/inventory/locations` | admin, editor, viewer, machines |
+| `POST` | `/tenants/:tenantId/inventory/movements` | admin, editor, machines |
+| `POST` | `/tenants/:tenantId/inventory/movements/batch` | admin, editor, machines |
+| `GET` | `/tenants/:tenantId/inventory/stock` | admin, editor, viewer, machines |
 
 ### Rate limiting — `InventoryThrottlerGuard`
 
@@ -534,6 +540,8 @@ test would be measuring the machine it runs on.
 | `src/application/ports/movement.repository.ts` | `MovementRepository`, `StockLevel` |
 | `src/application/inventory/declare-product.use-case.ts` | 1.1, 1.2, 1.4 |
 | `src/application/inventory/declare-location.use-case.ts` | 2.1, 2.2 |
+| `src/application/inventory/list-products.use-case.ts` | The catalogue read |
+| `src/application/inventory/list-locations.use-case.ts` | The places read |
 | `src/application/inventory/record-movements.use-case.ts` | The batch flow; serves both routes |
 | `src/application/inventory/read-stock-on-hand.use-case.ts` | 6.1–6.3 |
 | `src/application/inventory/inventory.use-case.spec.ts` | The application-tier cases above |

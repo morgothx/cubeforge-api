@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { LocationCode } from '../../domain/inventory/identifiers';
+import type { Sku } from '../../domain/inventory/identifiers';
 import type { Role } from '../../domain/membership/role';
 import type { ActorContext } from '../actor-context';
-import type { Declaration } from '../ports/reference.repository';
+import type { ReferenceEntity } from '../ports/reference.repository';
 import {
   TENANT_SCOPED_UNIT_OF_WORK,
   type TenantScopedUnitOfWork,
@@ -12,39 +12,41 @@ import {
   tenantActedIn,
 } from '../tenant-authorization';
 
-export interface DeclareLocationCommand {
+export interface ListProductsQuery {
   readonly actor: ActorContext;
-  readonly code: LocationCode;
-  readonly name: string;
 }
 
-/** The catalogue's twin, and idempotent for the same reason. */
-/** The catalogue's rule, for the same reason. */
-export const DECLARE_LOCATION_ROLES = [
+/**
+ * What a tenant tracks. An integrator reads this to reconcile its own catalogue
+ * against what the platform believes it declared.
+ */
+/** Reading the catalogue tells a caller nothing it did not send. */
+export const LIST_PRODUCTS_ROLES = [
   'admin',
   'editor',
+  'viewer',
 ] as const satisfies readonly Role[];
 
 @Injectable()
-export class DeclareLocationUseCase {
+export class ListProductsUseCase {
   constructor(
     @Inject(TENANT_SCOPED_UNIT_OF_WORK)
     private readonly tenants: TenantScopedUnitOfWork,
   ) {}
 
-  async execute(command: DeclareLocationCommand): Promise<Declaration> {
-    const tenantId = tenantActedIn(command.actor);
+  async execute(
+    query: ListProductsQuery,
+  ): Promise<readonly ReferenceEntity<Sku>[]> {
+    const tenantId = tenantActedIn(query.actor);
 
     return this.tenants.runInTenant(tenantId, async (repositories) => {
       await authorizeCallerInTenant(
         repositories,
-        command.actor,
-        DECLARE_LOCATION_ROLES,
+        query.actor,
+        LIST_PRODUCTS_ROLES,
       );
 
-      return repositories.locations.declare(command.code, {
-        name: command.name,
-      });
+      return repositories.products.list();
     });
   }
 }

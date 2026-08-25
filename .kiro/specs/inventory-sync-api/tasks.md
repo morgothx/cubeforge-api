@@ -215,7 +215,7 @@ two small concrete repositories rather than a base class.
 
 ## 5. Reaching it over HTTP
 
-- [ ] 5.1 (P) Expose the catalogue and the places
+- [x] 5.1 (P) Expose the catalogue and the places
   - A route to declare each and a route to list each
   - Declare who may reach them: writing needs an administrator or an editor,
     reading admits a viewer, and **all of them admit a machine credential** —
@@ -645,3 +645,64 @@ Sections 1 through 4 are done. Every requirement about *behaviour* is now
 satisfied and tested without HTTP: declaring, recording, replaying, batching,
 summing, and refusing a caller who acts in no tenant. What remains is reaching
 it (section 5) and proving the properties end to end (section 6).
+
+### The design put the routes where no machine could reach them
+
+`/inventory/products` — and the guard already had the answer written into it:
+
+> A route that admits machines and names no tenant has nothing to compare a key
+> against, and returning `null` refuses it.
+
+A person's tenant is read from the path; a machine's comes from its key, and
+the guard confines the key by comparing the two. With no tenant in the path
+there is nothing to compare, so **every machine caller would have been refused**
+— on the surface built for machines, with a refusal indistinguishable from an
+absent record.
+
+Routes are now `/tenants/:tenantId/inventory/…`, the design's table is
+corrected, and a new route-inventory test refuses any machine route whose path
+names no tenant. The next feature to admit a key cannot repeat this.
+
+### The use cases were not enforcing roles at all
+
+Caught by `declaration-drift.spec.ts`, which pairs every route's declared roles
+with a constant its use case exports and actually applies. Inventory had no such
+constants, because these use cases leaned entirely on the guard — a **single**
+layer, on a platform whose whole authorization story is two.
+
+Fixed properly rather than by exempting the routes: six `*_ROLES` constants, and
+`authorizeCallerInTenant` beside `authorizeInTenant`. The new one exists because
+a machine has **no membership to resolve** — its role is carried by its
+credential — but the tenant still has to be checked, or a key issued into a
+tenant that was later deactivated would keep working. The membership path
+already refuses that for people.
+
+Probe D removes the second layer: two tests bite, including the deactivated
+tenant.
+
+### The tests were passing without a tenant existing
+
+Rewriting them on the real test context turned 32 green tests red. Every
+application-tier inventory test had been using actors naming tenants that were
+never provisioned, and passing — because nothing resolved a tenant or a role
+until now. They were not testing authorization; they were testing that
+authorization was absent.
+
+### A test that asserted the empty set now names its members
+
+`route-inventory.spec.ts` said *"admits no machine caller on any route it ships
+with"*, with a comment: *"no real endpoint uses it until feature 5 decides one
+should."* This is feature 5. The assertion was rewritten to list the four routes
+rather than deleted, so the next one is added by editing that line rather than
+by nobody noticing.
+
+### The drift check compared whole declarations
+
+It asserted `declaration === { roles }`, which no machine route can satisfy.
+Split: the roles are still compared exactly — that is the drift it exists to
+catch — and the permitted key set is asserted separately, so `machines` does not
+become a hole through which anything else could arrive.
+
+Five probes: widening the route, narrowing it, widening only the use case,
+removing the second layer, and moving the route out from under the tenant. All
+five bite.

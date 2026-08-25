@@ -209,6 +209,8 @@ describe('the route inventory, against the real application', () => {
       'GET /me',
       'GET /tenants',
       'GET /tenants/:tenantId/api-keys',
+      'GET /tenants/:tenantId/inventory/locations',
+      'GET /tenants/:tenantId/inventory/products',
       'GET /tenants/:tenantId/members',
       'PATCH /tenants/:tenantId/members/:membershipId',
       'POST /auth/credentials',
@@ -219,6 +221,8 @@ describe('the route inventory, against the real application', () => {
       'POST /tenants',
       'POST /tenants/:tenantId/api-keys',
       'POST /tenants/:tenantId/members',
+      'PUT /tenants/:tenantId/inventory/locations/:code',
+      'PUT /tenants/:tenantId/inventory/products/:sku',
     ]);
   });
 
@@ -253,6 +257,22 @@ describe('the route inventory, against the real application', () => {
       'DELETE /tenants/:tenantId/members/:membershipId': { roles: ['admin'] },
       'POST /tenants/:tenantId/api-keys': { roles: ['admin'] },
       'GET /tenants/:tenantId/api-keys': { roles: ['admin'] },
+      'GET /tenants/:tenantId/inventory/locations': {
+        roles: ['admin', 'editor', 'viewer'],
+        machines: true,
+      },
+      'GET /tenants/:tenantId/inventory/products': {
+        roles: ['admin', 'editor', 'viewer'],
+        machines: true,
+      },
+      'PUT /tenants/:tenantId/inventory/locations/:code': {
+        roles: ['admin', 'editor'],
+        machines: true,
+      },
+      'PUT /tenants/:tenantId/inventory/products/:sku': {
+        roles: ['admin', 'editor'],
+        machines: true,
+      },
       'DELETE /tenants/:tenantId/api-keys/:apiKeyId': { roles: ['admin'] },
     });
   });
@@ -302,14 +322,41 @@ describe('the route inventory, against the real application', () => {
     expect(unusable).toEqual([]);
   });
 
-  it('admits no machine caller on any route it ships with', () => {
-    // Requirement 3.4. The mechanism exists and is proven by a fixture; no
-    // real endpoint uses it until feature 5 decides one should.
-    expect(
-      routes.filter(
+  it('admits machine callers only where a feature decided to', () => {
+    // Requirement 3.4 of the authorization feature. Until inventory there was
+    // no such route at all, and this test asserted the empty set; the mechanism
+    // was proven by a fixture alone. Inventory is the surface built for
+    // machines, so it is the answer, and listing it here means the next route
+    // to admit a key does so by editing this line rather than by nobody
+    // noticing.
+    const admitting = routes
+      .filter(
         (route) =>
           route.declaration !== null && 'machines' in route.declaration,
-      ),
-    ).toEqual([]);
+      )
+      .map((route) => route.path);
+
+    expect([...new Set(admitting)].sort()).toEqual([
+      '/tenants/:tenantId/inventory/locations',
+      '/tenants/:tenantId/inventory/locations/:code',
+      '/tenants/:tenantId/inventory/products',
+      '/tenants/:tenantId/inventory/products/:sku',
+    ]);
+  });
+
+  it('names a tenant in the path of every route that admits a machine', () => {
+    // Not cosmetic. A person's tenant is read from the path; a machine's comes
+    // from its key, and the guard refuses a key wherever there is no path
+    // tenant to confine it against. A machine route that named no tenant would
+    // be unreachable by the only caller it exists for — silently, and with a
+    // refusal indistinguishable from an absent record.
+    const unconfinable = routes.filter(
+      (route) =>
+        route.declaration !== null &&
+        'machines' in route.declaration &&
+        !route.path.includes(':tenantId'),
+    );
+
+    expect(unconfinable).toEqual([]);
   });
 });

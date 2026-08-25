@@ -11,6 +11,7 @@ import type {
 } from '../../domain/inventory/movement';
 import { judgeMovement } from '../../domain/inventory/movement';
 import type { RejectionReason } from '../../domain/inventory/rejection-reason';
+import type { Role } from '../../domain/membership/role';
 import type { ActorContext } from '../actor-context';
 import type { LocationRepository } from '../ports/location.repository';
 import type { ProductRepository } from '../ports/product.repository';
@@ -19,7 +20,10 @@ import {
   TENANT_SCOPED_UNIT_OF_WORK,
   type TenantScopedUnitOfWork,
 } from '../ports/tenant-scoped-unit-of-work';
-import { tenantActedIn } from '../tenant-authorization';
+import {
+  authorizeCallerInTenant,
+  tenantActedIn,
+} from '../tenant-authorization';
 
 /**
  * One movement as it arrives: strings, because it came from outside.
@@ -70,6 +74,12 @@ interface Candidate {
   readonly movement: SubmittedMovement;
 }
 
+/** Recording changes the history, so a viewer may not. */
+export const RECORD_MOVEMENTS_ROLES = [
+  'admin',
+  'editor',
+] as const satisfies readonly Role[];
+
 @Injectable()
 export class RecordMovementsUseCase {
   constructor(
@@ -90,31 +100,34 @@ export class RecordMovementsUseCase {
     // entirely malformed then costs one round trip and no writes.
     const candidates = this.judgeLocally(command.movements, outcomes);
 
-    return this.tenants.runInTenant(
-      tenantId,
-      async ({ products, locations, movements }) => {
-        const survivors = await this.dropUnknownReferences(
-          candidates,
-          outcomes,
-          { products, locations },
-        );
+    return this.tenants.runInTenant(tenantId, async (repositories) => {
+      await authorizeCallerInTenant(
+        repositories,
+        command.actor,
+        RECORD_MOVEMENTS_ROLES,
+      );
+      const { products, locations, movements } = repositories;
 
-        const recorded = await movements.record(
-          survivors.map((candidate) => candidate.movement),
-        );
+      const survivors = await this.dropUnknownReferences(candidates, outcomes, {
+        products,
+        locations,
+      });
 
-        for (const { at, movement } of survivors) {
-          // Absent from what came back means the identifier was already recorded.
-          // That is a successful retry, not a failure, and it is reported
-          // distinctly so a caller can tell one from a first submission.
-          outcomes[at] = recorded.has(movement.externalId)
-            ? { status: 'recorded', externalId: movement.externalId }
-            : { status: 'already-recorded', externalId: movement.externalId };
-        }
+      const recorded = await movements.record(
+        survivors.map((candidate) => candidate.movement),
+      );
 
-        return summarise(outcomes);
-      },
-    );
+      for (const { at, movement } of survivors) {
+        // Absent from what came back means the identifier was already recorded.
+        // That is a successful retry, not a failure, and it is reported
+        // distinctly so a caller can tell one from a first submission.
+        outcomes[at] = recorded.has(movement.externalId)
+          ? { status: 'recorded', externalId: movement.externalId }
+          : { status: 'already-recorded', externalId: movement.externalId };
+      }
+
+      return summarise(outcomes);
+    });
   }
 
   /** Parsing, the standalone invariants, and duplicates within this batch. */

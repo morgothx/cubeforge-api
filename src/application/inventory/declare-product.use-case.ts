@@ -1,12 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Declaration } from '../ports/reference.repository';
 import type { Sku } from '../../domain/inventory/identifiers';
+import type { Role } from '../../domain/membership/role';
 import type { ActorContext } from '../actor-context';
 import {
   TENANT_SCOPED_UNIT_OF_WORK,
   type TenantScopedUnitOfWork,
 } from '../ports/tenant-scoped-unit-of-work';
-import { tenantActedIn } from '../tenant-authorization';
+import {
+  authorizeCallerInTenant,
+  tenantActedIn,
+} from '../tenant-authorization';
 
 export interface DeclareProductCommand {
   readonly actor: ActorContext;
@@ -24,6 +28,12 @@ export interface DeclareProductCommand {
  * synchronises its whole catalogue on a schedule and sends every product every
  * time; a conflict on the second night would mean the integration works once.
  */
+/** Declaring changes what a tenant tracks, so a viewer may not. */
+export const DECLARE_PRODUCT_ROLES = [
+  'admin',
+  'editor',
+] as const satisfies readonly Role[];
+
 @Injectable()
 export class DeclareProductUseCase {
   constructor(
@@ -37,11 +47,17 @@ export class DeclareProductUseCase {
     // refused.
     const tenantId = tenantActedIn(command.actor);
 
-    return this.tenants.runInTenant(tenantId, ({ products }) =>
-      products.declare(command.sku, {
+    return this.tenants.runInTenant(tenantId, async (repositories) => {
+      await authorizeCallerInTenant(
+        repositories,
+        command.actor,
+        DECLARE_PRODUCT_ROLES,
+      );
+
+      return repositories.products.declare(command.sku, {
         name: command.name,
         category: command.category,
-      }),
-    );
+      });
+    });
   }
 }
