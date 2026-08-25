@@ -201,7 +201,7 @@ two small concrete repositories rather than a base class.
   - _Depends: 4.2_
   - _Boundary: recordMovements use case_
 
-- [ ] 4.5 (P) Answer what is on hand
+- [x] 4.5 (P) Answer what is on hand
   - Sum the movements recorded for the tenant, per product and place
   - Report a pairing whose movements cancel out as zero rather than omitting it
   - Permit a negative result, and refuse no sale for taking stock below zero:
@@ -610,3 +610,38 @@ forever.
 Duplicate detection, replay reporting, reference checking, the standalone
 invariants, and judging against the clock rather than a constant. Each removed
 on its own, each turning a different test red.
+
+### Zero is a fact, and negative is somebody else's business
+
+Two rules that look like edge cases and are not.
+
+**A pairing summing to zero is reported, not omitted.** Omitting it would make
+"we sold everything we had" indistinguishable from "we never stocked it", which
+are opposite facts about a warehouse.
+
+**A total may go below zero, and a sale taking it there is not refused.** The
+platform records what a source system reports; deciding what is possible in that
+system's warehouse is not its job, and refusing would mean quietly disagreeing
+with the books it mirrors. If the ERP thinks it sold nine and received two, the
+honest answer is minus seven and a conversation for somebody else.
+
+### No caching, deliberately
+
+Summing is the right answer at this scale, and pre-aggregation is exactly what
+the semantic layer of a later feature exists to do. Building it here would build
+that feature twice, in the place with the least information about how the
+numbers are actually asked for.
+
+### The open question is now visible in a test
+
+A declared product that never moved yields no row, because stock is grouped over
+movements and such a product has no place to be counted at. It was open question
+1 in the design; it is now a test that says so, so a dashboard wanting the
+catalogue with zeroes finds the decision rather than the surprise.
+
+## Section 4 complete — the application layer answers everything
+
+Sections 1 through 4 are done. Every requirement about *behaviour* is now
+satisfied and tested without HTTP: declaring, recording, replaying, batching,
+summing, and refusing a caller who acts in no tenant. What remains is reaching
+it (section 5) and proving the properties end to end (section 6).
