@@ -154,11 +154,19 @@ so a batch that is entirely malformed costs one round trip and no writes.
 Branded identifiers follow the existing `src/domain/identifiers.ts` pattern.
 
 ```ts
-export type Sku = string & { readonly __brand: 'Sku' };
-export type LocationCode = string & { readonly __brand: 'LocationCode' };
-export type ExternalMovementId = string & {
-  readonly __brand: 'ExternalMovementId';
-};
+export type Sku = Branded<string, 'Sku'>;
+export type LocationCode = Branded<string, 'LocationCode'>;
+export type ExternalMovementId = Branded<string, 'ExternalMovementId'>;
+
+/**
+ * Codes parse two ways. The throwing form serves paths with one answer to give;
+ * the non-throwing form serves the batch, where a malformed code is one row's
+ * problem rather than the request's.
+ */
+export type Malformation = 'blank' | 'too-long' | 'unsupported-characters';
+export type Parsed<T> =
+  | { readonly malformed: false; readonly value: T }
+  | { readonly malformed: true; readonly because: Malformation };
 
 export type MovementKind = 'receipt' | 'sale' | 'adjustment';
 
@@ -172,6 +180,7 @@ export type RejectionReason =
   | 'quantity-out-of-range'
   | 'quantity-sign-mismatch'
   | 'occurred-in-future'
+  | 'occurred-not-a-moment'
   | 'duplicate-within-batch'
   | 'malformed-identifier';
 

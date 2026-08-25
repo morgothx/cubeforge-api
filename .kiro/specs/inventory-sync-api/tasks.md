@@ -7,9 +7,9 @@ immediate peers.
 
 ## 1. The ground everything else stands on
 
-The tables, the rules the database itself enforces, and the one shared seam.
-Section 1.3 touches a file every later section reads, so it goes first and
-nothing waits on it afterwards.
+The tables and the rules the database itself enforces. These two are one
+checkpoint rather than two: the platform's policy-coverage test turns red the
+moment a table exists without a policy, so 1.1 alone leaves the suite failing.
 
 - [x] 1.1 Give a tenant somewhere to keep products, places and movements
   - Three tenant-owned tables, each carrying its tenant explicitly rather than
@@ -49,24 +49,12 @@ nothing waits on it afterwards.
   - _Requirements: 1.5, 2.4, 3.6, 7.2_
   - _Boundary: Persistence schema_
 
-- [ ] 1.3 Widen the tenant-scoped seam to carry inventory
-  - Add the three new repositories to the set handed to work running inside a
-    tenant, in both the real and the in-memory implementations
-  - Introduce no second way to reach persistence: the existing seam hands
-    repositories to a callback precisely so there is no construction path that
-    skips the tenant, and a second path would be worth exactly as much as the
-    number of ways around the first
-  - Done when a use case can obtain all three inside a tenant and cannot obtain
-    any of them outside one, and the existing suite still passes
-  - _Requirements: 7.2_
-  - _Boundary: TenantScopedUnitOfWork_
-
 ## 2. What a movement is, decided without a database
 
 Pure rules, testable without a container. This is where the properties the
 project exists to demonstrate stop being framework behaviour.
 
-- [ ] 2.1 Name the things a tenant refers to
+- [x] 2.1 Name the things a tenant refers to
   - Distinct identifier types for a SKU, a place code and a source-system
     movement identifier, so one cannot be passed where another is meant
   - Refuse an empty identifier, one longer than permitted, and one carrying
@@ -76,7 +64,7 @@ project exists to demonstrate stop being framework behaviour.
   - _Requirements: 1.4_
   - _Boundary: Inventory domain_
 
-- [ ] 2.2 Judge a movement on its own terms
+- [x] 2.2 Judge a movement on its own terms
   - One pure judgement over a submitted movement and the current moment,
     answering admissible or refused-for-this-reason
   - Accept only the three kinds the requirements name, and offer no kind that
@@ -100,6 +88,22 @@ project exists to demonstrate stop being framework behaviour.
   - Not parallel with 2.1: a submitted movement is expressed in the identifier
     types that task defines
 
+- [ ] 2.3 Declare what persistence must offer, without providing it yet
+  - Three port interfaces: one shape shared by the catalogue and the places —
+    declare, replace, answer which of a set exist — and one for movements,
+    covering the insert that skips what is already recorded and the sum
+  - Interfaces only. They compile against nothing and are consumed by nothing
+    yet, which is what lets the two repository tasks that follow run alongside
+    each other without editing one file
+  - Express membership questions as a set of codes rather than as rows: it is
+    the only question asked before an insert, and returning records nobody
+    reads is an invitation to read them
+  - Done when the three interfaces typecheck, reference the identifier types
+    from 2.1, and no implementation of any of them exists
+  - _Requirements: 7.2_
+  - _Depends: 2.1_
+  - _Boundary: Application ports_
+
 ## 3. The things movements point at
 
 Two entities of one shape. The interface is shared; the implementations stay
@@ -114,10 +118,11 @@ two small concrete repositories rather than a base class.
   - Offer no way to delete: movements already recorded point at it, and the
     history has to stay readable
   - Provide both the real implementation and the in-memory one used by tests
+  - Touch no shared file: the seam is widened once, by 4.2, for all three
   - Done when re-declaring reports an update rather than a second product, two
     tenants hold the same SKU independently, and no deletion path exists
   - _Requirements: 1.1, 1.2, 1.3, 1.5_
-  - _Depends: 1.3_
+  - _Depends: 2.3_
   - _Boundary: ProductRepository_
 
 - [ ] 3.2 (P) Keep a tenant's places
@@ -126,7 +131,7 @@ two small concrete repositories rather than a base class.
   - Done when re-declaring reports an update, and the membership answer is what
     a later movement check consumes
   - _Requirements: 2.1, 2.2, 2.4_
-  - _Depends: 1.3_
+  - _Depends: 2.3_
   - _Boundary: LocationRepository_
 
 ## 4. Recording what happened
@@ -146,7 +151,33 @@ two small concrete repositories rather than a base class.
   - _Requirements: 5.1, 5.2_
   - _Boundary: MovementRepository_
 
-- [ ] 4.2 Turn a batch into an answer about every row
+- [ ] 4.2 Widen the tenant-scoped seam to carry inventory
+  - Add the three repositories to the set handed to work running inside a
+    tenant, in both the real and the in-memory implementations
+  - An explicit integration task because it is the one place three boundaries
+    meet. It cannot come earlier: the seam constructs concrete repositories, so
+    widening it before they exist does not compile. It cannot come later: no use
+    case can reach persistence until it does
+  - Introduce no second way to reach persistence — the existing seam hands
+    repositories to a callback precisely so there is no construction path that
+    skips the tenant, and a second path would be worth exactly as much as the
+    number of ways around the first
+  - Done when a use case can obtain all three inside a tenant and cannot obtain
+    any of them outside one, and the existing suite still passes
+  - _Requirements: 7.2_
+  - _Depends: 3.1, 3.2, 4.1_
+  - _Boundary: TenantScopedUnitOfWork_
+
+- [ ] 4.3 (P) Declare a product and a place
+  - Two use cases over the repositories from section 3: recording what is not
+    there, replacing what is, and telling the caller which happened
+  - Done when re-declaring reports an update rather than an error, and neither
+    use case can be constructed with a repository obtained outside a tenant
+  - _Requirements: 1.1, 1.2, 2.1, 2.2_
+  - _Depends: 4.2_
+  - _Boundary: declareProduct, declareLocation use cases_
+
+- [ ] 4.4 Turn a batch into an answer about every row
   - Decide everything decidable without the database first — the per-movement
     judgement, then identifiers duplicated within this same batch — so a batch
     that is entirely malformed costs one round trip and no writes
@@ -167,10 +198,10 @@ two small concrete repositories rather than a base class.
     each refusal by position, and re-submitting a mixed batch records only the
     rows that were new
   - _Requirements: 2.3, 3.1, 3.7, 4.1, 4.2, 4.4, 4.5, 5.3, 5.4, 5.5_
-  - _Depends: 3.1, 3.2, 4.1_
+  - _Depends: 4.2_
   - _Boundary: recordMovements use case_
 
-- [ ] 4.3 (P) Answer what is on hand
+- [ ] 4.5 (P) Answer what is on hand
   - Sum the movements recorded for the tenant, per product and place
   - Report a pairing whose movements cancel out as zero rather than omitting it
   - Permit a negative result, and refuse no sale for taking stock below zero:
@@ -179,7 +210,7 @@ two small concrete repositories rather than a base class.
   - Done when a product received and then sold in equal quantity appears with
     zero, and a sale exceeding what arrived is recorded and reported negative
   - _Requirements: 6.1, 6.2, 6.3_
-  - _Depends: 1.3, 4.1_
+  - _Depends: 4.2_
   - _Boundary: MovementRepository, readStockOnHand use case_
 
 ## 5. Reaching it over HTTP
@@ -194,7 +225,7 @@ two small concrete repositories rather than a base class.
   - Done when every route carries an explicit declaration and the existing
     declaration-drift check still passes
   - _Requirements: 1.1, 1.2, 2.1, 2.2, 7.3, 7.4_
-  - _Depends: 3.1, 3.2_
+  - _Depends: 4.3_
   - _Boundary: HTTP inventory controllers_
 
 - [ ] 5.2 Expose recording, one and many
@@ -212,14 +243,14 @@ two small concrete repositories rather than a base class.
     anything, and a batch with bad rows returns a per-row report rather than an
     error
   - _Requirements: 4.3, 9.1, 9.2, 9.3_
-  - _Depends: 4.2_
+  - _Depends: 4.4_
   - _Boundary: HTTP inventory controllers_
 
 - [ ] 5.3 (P) Expose stock on hand
   - One read route, admitting a viewer and a machine credential
   - Done when a viewer's credential can read it and cannot write anything
   - _Requirements: 6.1, 7.4_
-  - _Depends: 4.3_
+  - _Depends: 4.5_
   - _Boundary: HTTP inventory controllers_
 
 - [ ] 5.4 (P) Slow a caller synchronising too eagerly
@@ -353,3 +384,45 @@ and G restore the grant *and* add a matching policy, and both tests bite.
 It does, with a comment explaining that forgetting one fails visibly later. All
 three new tables were added to it. Truncation order matters: movements first,
 then the two reference tables.
+
+### The task graph had a cycle, found at 1.3
+
+1.3 was *widen the tenant-scoped seam*. The seam **constructs** concrete
+repositories, so widening it before they exist does not compile — and the
+repositories cannot be reached by any use case until it is widened. It also
+needed the identifier types, which were 2.1.
+
+Reordered rather than worked around: the ports are declared in 2.3 (interfaces,
+consumed by nothing), the repositories are built in 3.1, 3.2 and 4.1 touching no
+shared file, and the widening became **4.2**, an explicit integration task —
+which is what the design's own rule asks for when work crosses boundaries. The
+use cases follow it.
+
+The sanity review missed this because it checked whether tasks could run
+*concurrently*, not whether each could compile *alone*.
+
+### Codes are refused, never repaired
+
+`parse` does not trim and does not case-fold. Normalizing would mean
+` ACME-001` and `ACME-001` are one product on the path that normalizes and two
+on the path that forgot; refusing is the only answer that cannot be
+inconsistent. It is the same reason places are a declared resource rather than
+free text.
+
+A probe adding a trim *after* the character check changed nothing, because the
+value was already refused by then — the probe was defeated by a second
+mechanism. Moving the trim *before* the checks is the one that bites, and it
+does.
+
+### One reason per row, not a list
+
+`judgeMovement` reports the first thing wrong and stops. A caller fixes one
+thing and resubmits, and the report this feeds carries up to five hundred
+entries.
+
+### Every rule was removed on its own
+
+Seven rules, seven probes, each removing exactly one and each turning a
+different test red. `occurred-not-a-moment` was not in the design's list of
+reasons; an invalid `Date` is reachable from a payload, so it was added and the
+design updated to match.
