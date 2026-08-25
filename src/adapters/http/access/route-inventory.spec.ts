@@ -220,6 +220,8 @@ describe('the route inventory, against the real application', () => {
       'POST /platform/people/:personId/setup-tokens',
       'POST /tenants',
       'POST /tenants/:tenantId/api-keys',
+      'POST /tenants/:tenantId/inventory/movements',
+      'POST /tenants/:tenantId/inventory/movements/batch',
       'POST /tenants/:tenantId/members',
       'PUT /tenants/:tenantId/inventory/locations/:code',
       'PUT /tenants/:tenantId/inventory/products/:sku',
@@ -263,6 +265,14 @@ describe('the route inventory, against the real application', () => {
       },
       'GET /tenants/:tenantId/inventory/products': {
         roles: ['admin', 'editor', 'viewer'],
+        machines: true,
+      },
+      'POST /tenants/:tenantId/inventory/movements': {
+        roles: ['admin', 'editor'],
+        machines: true,
+      },
+      'POST /tenants/:tenantId/inventory/movements/batch': {
+        roles: ['admin', 'editor'],
         machines: true,
       },
       'PUT /tenants/:tenantId/inventory/locations/:code': {
@@ -339,6 +349,8 @@ describe('the route inventory, against the real application', () => {
     expect([...new Set(admitting)].sort()).toEqual([
       '/tenants/:tenantId/inventory/locations',
       '/tenants/:tenantId/inventory/locations/:code',
+      '/tenants/:tenantId/inventory/movements',
+      '/tenants/:tenantId/inventory/movements/batch',
       '/tenants/:tenantId/inventory/products',
       '/tenants/:tenantId/inventory/products/:sku',
     ]);

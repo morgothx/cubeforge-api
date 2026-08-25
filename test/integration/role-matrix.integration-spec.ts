@@ -209,6 +209,47 @@ describe('the role matrix', () => {
           .send({ name: 'Main warehouse' }),
     },
     {
+      // The world here declares no catalogue, so an admitted caller's movement
+      // is *rejected* — and still answered 200, with the reason in the body.
+      // That is the point: this matrix asks who is let in, and a per-row
+      // rejection is not a refusal. A caller who was refused gets 404 from the
+      // guard and never reaches the report at all.
+      key: 'POST /tenants/:tenantId/inventory/movements',
+      admits: ['admin', 'editor'],
+      call: (world, headers) =>
+        request(server())
+          .post(`/tenants/${world.acme.id}/inventory/movements`)
+          .set(headers)
+          .send({
+            externalId: 'ERP-MATRIX',
+            sku: 'ACME-001',
+            location: 'WH-1',
+            kind: 'receipt',
+            quantity: 1,
+            occurredAt: '2026-01-01T00:00:00.000Z',
+          }),
+    },
+    {
+      key: 'POST /tenants/:tenantId/inventory/movements/batch',
+      admits: ['admin', 'editor'],
+      call: (world, headers) =>
+        request(server())
+          .post(`/tenants/${world.acme.id}/inventory/movements/batch`)
+          .set(headers)
+          .send({
+            movements: [
+              {
+                externalId: 'ERP-MATRIX-BATCH',
+                sku: 'ACME-001',
+                location: 'WH-1',
+                kind: 'receipt',
+                quantity: 1,
+                occurredAt: '2026-01-01T00:00:00.000Z',
+              },
+            ],
+          }),
+    },
+    {
       key: 'GET /tenants/:tenantId/inventory/locations',
       admits: ['admin', 'editor', 'viewer'],
       call: (world, headers) =>

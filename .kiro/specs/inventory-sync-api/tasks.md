@@ -228,7 +228,7 @@ two small concrete repositories rather than a base class.
   - _Depends: 4.3_
   - _Boundary: HTTP inventory controllers_
 
-- [ ] 5.2 Expose recording, one and many
+- [x] 5.2 Expose recording, one and many
   - A route for a single movement and a route for a batch, both rendering the
     per-row report
   - Cap the batch at five hundred and refuse a larger one **whole**, through the
@@ -706,3 +706,45 @@ become a hole through which anything else could arrive.
 Five probes: widening the route, narrowing it, widening only the use case,
 removing the second layer, and moving the route out from under the tenant. All
 five bite.
+
+### The edge validates shape; it must not validate meaning
+
+`MovementRow` carries no `@IsIn` on `kind`, no sign rule, no past-tense check on
+`occurredAt`. Every one of those is a per-row rejection with a named reason, and
+enforcing it at the edge turns one bad row into the whole request's failure —
+the single thing this feature exists not to do.
+
+Probe B adds `@IsIn(['receipt','sale','adjustment'])` to the DTO, which looks
+like tightening and is the opposite: the row that should have come back
+`unknown-kind` in a report becomes a 400 for the batch. It bites.
+
+What the edge does enforce is what cannot be a row's problem: a field of the
+wrong *type* means the payload was not what it claimed to be, and a batch over
+five hundred means the request was too big. Both are the request's failure, and
+both go through the error filter.
+
+### Both routes answer 200, including when a row was refused
+
+A partially applied batch is not a failure. 207 would say "inspect the body",
+which is true of every response here including the clean one, so it would carry
+no information.
+
+Asserted end to end: a batch with two bad rows answers **200** with the
+rejections in it. A caller who only reads the status sees success — which is why
+the report can never be shorter than what was sent, and why probe D (dropping
+rejected rows from the response) bites.
+
+### A test that tolerated two opposite answers
+
+One draft asserted `expect([200, 404]).toContain(stock.status)` against a route
+task 5.3 had not built yet. A test that passes whether the route exists or not
+proves nothing about either. Replaced with the fact actually being claimed:
+nothing from the refused batch was written, shown by resubmitting one of its
+rows and getting `recorded`.
+
+### `reflect-metadata` is loaded by Nest, not by the DTO
+
+`class-transformer`'s `@Type` calls `Reflect.getMetadata` while the module is
+evaluated. In the application Nest has already loaded the shim; a test importing
+the DTO module directly has not. The spec imports it first, with a comment
+saying why — the alternative was an import in every DTO to serve one caller.
