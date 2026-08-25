@@ -1,9 +1,15 @@
 import type { ProductAttributes } from '../../../application/ports/product.repository';
 import { tenantId } from '../../../domain/identifiers';
-import { sku } from '../../../domain/inventory/identifiers';
+import {
+  externalMovementId,
+  locationCode,
+  sku,
+} from '../../../domain/inventory/identifiers';
 import type { Sku } from '../../../domain/inventory/identifiers';
+import type { SubmittedMovement } from '../../../domain/inventory/movement';
 import {
   InMemoryInventoryStore,
+  InMemoryMovementRepository,
   InMemoryReferenceRepository,
 } from './in-memory-inventory-store';
 
@@ -106,5 +112,98 @@ describe('the catalogue double', () => {
     // Movements point at these rows, and the database grants no deletion
     // either. Two absences, so restoring one by accident is not enough.
     expect('delete' in catalogueOf(acme)).toBe(false);
+  });
+});
+
+describe('the movement stream double', () => {
+  let store: InMemoryInventoryStore;
+
+  const streamOf = (tenant: typeof acme) =>
+    new InMemoryMovementRepository(store, tenant);
+
+  beforeEach(() => {
+    store = new InMemoryInventoryStore();
+  });
+
+  const movement = (
+    externalId: string,
+    overrides: Partial<SubmittedMovement> = {},
+  ): SubmittedMovement => ({
+    externalId: externalMovementId(externalId),
+    sku: sku('ACME-001'),
+    location: locationCode('WH-1'),
+    kind: 'receipt',
+    quantity: 5,
+    occurredAt: new Date('2026-08-25T10:00:00.000Z'),
+    ...overrides,
+  });
+
+  it('reports back only what it newly recorded', async () => {
+    await expect(
+      streamOf(acme).record([movement('ERP-1'), movement('ERP-2')]),
+    ).resolves.toEqual(new Set(['ERP-1', 'ERP-2']));
+  });
+
+  it('records nothing the second time, and says so', async () => {
+    // The distinction the whole retry story rests on. A double that returned
+    // everything submitted would make every replay test pass against a broken
+    // implementation.
+    const stream = streamOf(acme);
+    await stream.record([movement('ERP-1')]);
+
+    await expect(stream.record([movement('ERP-1')])).resolves.toEqual(
+      new Set(),
+    );
+    await expect(stream.stockOnHand()).resolves.toEqual([
+      { sku: 'ACME-001', location: 'WH-1', onHand: 5 },
+    ]);
+  });
+
+  it('records only the part of a resubmitted batch that is new', async () => {
+    const stream = streamOf(acme);
+    await stream.record([movement('ERP-1')]);
+
+    await expect(
+      stream.record([movement('ERP-1'), movement('ERP-2')]),
+    ).resolves.toEqual(new Set(['ERP-2']));
+  });
+
+  it('lets a different tenant use the same identifier', async () => {
+    await streamOf(acme).record([movement('ERP-1')]);
+
+    await expect(streamOf(globex).record([movement('ERP-1')])).resolves.toEqual(
+      new Set(['ERP-1']),
+    );
+  });
+
+  it('sums per product and place, keeping a pairing that cancels out', async () => {
+    await streamOf(acme).record([
+      movement('ERP-1', { kind: 'receipt', quantity: 5 }),
+      movement('ERP-2', { kind: 'sale', quantity: -5 }),
+      movement('ERP-3', { location: locationCode('WH-2'), quantity: 3 }),
+    ]);
+
+    await expect(streamOf(acme).stockOnHand()).resolves.toEqual([
+      { sku: 'ACME-001', location: 'WH-1', onHand: 0 },
+      { sku: 'ACME-001', location: 'WH-2', onHand: 3 },
+    ]);
+  });
+
+  it('lets a total go negative', async () => {
+    // The platform records what a source system reports. Deciding what is
+    // possible in that system's warehouse is not its job.
+    await streamOf(acme).record([
+      movement('ERP-1', { kind: 'sale', quantity: -9 }),
+    ]);
+
+    await expect(streamOf(acme).stockOnHand()).resolves.toEqual([
+      { sku: 'ACME-001', location: 'WH-1', onHand: -9 },
+    ]);
+  });
+
+  it('shows one tenant nothing of another', async () => {
+    await streamOf(globex).record([movement('ERP-1')]);
+
+    await expect(streamOf(acme).stockOnHand()).resolves.toEqual([]);
   });
 });

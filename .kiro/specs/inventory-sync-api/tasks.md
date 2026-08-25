@@ -136,7 +136,7 @@ two small concrete repositories rather than a base class.
 
 ## 4. Recording what happened
 
-- [ ] 4.1 Record movements without racing a retry
+- [x] 4.1 Record movements without racing a retry
   - Insert the movements given, skipping any whose source-system identifier is
     already recorded in this tenant, and report back exactly which ones were
     newly recorded
@@ -462,3 +462,45 @@ These repositories cannot join that suite until the unit of work carries them
 The second block captured a connection pool at module load, and the first
 block's teardown had already closed it. Asked for per call instead. Worth
 knowing before the remaining integration specs are written.
+
+### The concurrency test was theatre, twice
+
+This is the central claim of the feature — recording is one statement so two
+retries cannot both insert — and the test asserting it was wrong in two
+different ways before it worked.
+
+**First:** it asserted "no duplicates, and the stock is right". A read-then-write
+implementation satisfies both, because the unique constraint kills the losing
+transaction with an error. The probe passed. The constraint was doing the work
+while the transaction died to make it happen, which is the wrong green.
+
+The property that actually separates the two is that **both submissions
+succeed**. `on conflict do nothing` waits for the other transaction and then
+skips; reading first aborts. A caller retrying a timed-out batch must get an
+answer, not an error about a movement it already sent.
+
+**Second:** with that tightened, the probe *still* passed — because the test was
+not concurrent. `Promise.allSettled` starts two promises; the scheduler is free
+to run the first to completion before the second begins, and then the second
+finds the rows already there and reports honestly. It overlapped by luck, and
+the luck went the wrong way.
+
+Now the first transaction is held open and the test **asks the database** —
+polling `pg_stat_activity` for a statement waiting on a lock — before committing
+it. A fixed delay would have made the overlap a guess about how fast this
+machine is. With that, the probe bites.
+
+**Two independent reasons a test can be green while proving nothing, in one
+test.** Neither was visible by reading it.
+
+### The tenant predicate, again
+
+Same as the catalogue: dropping the `where` from the sum changed nothing, RLS
+held, and the claim needed its own policy-bypassed block before the probe would
+bite.
+
+### And another speculative export
+
+`STOCK_ON_HAND_IS_DERIVED` — a `sql` fragment exported "beside the query it
+explains", used by nothing. Deleted. Second time this feature; the reflex is
+apparently to leave a landmark next to anything interesting.

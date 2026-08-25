@@ -3,7 +3,13 @@ import type {
   ReferenceEntity,
   ReferenceRepository,
 } from '../../../application/ports/reference.repository';
+import type {
+  MovementRepository,
+  StockLevel,
+} from '../../../application/ports/movement.repository';
 import type { TenantId } from '../../../domain/identifiers';
+import type { ExternalMovementId } from '../../../domain/inventory/identifiers';
+import type { SubmittedMovement } from '../../../domain/inventory/movement';
 
 /**
  * Both reference entities carry a name, which is the one attribute the shared
@@ -30,18 +36,35 @@ export class InMemoryInventoryStore {
     Held<{ readonly name: string; readonly category: string | null }>
   >();
   readonly locations = new Map<string, Held<{ readonly name: string }>>();
+  /** Keyed by tenant and the source system's identifier, as the table is. */
+  readonly movements = new Map<
+    string,
+    SubmittedMovement & { tenant: TenantId }
+  >();
 
   snapshot(): string {
-    return JSON.stringify([[...this.products], [...this.locations]]);
+    return JSON.stringify([
+      [...this.products],
+      [...this.locations],
+      [...this.movements],
+    ]);
   }
 
   restore(snapshot: string): void {
-    const [products, locations] = JSON.parse(snapshot) as [
+    const [products, locations, movements] = JSON.parse(snapshot) as [
       [string, Held<{ name: string; category: string | null }>][],
       [string, Held<{ name: string }>][],
+      [string, SubmittedMovement & { tenant: TenantId }][],
     ];
     this.products.clear();
     this.locations.clear();
+    this.movements.clear();
+    for (const [key, movement] of movements) {
+      this.movements.set(key, {
+        ...movement,
+        occurredAt: new Date(movement.occurredAt),
+      });
+    }
     for (const [key, held] of products) {
       this.products.set(key, revive(held));
     }
@@ -119,6 +142,72 @@ export class InMemoryReferenceRepository<
           updatedAt: held.updatedAt,
         }))
         .sort((left, right) => left.code.localeCompare(right.code)),
+    );
+  }
+}
+
+/**
+ * The movement stream's double.
+ *
+ * It mirrors the one behaviour of the real adapter that a use case can observe:
+ * recording returns only what was newly recorded, so a caller can tell a first
+ * submission from a replay. A double that returned everything submitted would
+ * make every replay test pass against a broken implementation.
+ */
+export class InMemoryMovementRepository implements MovementRepository {
+  constructor(
+    private readonly store: InMemoryInventoryStore,
+    private readonly tenantId: TenantId,
+  ) {}
+
+  private key(externalId: ExternalMovementId): string {
+    return `${this.tenantId}:${externalId}`;
+  }
+
+  private get mine(): SubmittedMovement[] {
+    return [...this.store.movements.values()].filter(
+      (movement) => movement.tenant === this.tenantId,
+    );
+  }
+
+  record(
+    movements: readonly SubmittedMovement[],
+  ): Promise<ReadonlySet<ExternalMovementId>> {
+    const recorded = new Set<ExternalMovementId>();
+
+    for (const movement of movements) {
+      const key = this.key(movement.externalId);
+      if (this.store.movements.has(key)) {
+        // Already recorded. Silently skipped, exactly as `on conflict do
+        // nothing` skips it, and absent from what is returned.
+        continue;
+      }
+      this.store.movements.set(key, { ...movement, tenant: this.tenantId });
+      recorded.add(movement.externalId);
+    }
+
+    return Promise.resolve(recorded);
+  }
+
+  stockOnHand(): Promise<readonly StockLevel[]> {
+    const totals = new Map<string, StockLevel>();
+
+    for (const movement of this.mine) {
+      const key = `${movement.sku}\u0000${movement.location}`;
+      const running = totals.get(key);
+      totals.set(key, {
+        sku: movement.sku,
+        location: movement.location,
+        onHand: (running?.onHand ?? 0) + movement.quantity,
+      });
+    }
+
+    return Promise.resolve(
+      [...totals.values()].sort(
+        (left, right) =>
+          left.sku.localeCompare(right.sku) ||
+          left.location.localeCompare(right.location),
+      ),
     );
   }
 }
