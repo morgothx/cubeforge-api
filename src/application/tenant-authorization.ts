@@ -96,6 +96,31 @@ export function tenantOf(actor: ActorContext): TenantId {
   return actor.tenantId;
 }
 
+/**
+ * The tenant a request runs in, admitting a machine as well as a person.
+ *
+ * A sibling of `tenantOf` rather than a loosening of it, and the reason is
+ * narrower than it first looks. Widening `tenantOf` would **not** have let
+ * machines reach the routes that use it: the guard refuses a key on any route
+ * that does not declare `machines`, and those use cases resolve a membership a
+ * key does not have. Both would still refuse.
+ *
+ * What widening would do is delete one of those redundant refusals while
+ * gaining nothing — and leave two helpers' worth of meaning inside one name.
+ * `tenantOf` says "the tenant this person is a member of"; this says "the
+ * tenant this caller acts in, whoever they are". Inventory is the first surface
+ * built for machines, so it is the first caller of the second question.
+ *
+ * An operator still has no tenant, and asking for one on their behalf remains a
+ * programming error the caller cannot observe.
+ */
+export function tenantActedIn(actor: ActorContext): TenantId {
+  if (actor.kind !== 'tenant-member' && actor.kind !== 'machine') {
+    throw new DomainViolation({ kind: 'not-found' });
+  }
+  return actor.tenantId;
+}
+
 /** Operator-only entry points share this check, and it is the whole of it. */
 export function requirePlatformOperator(actor: ActorContext): void {
   if (actor.kind !== 'platform-operator') {

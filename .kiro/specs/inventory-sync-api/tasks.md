@@ -168,7 +168,7 @@ two small concrete repositories rather than a base class.
   - _Depends: 3.1, 3.2, 4.1_
   - _Boundary: TenantScopedUnitOfWork_
 
-- [ ] 4.3 (P) Declare a product and a place
+- [x] 4.3 (P) Declare a product and a place
   - Two use cases over the repositories from section 3: recording what is not
     there, replacing what is, and telling the caller which happened
   - Done when re-declaring reports an update rather than an error, and neither
@@ -535,3 +535,43 @@ default would have been a mechanical edit across files this task has no business
 touching; a real store rather than an optional one means a use case reaching for
 `movements` in a context that forgot to pass one fails on what it did rather
 than on `undefined`.
+
+### The platform had no way to ask a machine which tenant it is in
+
+`tenantOf` refuses a machine on purpose — every surface before this one was
+built for people. Inventory is the first built for machines, so it needed the
+question asked differently.
+
+Added `tenantActedIn` as a **sibling** rather than widening `tenantOf`. The
+justification written into the first draft of that comment was wrong, and the
+probe is what showed it: widening `tenantOf` would not have let machines reach
+any existing route, because the guard refuses a key on any route that does not
+declare `machines` **and** those use cases resolve a membership a key does not
+have. Both refusals stand without it.
+
+What widening would actually do is delete one redundant refusal for no gain, and
+put two questions inside one name. `tenantOf` means "the tenant this person is a
+member of"; `tenantActedIn` means "the tenant this caller acts in, whoever they
+are". Those are different questions and inventory needs the second.
+
+**The probe disproved the premise of the claim it was written to confirm.** The
+decision survived; the reasoning did not, and the comment now says the true
+thing.
+
+### A check behind another check is untested, again
+
+Nothing in either suite noticed `tenantOf` being widened — the guard and the
+membership lookup both answer first. Same shape as a repository predicate behind
+a row-level security policy, and as `FORCE` being invisible to a non-owner.
+Three instances now, and the rule is worth stating plainly:
+
+**A refusal with another refusal in front of it is proven by nothing until it is
+asserted directly.**
+
+`tenant-authorization.spec.ts` asserts both helpers against all four kinds of
+caller. With it, the probe bites.
+
+### The command carries no tenant
+
+Neither `DeclareProductCommand` nor `DeclareLocationCommand` has a tenant field.
+"A caller in Acme declaring into Globex" is not refused — it is not expressible.
