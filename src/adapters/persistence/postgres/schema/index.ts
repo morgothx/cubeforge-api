@@ -5,6 +5,7 @@ export {
   platformOperators,
   refreshTokens,
 } from './credentials';
+export { exportCursors } from './export-cursors';
 export { inventoryLocations } from './inventory-locations';
 export { inventoryProducts } from './inventory-products';
 export { memberships } from './memberships';

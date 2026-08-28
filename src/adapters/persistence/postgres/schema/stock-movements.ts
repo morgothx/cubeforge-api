@@ -13,6 +13,7 @@ import {
 import { inventoryLocations } from './inventory-locations';
 import { inventoryProducts } from './inventory-products';
 import { tenants } from './tenants';
+import { xid8 } from './xid8';
 
 /**
  * Something that happened to stock. Append-only: never updated, never deleted.
@@ -53,6 +54,21 @@ export const stockMovements = pgTable(
     recordedAt: timestamp('recorded_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
+    /**
+     * The transaction that recorded this movement, for the incremental export.
+     *
+     * `recorded_at` cannot serve: it is the moment the transaction *began*, and
+     * two concurrent inserts commit in whatever order they finish, so a cursor
+     * holding the greatest moment exported skips whichever transaction started
+     * earlier and committed later — silently, and for ever. A transaction
+     * identifier can be compared against the point below which nothing is still
+     * in flight, which no timestamp can express.
+     *
+     * Written only by its default. Drizzle never sends this column.
+     */
+    recordedXid: xid8('recorded_xid')
+      .notNull()
+      .default(sql`pg_current_xact_id()`),
   },
   (table) => [
     // The constraint a retry relies on. `INSERT … ON CONFLICT DO NOTHING
@@ -90,10 +106,16 @@ export const stockMovements = pgTable(
       table.sku,
       table.locationCode,
     ),
-    // What a later incremental export will walk.
+    // Written when this table was, to serve "a later incremental export". That
+    // export exists now and does **not** walk this: it walks transaction
+    // identifiers, because a moment cannot express the point below which
+    // nothing is still in flight. Left in place rather than dropped here —
+    // removing an index belongs to a task that says so.
     index('stock_movements_tenant_recorded_idx').on(
       table.tenantId,
       table.recordedAt,
     ),
+    // What the export actually walks: one tenant's stream, in identifier order.
+    index('stock_movements_export_idx').on(table.tenantId, table.recordedXid),
   ],
 );

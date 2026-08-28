@@ -23,6 +23,13 @@ const ALLOWANCE = loadInventoryThrottlingConfig(process.env);
  * origin, because a warehouse system and a point-of-sale can sit behind one
  * address and are not one caller.
  */
+// Every test here spends a whole allowance: sixty real HTTP requests, and the
+// sign-in one additionally pays for an Argon2 hash so that a missing account is
+// not faster than a present one. That is seconds of honest work, and it sat just
+// under Jest's five-second default only while the machine was quiet. Given the
+// time it needs rather than made to look fast.
+jest.setTimeout(60_000);
+
 describe('the inventory allowance', () => {
   useIntegrationDatabase();
 
@@ -137,10 +144,5 @@ describe('the inventory allowance', () => {
       .send({ email: 'nobody@example.com', password: 'wrong-but-well-formed' });
 
     expect(signIn.status).not.toBe(429);
-    // Longer than the default. Spending a whole allowance is sixty requests,
-    // and a rejected sign-in deliberately costs an Argon2 hash so that a
-    // missing account is not faster than a present one. Together they sit just
-    // under five seconds on a quiet machine and just over it on a busy one,
-    // which is a flake rather than a finding.
-  }, 20_000);
+  });
 });

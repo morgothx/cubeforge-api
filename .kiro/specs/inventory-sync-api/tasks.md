@@ -893,3 +893,21 @@ allowance and then pays for an Argon2 hash on a rejected sign-in. It sat just
 under Jest's five-second default and went over it once three more suites ran
 before it. Given the time it honestly needs rather than made faster: what it
 measures is real work.
+
+### A revalidation trigger fired, on 2026-08-28
+
+This spec's design lists "any consumer beginning to read these tables directly
+rather than through the routes here" as a trigger. `s3-data-export` is that
+consumer, and it also **adds a column** to `stock_movements`:
+`recorded_xid xid8 NOT NULL DEFAULT pg_current_xact_id()`, written only by that
+default and read only by the export.
+
+Re-checked, and unchanged: the table is still append-only (`SELECT, INSERT` and
+nothing else for `cubeforge_app`), its policies are untouched, and the whole
+inventory suite passes with the column present. What changed is that
+`stock_movements_tenant_recorded_idx` — added here with the comment "what a
+later incremental export will walk" — is **not** what the export walks. A moment
+cannot express the point below which no transaction is still in flight, so the
+export walks transaction identifiers instead and has its own index. The old
+index now has no reader; dropping it belongs to a task that says so, and is
+noted in the export spec rather than done quietly here.
