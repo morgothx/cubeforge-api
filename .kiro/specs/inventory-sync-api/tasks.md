@@ -270,7 +270,7 @@ two small concrete repositories rather than a base class.
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
   - _Boundary: InventoryThrottlerGuard_
 
-- [ ] 5.5 Wire the feature into the running application
+- [x] 5.5 Wire the feature into the running application
   - Bind these ports to these adapters in a module of their own and import it
   - Confirm every new route appears in the inventory the platform walks, each
     with a declaration, so a route added without one cannot ship
@@ -290,7 +290,7 @@ Each of these writes its **own** spec file rather than adding to a shared one;
 four tasks appending to a single file are not parallel however unrelated their
 assertions are.
 
-- [ ] 6.1 Travel the machine path for the first time
+- [x] 6.1 Travel the machine path for the first time
   - Exercise **every** inventory route with a real API key, not only with a
     person's token
   - This path was designed, built and unit-tested, and no shipped route has ever
@@ -794,3 +794,35 @@ Raising the allowance to a hundred thousand made the exhausting loop take longer
 than the timeout. The probe was unrunnable rather than uninformative — worth
 recording so it is not mistaken for a gap. The limit's effect is covered by the
 other four.
+
+### The machine path works, and it was worth travelling to find out
+
+Every inventory route reached with a real API key: an editor key writes and
+reads, a viewer key reads and is refused every write, a key presented against
+another tenant's inventory gains nothing, a revoked key gains nothing, and a
+caller with no credential is refused on all seven.
+
+All seven passed first time, which is not evidence — probes are. Removing
+`machines: true` from one route turns two tests red; removing the guard's
+tenant confinement turns the trespass test red.
+
+### The second authorization layer is invisible from HTTP, necessarily
+
+Widening a use case's roles to admit a viewer leaves **every** assertion in the
+machine suite green: the guard refuses the key at the edge, so the use case
+never runs. The application-tier suite turns red instead, which is where that
+claim belongs.
+
+Third instance of the same shape — a repository predicate behind a policy,
+`tenantOf` behind the guard, and now this. The rule has held every time:
+**whichever layer answers first hides the other, so each has to be asserted
+where nothing stands in front of it.**
+
+Written into the test rather than left for the next reader to rediscover.
+
+### A missing controller is a missing route, and that fails nothing by itself
+
+Every other route test compares what the application serves against what it
+declares — and a controller left out of its module is absent from both sides.
+`route-inventory.spec.ts` now names the seven inventory routes explicitly, so
+dropping one from the module fails by name. Both probes bite.

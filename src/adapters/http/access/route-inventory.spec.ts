@@ -377,4 +377,32 @@ describe('the route inventory, against the real application', () => {
 
     expect(unconfinable).toEqual([]);
   });
+
+  it('serves the whole inventory surface, every route declaring something', () => {
+    // The feature is wired, not half wired. A controller left out of its module
+    // is a route that simply is not there, and every other test in this file
+    // would still pass — they assert what the application serves, and a missing
+    // route is missing from both sides of the comparison.
+    const inventory = routes
+      .filter((route) => route.path.includes('/inventory'))
+      .map((route) => `${route.method} ${route.path}`);
+
+    expect(inventory.sort()).toEqual([
+      'GET /tenants/:tenantId/inventory/locations',
+      'GET /tenants/:tenantId/inventory/products',
+      'GET /tenants/:tenantId/inventory/stock',
+      'POST /tenants/:tenantId/inventory/movements',
+      'POST /tenants/:tenantId/inventory/movements/batch',
+      'PUT /tenants/:tenantId/inventory/locations/:code',
+      'PUT /tenants/:tenantId/inventory/products/:sku',
+    ]);
+    expect(
+      routes
+        .filter(
+          (route) =>
+            route.path.includes('/inventory') && route.declaration === null,
+        )
+        .map((route) => route.path),
+    ).toEqual([]);
+  });
 });
