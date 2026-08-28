@@ -544,23 +544,24 @@ test would be measuring the machine it runs on.
 | `src/application/inventory/list-locations.use-case.ts` | The places read |
 | `src/application/inventory/record-movements.use-case.ts` | The batch flow; serves both routes |
 | `src/application/inventory/read-stock-on-hand.use-case.ts` | 6.1–6.3 |
-| `src/application/inventory/inventory.use-case.spec.ts` | The application-tier cases above |
+| `src/application/inventory/declare.use-case.spec.ts` | The two declaration cases |
+| `src/application/inventory/record-movements.use-case.spec.ts` | The batch flow |
+| `src/application/inventory/read-stock-on-hand.use-case.spec.ts` | The stock read |
 | `src/adapters/persistence/postgres/schema/inventory-products.ts` | Table |
 | `src/adapters/persistence/postgres/schema/inventory-locations.ts` | Table |
 | `src/adapters/persistence/postgres/schema/stock-movements.ts` | Table, unique `(tenant_id, external_id)` |
-| `src/adapters/persistence/postgres/product.repository.ts` | Drizzle implementation |
-| `src/adapters/persistence/postgres/location.repository.ts` | Drizzle implementation |
-| `src/adapters/persistence/postgres/movement.repository.ts` | `on conflict do nothing … returning`, and the sum |
-| `src/adapters/persistence/in-memory/product.repository.ts` | Test double |
-| `src/adapters/persistence/in-memory/location.repository.ts` | Test double |
-| `src/adapters/persistence/in-memory/movement.repository.ts` | Test double |
+| `src/adapters/persistence/postgres/postgres-product.repository.ts` | Drizzle implementation |
+| `src/adapters/persistence/postgres/postgres-location.repository.ts` | Drizzle implementation |
+| `src/adapters/persistence/postgres/postgres-movement.repository.ts` | `on conflict do nothing … returning`, and the sum |
+| `src/adapters/persistence/in-memory/in-memory-inventory-store.ts` | The three test doubles over one store |
 | `src/adapters/http/inventory-products.controller.ts` | Two routes |
 | `src/adapters/http/inventory-locations.controller.ts` | Two routes |
 | `src/adapters/http/inventory-movements.controller.ts` | Single and batch |
 | `src/adapters/http/inventory-stock.controller.ts` | One route |
 | `src/adapters/http/dto/inventory-catalogue.dto.ts` | Product and location payload shapes |
 | `src/adapters/http/dto/inventory-movements.dto.ts` | Movement payloads, including the 500-row array limit |
-| `src/adapters/http/inventory-throttling.ts` | `InventoryThrottlerGuard` |
+| `src/adapters/http/inventory-throttling.ts` | `InventoryThrottlerGuard`, its buckets and its allowance |
+| `src/adapters/http/inventory-throttling.spec.ts` | The allowance as a size — requirement 8.5 |
 | `src/inventory.module.ts` | Binds these ports to these adapters |
 | `drizzle/0012_inventory_schema.sql` | Tables, indexes, constraints |
 | `drizzle/0013_inventory_roles_and_rls.sql` | `ENABLE` + `FORCE`, policies, grants without `DELETE` |
@@ -578,9 +579,16 @@ test would be measuring the machine it runs on.
 | `src/adapters/persistence/postgres/tenant-scoped-unit-of-work.ts` | Construct the three new repositories inside the transaction |
 | `src/adapters/persistence/in-memory/*unit-of-work*` | The same, for tests |
 | `src/adapters/persistence/postgres/schema/index.ts` | Export the three tables |
-| `src/adapters/http/throttling.config.ts` | Add the inventory allowance |
 | `src/app.module.ts` | Import `InventoryModule` |
 | `src/adapters/http/access/route-inventory.spec.ts` | The new routes appear in the declared-route inventory |
+
+The paths above were corrected at feature validation to the names actually
+built: the repository files carry the `postgres-` prefix the rest of the
+persistence adapter uses, the three in-memory doubles share one store file, the
+application-tier specs split by use case, and the inventory allowance lives in
+`inventory-throttling.ts` rather than in the shared `throttling.config.ts`. All
+four follow conventions already in the repository; the plan was written before
+those files were looked at.
 
 The one shared file with a real chance of conflict is
 `tenant-scoped-unit-of-work.ts`, on both sides. It is a three-line addition and
@@ -624,7 +632,7 @@ appending to one spec file are not parallel however unrelated their assertions.
 | 8.1, 8.2 | `InventoryThrottlerGuard` |
 | 8.3 | the guard refuses before the controller |
 | 8.4 | keyed on the credential |
-| 8.5 | 60 requests × 500 rows |
+| 8.5 | 60 requests × 500 rows, asserted in `inventory-throttling.spec.ts` |
 | 9.1, 9.2 | `RejectionReason`, a closed union |
 | 9.3 | reasons name rules, never records |
 
