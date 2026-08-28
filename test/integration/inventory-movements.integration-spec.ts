@@ -9,31 +9,15 @@ import {
   sku,
 } from '../../src/domain/inventory/identifiers';
 import type { SubmittedMovement } from '../../src/domain/inventory/movement';
-import { asPersonInTenant, runtimePool, seed } from './support/database';
+import {
+  asPersonInTenant,
+  runtimePool,
+  seed,
+  waitForABlockedStatement,
+} from './support/database';
 import { seedTenant, useIntegrationDatabase } from './support/fixtures';
 
 const occurredAt = new Date('2026-08-25T10:00:00.000Z');
-
-/**
- * Waits until some statement is waiting on a lock.
- *
- * A fixed delay would make the overlap a guess about how fast this machine is.
- * Asking the database whether anything is blocked makes it a fact.
- */
-async function waitForABlockedStatement(): Promise<void> {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    const blocked = await seed(async (client) => {
-      const result = await client.query<{ blocked: number }>(
-        `SELECT count(*)::int AS blocked FROM pg_stat_activity
-          WHERE wait_event_type = 'Lock'`,
-      );
-      return result.rows[0]?.blocked ?? 0;
-    });
-    if (blocked > 0) return;
-    await new Promise((resume) => setTimeout(resume, 10));
-  }
-  throw new Error('no statement ever blocked; the overlap did not happen');
-}
 
 function movement(
   externalId: string,

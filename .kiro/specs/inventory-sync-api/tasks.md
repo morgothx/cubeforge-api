@@ -303,7 +303,7 @@ assertions are.
   - _Depends: 5.5_
   - _Boundary: Integration suite_
 
-- [ ] 6.2 (P) Show that one tenant cannot perceive another
+- [x] 6.2 (P) Show that one tenant cannot perceive another
   - Two tenants holding the same SKU see only their own products and movements
   - Referencing another tenant's product answers **exactly** as referencing one
     that exists nowhere — asserted by comparing the two responses to each other
@@ -316,7 +316,7 @@ assertions are.
   - _Depends: 5.5_
   - _Boundary: Integration suite_
 
-- [ ] 6.3 (P) Submit the same batch twice at the same time
+- [x] 6.3 (P) Submit the same batch twice at the same time
   - Two concurrent submissions of one batch record each movement exactly once
   - This is the test that fails under a read-then-write implementation and
     passes under the constraint, which is the whole reason 4.1 is written the
@@ -327,7 +327,7 @@ assertions are.
   - _Depends: 5.5_
   - _Boundary: Integration suite_
 
-- [ ] 6.4 (P) Show the history cannot be rewritten
+- [x] 6.4 (P) Show the history cannot be rewritten
   - The application identity is refused an update and a delete on movements, and
     a delete on both reference tables, by the database rather than by the code
   - A mistake corrected by an offsetting movement leaves both movements present
@@ -826,3 +826,70 @@ Every other route test compares what the application serves against what it
 declares — and a controller left out of its module is absent from both sides.
 `route-inventory.spec.ts` now names the seven inventory routes explicitly, so
 dropping one from the module fails by name. Both probes bite.
+
+### 6.2 A defence in depth cannot be probed one layer at a time
+
+Removing the tenant predicate from `stockOnHand` breaks nothing: the row-level
+security policy answers. Disabling row-level security on `stock_movements`
+breaks nothing either: the predicate answers. Removing **both** fails the
+cross-tenant total. So this suite guards the pair rather than either half —
+which is what defence in depth is, and is why each layer is *also* asserted
+where nothing stands in front of it: the predicate in the repository suite, the
+policy in `inventory-schema`.
+
+The probes that did bite here: an `on conflict` target without `tenant_id`
+(three tests, including 7.6 by name), and a rejection reason carrying the SKU
+it rejected — the leak-shaped change 7.5 exists to forbid.
+
+### 6.2 A disclosure test must compare the two answers, not describe them
+
+`unknown-sku` for another tenant's SKU and `unknown-sku` for one that exists
+nowhere are asserted equal **to each other**, with only the external identifier
+blanked. An assertion against a literal string stays green when both answers
+change together; this one is the property, and it fails the moment the two
+paths diverge — which is exactly the shape a disclosure would take.
+
+### 6.3 Supertest sends nothing until somebody subscribes
+
+`inFlight = submit(batch)` dispatches no request: supertest's `Test` is a
+thenable that fires on `.then`. The first version of the overlap test therefore
+held a transaction open against a request that had never been sent, and no
+statement ever blocked.
+
+It said so, loudly, because the wait is a wait rather than a delay — a fixed
+`setTimeout` would have "overlapped" nothing and passed. `waitForABlockedStatement`
+moved to `support/database.ts` so both concurrency tests share the one that
+fails when the overlap stops happening.
+
+### 6.3 Dropping the constraint fails all three, as the design claimed
+
+With `stock_movements_tenant_external_unique` dropped, every test in the replay
+suite fails. That is the evidence for the whole shape of `record`: one
+statement observing a constraint, rather than a read followed by a write.
+
+### 6.4 The missing grant hides the missing policy
+
+`REVOKE`-and-no-policy is two protections, and the grant is the one that speaks:
+restoring `GRANT UPDATE` alone makes the schema suite's `permission denied`
+disappear — and the update then affects **zero rows without raising anything**,
+because no policy makes a row visible to update. A test asserting only the error
+message would have reported the protection gone when it was merely quieter.
+
+So the policies are asserted directly, from `pg_policies`, where the grant is
+not in front of them; and the grants are asserted as a **set** (`INSERT`,
+`SELECT`) rather than as two absences, so a third privilege has to be argued for
+here rather than merely not tested. Fourth instance of the rule.
+
+### 6.4 Four supertest requests built at once do not agree on a port
+
+Collecting `request(server()).delete(...)` calls into an array before awaiting
+any of them binds the unlistened server four times and the later ones connect
+to a port that is gone (`ECONNREFUSED`). Built one at a time inside the loop.
+
+### Unrelated flake, found by the suite getting longer
+
+`the inventory allowance › leaves signing in alone` spends a sixty-request
+allowance and then pays for an Argon2 hash on a rejected sign-in. It sat just
+under Jest's five-second default and went over it once three more suites ran
+before it. Given the time it honestly needs rather than made faster: what it
+measures is real work.

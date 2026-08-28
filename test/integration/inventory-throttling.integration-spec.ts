@@ -137,5 +137,10 @@ describe('the inventory allowance', () => {
       .send({ email: 'nobody@example.com', password: 'wrong-but-well-formed' });
 
     expect(signIn.status).not.toBe(429);
-  });
+    // Longer than the default. Spending a whole allowance is sixty requests,
+    // and a rejected sign-in deliberately costs an Argon2 hash so that a
+    // missing account is not faster than a present one. Together they sit just
+    // under five seconds on a quiet machine and just over it on a busy one,
+    // which is a flake rather than a finding.
+  }, 20_000);
 });

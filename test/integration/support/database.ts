@@ -193,6 +193,30 @@ export async function seed<T>(
 }
 
 /**
+ * Waits until some statement is actually blocked on a lock.
+ *
+ * A concurrency test that starts two things and trusts the scheduler is not a
+ * concurrency test: the first can finish entirely before the second begins, and
+ * then the wrong implementation passes. This waits for the overlap to be
+ * observable in `pg_stat_activity` and fails loudly if it never happens, so a
+ * test that stopped overlapping says so rather than quietly becoming sequential.
+ */
+export async function waitForABlockedStatement(): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const blocked = await seed(async (client) => {
+      const result = await client.query<{ blocked: number }>(
+        `SELECT count(*)::int AS blocked FROM pg_stat_activity
+          WHERE wait_event_type = 'Lock'`,
+      );
+      return result.rows[0]?.blocked ?? 0;
+    });
+    if (blocked > 0) return;
+    await new Promise((resume) => setTimeout(resume, 10));
+  }
+  throw new Error('no statement ever blocked; the overlap did not happen');
+}
+
+/**
  * Returns the database to an empty state. `TRUNCATE` is not filtered by
  * row-level security, so this removes every tenant's rows rather than only
  * those some policy would have revealed.
