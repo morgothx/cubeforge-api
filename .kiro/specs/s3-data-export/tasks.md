@@ -127,7 +127,7 @@ skipped or duplicated, and they are worth being able to test without a database.
 
 ## 4. Reading and writing for real
 
-- [ ] 4.1 (P) Read the horizon, and the movements below it
+- [x] 4.1 (P) Read the horizon, and the movements below it
   - The horizon is the transaction identifier below which nothing is still in
     flight; movements are read as a half-open window against it
   - Done when a movement inserted by a transaction that is still open is absent
@@ -136,7 +136,7 @@ skipped or duplicated, and they are worth being able to test without a database.
   - _Requirements: 2.1, 2.5, 2.6, 2.7_
   - _Boundary: PostgreSQL adapters_
 
-- [ ] 4.2 (P) Keep each tenant's position, in two phases
+- [x] 4.2 (P) Keep each tenant's position, in two phases
   - The target of a run is recorded before anything is written and confirmed
     after; a run that dies leaves the window recorded rather than lost
   - Done when a cursor left part-way through is read back as exactly the window
@@ -145,7 +145,7 @@ skipped or duplicated, and they are worth being able to test without a database.
   - _Requirements: 2.2, 6.3_
   - _Boundary: PostgreSQL adapters_
 
-- [ ] 4.3 (P) Turn rows into a columnar object and put it where it belongs
+- [x] 4.3 (P) Turn rows into a columnar object and put it where it belongs
   - Encode rows with their types intact, and put the object under the given key
   - Answer, before a run touches a tenant, whether the destination exists and
     the credentials are accepted
@@ -445,3 +445,37 @@ An interface has no implicit index signature, so it cannot be handed to an
 encoder that takes a record of columns without a cast — and that cast is the
 kind that stays right until somebody adds a field. Written as type aliases, the
 assignment is checked.
+
+### 4.1 The horizon, proven where it is decided
+
+The experiment from `research.md` §1 is now a test: one transaction inserts and
+is held open while a second inserts and commits, taking a higher identifier but
+committing first. Neither is carried — the visible one is above the horizon
+*because* the invisible one is below it and still open — and after the first
+commits, both are carried, each exactly once.
+
+Replacing the horizon with `max(recorded_xid) + 1` fails both of those tests and
+nothing else, which is exactly the shape of a silent data loss: eight tests stay
+green while movements disappear.
+
+### 4.3 "A moment is a moment" needs saying as "not text"
+
+The first version parsed `occurred_at` and compared the instant. That passes
+when the column is written as a **string**, because an ISO string parses back to
+the right moment — so it would have accepted precisely the file this feature
+exists not to write. Asserting `typeof` is not `'string'` first makes the probe
+bite: typing the column as STRING now fails four tests instead of none.
+
+Fourth instance of the rule, and the second in two tasks.
+
+### 4.3 `forcePathStyle` is not optional against the emulator
+
+The emulator addresses buckets by path; a virtual-host style request resolves to
+nothing at all. It is set in the one place that constructs the client.
+
+### 4.2 An unnecessary cast was removed by the linter, correctly
+
+`file.rows as readonly ColumnarRow[]` was written defensively and `--fix`
+deleted it: `ExportedRow` is already assignable, because the row shapes are type
+aliases rather than interfaces (see 3.1). The cast would have been the kind that
+stays right until somebody adds a field.
