@@ -27,6 +27,10 @@ import type { LocationAttributes } from '../../../application/ports/location.rep
 import type { LocationCode, Sku } from '../../../domain/inventory/identifiers';
 import type { InMemoryApiKeyStore } from './in-memory-api-key-store';
 import {
+  InMemoryExportCursorRepository,
+  InMemoryMovementExportRepository,
+} from './in-memory-export-store';
+import {
   InMemoryInventoryStore,
   InMemoryMovementRepository,
   InMemoryReferenceRepository,
@@ -77,6 +81,14 @@ export class InMemoryTenantScopedUnitOfWork implements TenantScopedUnitOfWork {
           LocationAttributes
         >(this.inventory.locations, tenantId, () => new Date()),
         movements: new InMemoryMovementRepository(this.inventory, tenantId),
+        movementExport: new InMemoryMovementExportRepository(
+          this.inventory,
+          tenantId,
+        ),
+        exportCursors: new InMemoryExportCursorRepository(
+          this.inventory,
+          tenantId,
+        ),
       });
     } catch (error) {
       // Both stores, or a use case that rejects after writing inventory would

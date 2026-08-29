@@ -156,7 +156,7 @@ skipped or duplicated, and they are worth being able to test without a database.
   - _Requirements: 4.6, 4.7, 8.2_
   - _Boundary: Storage adapters_
 
-- [ ] 4.4 Widen the tenant-scoped seam to carry the export
+- [x] 4.4 Widen the tenant-scoped seam to carry the export
   - The two new repositories join the ones the seam hands out, in **both** the
     real construction path and the in-memory one, in one change
   - A port cannot be widened in halves: adding a member makes every
@@ -479,3 +479,21 @@ nothing at all. It is set in the one place that constructs the client.
 deleted it: `ExportedRow` is already assignable, because the row shapes are type
 aliases rather than interfaces (see 3.1). The cast would have been the kind that
 stays right until somebody adds a field.
+
+### 4.4 The seam widened in one change, and the rollback came free
+
+Port and both construction paths in a single edit, as 3.2 established it has to
+be. What was worth asserting beyond "the repositories are handed out" is that
+the seam opens **one** transaction: a run that moves the cursor and then dies
+leaves the cursor where it was, because the same rollback that discards its
+writes discards the cursor move.
+
+That makes "the cursor moved but the objects did not" a state the database
+cannot hold — for anything inside the transaction. Objects in storage are
+outside it, which is exactly why the cursor is two-phase: the part that cannot
+be rolled back is the part the replay handles.
+
+Two probes: removing the export repositories from the real seam fails two tests,
+and removing `set_config('app.current_tenant')` fails all four — the second is
+the one that matters, because it shows the isolation here is the policy's and
+not a predicate this feature wrote for itself.

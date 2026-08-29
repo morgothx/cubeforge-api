@@ -1,5 +1,7 @@
 import type { TenantId } from '../../domain/identifiers';
 import type { ApiKeyRepository } from './api-key.repository';
+import type { ExportCursorRepository } from './export-cursor.repository';
+import type { MovementExportRepository } from './movement-export.repository';
 import type { LocationRepository } from './location.repository';
 import type { MovementRepository } from './movement.repository';
 import type { MembershipRepository } from './membership.repository';
@@ -29,6 +31,20 @@ export interface TenantScopedRepositories {
   readonly products: ProductRepository;
   readonly locations: LocationRepository;
   readonly movements: MovementRepository;
+
+  /**
+   * Reading the movement stream for export, and remembering how far it has been
+   * read.
+   *
+   * Here rather than behind a seam of their own, for the reason the comments
+   * above give: one construction path that cannot skip the tenant is worth
+   * exactly as much as the number of ways around it. An export that reached the
+   * database by any other route would be the first reader on this platform not
+   * covered by row-level security — and it reads history, which is the last
+   * thing that should be the exception.
+   */
+  readonly movementExport: MovementExportRepository;
+  readonly exportCursors: ExportCursorRepository;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { drizzle } from 'drizzle-orm/node-postgres';
+import { PostgresTenantScopedUnitOfWork } from '../../src/adapters/persistence/postgres/postgres-tenant-scoped-unit-of-work';
 import { PostgresExportCursorRepository } from '../../src/adapters/persistence/postgres/postgres-export-cursor.repository';
 import { PostgresMovementExportRepository } from '../../src/adapters/persistence/postgres/postgres-movement-export.repository';
 import type { Transaction } from '../../src/adapters/persistence/postgres/postgres-tenant-scoped-unit-of-work';
@@ -306,5 +307,115 @@ describe('the export adapters, against PostgreSQL', () => {
         readingAs(mine, ({ cursors }) => cursors.read('movements')),
       ).resolves.toEqual({ state: 'never-carried' });
     });
+  });
+});
+
+/**
+ * The seam, carrying the export.
+ *
+ * The point of asserting this separately: an export that reached the database
+ * by any other route would be the first reader on this platform not covered by
+ * row-level security. Reading through `runInTenant` is what makes the isolation
+ * inherited rather than re-argued, and the only way to be sure it is inherited
+ * is to read a second tenant's rows through it and get nothing.
+ */
+describe('the export through the tenant-scoped seam', () => {
+  useIntegrationDatabase();
+
+  async function tenantWithMovement(externalId: string): Promise<TenantId> {
+    const { id } = await seedTenant();
+    await seed(async (client) => {
+      await client.query(
+        `INSERT INTO inventory_products (id, tenant_id, sku, name)
+         VALUES (gen_random_uuid(), $1, 'ACME-001', 'A widget')`,
+        [id],
+      );
+      await client.query(
+        `INSERT INTO inventory_locations (id, tenant_id, code, name)
+         VALUES (gen_random_uuid(), $1, 'WH-1', 'Main warehouse')`,
+        [id],
+      );
+    });
+    const tenant = tenantId(id);
+    await asPersonInTenant(tenant, (client) =>
+      client.query(
+        `INSERT INTO stock_movements
+           (id, tenant_id, external_id, sku, location_code, kind, quantity, occurred_at)
+         VALUES ($1, $2, $3, 'ACME-001', 'WH-1', 'receipt', 5, now())`,
+        [randomUUID(), tenant, externalId],
+      ),
+    );
+    return tenant;
+  }
+
+  const seamFor = (): PostgresTenantScopedUnitOfWork =>
+    new PostgresTenantScopedUnitOfWork(drizzle(runtimePool('app')));
+
+  it('hands out the export repositories inside the transaction', async () => {
+    const tenant = await tenantWithMovement('ERP-1');
+
+    const rows = await seamFor().runInTenant(tenant, async (repositories) => {
+      const horizon = await repositories.movementExport.horizon();
+      return repositories.movementExport.inWindow(
+        windowFrom(transactionId(1n), horizon),
+      );
+    });
+
+    expect(rows.map((row) => row.external_id)).toEqual(['ERP-1']);
+  });
+
+  it('shows the export nothing of another tenant, by policy', async () => {
+    const mine = await tenantWithMovement('ERP-MINE');
+    await tenantWithMovement('ERP-THEIRS');
+
+    const rows = await seamFor().runInTenant(mine, async (repositories) => {
+      const horizon = await repositories.movementExport.horizon();
+      return repositories.movementExport.inWindow(
+        windowFrom(transactionId(1n), horizon),
+      );
+    });
+
+    // Row-level security is what answers here: the export asked for a window,
+    // not for a tenant, and the policy decided which rows the window could
+    // possibly contain.
+    expect(rows.map((row) => row.external_id)).toEqual(['ERP-MINE']);
+  });
+
+  it('carries the cursor through the same seam', async () => {
+    const tenant = await tenantWithMovement('ERP-1');
+
+    await seamFor().runInTenant(tenant, (repositories) =>
+      repositories.exportCursors.finish('movements', transactionId(400n)),
+    );
+
+    await expect(
+      seamFor().runInTenant(tenant, (repositories) =>
+        repositories.exportCursors.read('movements'),
+      ),
+    ).resolves.toEqual({ state: 'carried', through: 400n });
+  });
+
+  it('rolls the cursor back with everything else when the work fails', async () => {
+    // The seam opens one transaction. A run that dies after moving the cursor
+    // and before finishing its writes must leave neither behind, and this is
+    // the property that makes "the cursor moved but the objects did not" a
+    // state the database cannot hold.
+    const tenant = await tenantWithMovement('ERP-1');
+
+    await expect(
+      seamFor().runInTenant(tenant, async (repositories) => {
+        await repositories.exportCursors.finish(
+          'movements',
+          transactionId(400n),
+        );
+        throw new Error('the run died here');
+      }),
+    ).rejects.toThrow('the run died here');
+
+    await expect(
+      seamFor().runInTenant(tenant, (repositories) =>
+        repositories.exportCursors.read('movements'),
+      ),
+    ).resolves.toEqual({ state: 'never-carried' });
   });
 });

@@ -9,6 +9,8 @@ import { APP_DATABASE, type Database } from './drizzle.module';
 import { PostgresApiKeyRepository } from './postgres-api-key.repository';
 import { PostgresLocationRepository } from './postgres-location.repository';
 import { PostgresMembershipRepository } from './postgres-membership.repository';
+import { PostgresExportCursorRepository } from './postgres-export-cursor.repository';
+import { PostgresMovementExportRepository } from './postgres-movement-export.repository';
 import { PostgresMovementRepository } from './postgres-movement.repository';
 import { PostgresPersonRepository } from './postgres-person.repository';
 import { PostgresProductRepository } from './postgres-product.repository';
@@ -66,5 +68,7 @@ export function repositoriesFor(
     products: new PostgresProductRepository(tx, tenantId),
     locations: new PostgresLocationRepository(tx, tenantId),
     movements: new PostgresMovementRepository(tx, tenantId),
+    movementExport: new PostgresMovementExportRepository(tx, tenantId),
+    exportCursors: new PostgresExportCursorRepository(tx, tenantId),
   };
 }
