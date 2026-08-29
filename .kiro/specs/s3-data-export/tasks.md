@@ -204,7 +204,7 @@ skipped or duplicated, and they are worth being able to test without a database.
 
 ## 6. Wiring
 
-- [ ] 6.1 Give the operator a command, and the application a module
+- [x] 6.1 Give the operator a command, and the application a module
   - Bind the ports to the adapters; import the feature into the application
   - A command that runs a full export, or one named tenant, with no interactive
     input, and exits reporting success only if every tenant was carried
@@ -558,4 +558,56 @@ from between the classified steps, which would be a defect in the export rather
 than in anything it talked to. It is reported rather than rethrown because one
 tenant's failure — including that kind — must not cost every other tenant its
 run.
+
+### 6.1 Running the command found what every double had hidden
+
+The first real run said `carried 0 movements into 0 partitions` for a tenant
+with nothing new — never `up to date`, which is what requirement 5.7 asks for.
+The horizon is the **database's**, not a tenant's: every transaction on the
+platform moves it, the export's own cursor writes included. So a tenant with
+nothing new almost always gets a real window that happens to contain none of its
+movements, and against a live platform no tenant would ever have been reported
+up to date at all.
+
+The in-memory double could not show it, because its horizon only advances when a
+movement is recorded. The fix is to decide emptiness from the rows rather than
+from the cursor, and the test that now holds it is a *second* tenant recording
+something — which is the smallest arrangement in which the double behaves like
+the database.
+
+This is the third form of the same lesson: a double looser than the thing it
+stands for hides exactly the bug it exists to catch. The first two were in this
+feature too — identifiers no `uuid` column would accept, and cursors that did
+not roll back.
+
+### 6.1 The module the API does not import
+
+The design's file plan said `AppModule` imports `ExportModule`. It does not, and
+the decision it came from already pointed that way: the requirements rejected a
+cron inside the API process, so what a scheduler will call is the command rather
+than a route. An API that imported this would refuse to start whenever the
+export's destination was unconfigured, for a capability it never uses. The
+command boots `ExportModule` directly; the design was corrected rather than the
+code bent to match it.
+
+### 6.1 The argument the package manager adds
+
+`pnpm ops:export -- --tenant X` hands the separator through, so the script's
+first argument is a bare `--`. It is dropped, and that is not leniency about
+arguments — everything else is still refused rather than ignored, because an
+operator who mistyped `--tenant` would otherwise export every tenant on the
+platform and be told it went well.
+
+### Outside this task's boundary, and said out loud
+
+**CI cannot pass as it stands, and has not since task 4.3.**
+`.github/workflows/ci.yml` runs no Floci service and sets none of the AWS or
+`EXPORT_BUCKET` variables, and its comment still claims "no test in this
+repository touches either". Two integration suites now do —
+`export-sink` and `export-command` — and both read the configuration at module
+load, so they fail before their first assertion. The workflow needs a Floci
+service, the four AWS variables and a bucket created before
+`pnpm test:integration`. Not folded into this task: it is a change to the gate
+itself, and a gate quietly repaired by the change it was meant to judge is worth
+nothing.
 

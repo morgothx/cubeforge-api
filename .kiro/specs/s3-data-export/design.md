@@ -186,7 +186,8 @@ identical to the failed attempt's (2.3, 6.6).
 | `src/adapters/persistence/postgres/schema/xid8.ts` | Drizzle has no `xid8`; this names it once |
 | `src/adapters/persistence/postgres/schema/export-cursors.ts` | Table |
 | `test/integration/export-schema.integration-spec.ts` | What the two migrations guarantee, against a real database |
-| `scripts/export.ts` | `pnpm ops:export`, argument handling, exit status |
+| `src/adapters/cli/export-command.ts` | Argument handling, the report's lines, the exit status |
+| `scripts/export.ts` | `pnpm ops:export` — boots `ExportModule` and runs it |
 | `test/integration/export-cursor.integration-spec.ts` | The horizon against a held-open transaction |
 | `test/integration/export-objects.integration-spec.ts` | Real objects in the emulator, read back with an independent reader |
 | `test/integration/export-run.integration-spec.ts` | A whole run: many tenants, one failing |
@@ -201,10 +202,17 @@ identical to the failed attempt's (2.3, 6.6).
 | `src/adapters/persistence/in-memory/in-memory-tenant-scoped-unit-of-work.ts` | The same, for tests |
 | `src/adapters/persistence/postgres/schema/stock-movements.ts` | The `recorded_xid` column |
 | `src/adapters/persistence/postgres/schema/index.ts` | Export the new table |
-| `src/app.module.ts` | Import `ExportModule` |
 | `package.json` | `ops:export` script; `hyparquet-writer`, `hyparquet`, `@aws-sdk/client-s3` |
 | `.env.example` | The destination bucket |
 | `.kiro/specs/inventory-sync-api/tasks.md` | Note that a revalidation trigger fired |
+
+**`AppModule` does not import `ExportModule`, and this table used to say it
+should.** The decision the requirements already took points the other way: the
+schedule belongs to the deployment feature, and a cron inside the API process
+was rejected because it cannot be exercised end to end. So what a scheduler will
+call is the command, not a route — and an API importing the export would refuse
+to start whenever the export's destination was unconfigured, for a capability it
+never uses. The command boots `ExportModule` directly.
 
 The migrations are numbered in the order they land: the movement column first,
 because the cursor table is meaningless without something to compare against.

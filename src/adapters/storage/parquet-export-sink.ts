@@ -84,4 +84,13 @@ export class ParquetExportSink implements ExportSink {
     this.client.destroy();
     return Promise.resolve();
   }
+
+  /**
+   * The same thing, under the name Nest calls when its context closes. Without
+   * it the command's process would sit with open sockets after the run it was
+   * started for has finished.
+   */
+  onModuleDestroy(): Promise<void> {
+    return this.close();
+  }
 }

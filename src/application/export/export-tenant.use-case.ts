@@ -103,8 +103,23 @@ export class ExportTenantUseCase {
     if (window === null) {
       return { status: 'up-to-date' };
     }
-
     await this.confirm(tenantId, window);
+
+    // **Carrying nothing is being up to date, and the emptiness has to be
+    // decided from the rows rather than from the cursor.** The horizon is the
+    // *database's*, not this tenant's: every transaction on the platform moves
+    // it, the export's own cursor writes included. So a tenant with nothing new
+    // almost always gets a real window that happens to contain none of its
+    // movements, and reporting that as "carried 0 movements" would mean no run
+    // against a live platform ever reports a tenant up to date at all.
+    //
+    // The point reached still moves. Nothing was written because there was
+    // nothing to write, and leaving the cursor behind would make every later
+    // run re-derive a window over movements it has already read.
+    if (readings.movements.length === 0) {
+      return { status: 'up-to-date' };
+    }
+
     return {
       status: 'carried',
       movements: readings.movements.length,

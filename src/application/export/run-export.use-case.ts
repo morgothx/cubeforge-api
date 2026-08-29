@@ -27,6 +27,16 @@ export interface RunExportCommand {
    * no caller's benefit.
    */
   readonly correlationId: string;
+
+  /**
+   * One tenant instead of all of them.
+   *
+   * Here rather than left to the entry point to filter, because listing tenants
+   * is something only the operator's unit of work can do — an entry point that
+   * wanted to narrow the run would have to obtain that list for itself, which
+   * is a second way to reach the platform's tenants for no gain.
+   */
+  readonly onlyTenant?: TenantId;
 }
 
 export interface ExportRun {
@@ -56,12 +66,28 @@ export class RunExportUseCase {
       ),
     );
 
+    const active = tenants.filter(isTenantActive);
+
+    // An operator who named a tenant that is not there to export has mistyped
+    // something. Silence would be worse than an error: a run reporting no
+    // tenants at all reads exactly like a run with nothing to do.
+    if (command.onlyTenant !== undefined) {
+      const named = command.onlyTenant;
+      if (!active.some((tenant) => tenant.id === named)) {
+        throw new Error(`no active tenant to export: ${named}`);
+      }
+    }
+
     const outcomes: TenantOutcome[] = [];
-    for (const tenant of tenants) {
+    for (const tenant of active) {
       // An inactive tenant keeps what it has already been given and gains
       // nothing further, so it is not an outcome at all rather than an outcome
-      // saying nothing happened.
-      if (!isTenantActive(tenant)) {
+      // saying nothing happened. A tenant the operator did not name is skipped
+      // for a different reason and reported the same way: not at all.
+      if (
+        command.onlyTenant !== undefined &&
+        tenant.id !== command.onlyTenant
+      ) {
         continue;
       }
       // One at a time, deliberately. Each tenant is its own transaction and its

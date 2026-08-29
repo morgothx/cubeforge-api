@@ -28,6 +28,7 @@
     "db:migrate": "drizzle-kit migrate",
     "ops:grant-operator": "node --env-file-if-exists=.env -r ts-node/register scripts/grant-operator.ts",
     "ops:demo-seed": "node --env-file-if-exists=.env -r ts-node/register scripts/demo-seed.ts",
+    "ops:export": "node --env-file-if-exists=.env -r ts-node/register scripts/export.ts",
     "ops:bootstrap-operator": "node --env-file-if-exists=.env -r ts-node/register scripts/bootstrap-operator.ts"
   },
   "dependencies": {

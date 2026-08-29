@@ -155,6 +155,33 @@ describe('exporting one tenant', () => {
     );
   });
 
+  it('reports a tenant up to date when its window turns out to hold nothing', async () => {
+    await recordOn(RECORDED.first);
+    const first = await exportTenant.execute({ tenantId: acme });
+    const written = movementKeys();
+
+    // Another tenant records something. Nothing of Acme's changed, but the
+    // transaction horizon is the *database's*, so Acme's next window is a real
+    // window that happens to contain none of its movements. This is what a run
+    // against a live platform meets every single time.
+    const globex = await context.seedTenant('Globex');
+    await catalogueFor(globex);
+    await recordOn(RECORDED.second, globex);
+
+    const second = await exportTenant.execute({ tenantId: acme });
+
+    expect(second).toEqual({ status: 'up-to-date' });
+    expect(movementKeys()).toEqual(written);
+    // And the point reached moves anyway: leaving it behind would make every
+    // later run re-derive a window over movements it has already read.
+    await expect(cursorOf()).resolves.not.toEqual(
+      expect.objectContaining({
+        through: first.status === 'carried' ? first.through : undefined,
+      }),
+    );
+    await expect(cursorOf()).resolves.toMatchObject({ state: 'carried' });
+  });
+
   it('partitions by the day a movement was recorded, not the day it occurred', async () => {
     await recordOn(RECORDED.second, acme, { occurredAt: OCCURRED });
 

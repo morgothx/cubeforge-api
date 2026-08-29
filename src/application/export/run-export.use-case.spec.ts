@@ -164,6 +164,36 @@ describe('running an export over every tenant', () => {
     }
   });
 
+  it('exports only the tenant an operator names', async () => {
+    const [, named] = tenants;
+
+    const run = await runExport.execute({
+      correlationId: RUN,
+      onlyTenant: named,
+    });
+
+    expect(run.report.outcomes.map((outcome) => outcome.tenantId)).toEqual([
+      named,
+    ]);
+    for (const other of tenants.filter((id) => id !== named)) {
+      await expect(cursorOf(other)).resolves.toEqual({
+        state: 'never-carried',
+      });
+    }
+  });
+
+  it('refuses a named tenant that is not there to export', async () => {
+    const [, retired] = tenants;
+    await deactivate(retired);
+
+    // Silence would be worse than an error: an operator who mistyped an
+    // identifier would read "0 tenants exported" as a successful run.
+    await expect(
+      runExport.execute({ correlationId: RUN, onlyTenant: retired }),
+    ).rejects.toThrow(retired);
+    expect(sink.keys()).toEqual([]);
+  });
+
   it('carries one correlation identifier through what it reports', async () => {
     const run = await runExport.execute({ correlationId: RUN });
 
