@@ -219,7 +219,7 @@ skipped or duplicated, and they are worth being able to test without a database.
 Each writes its own spec file. Four tasks appending to one file are not parallel
 however unrelated their assertions are.
 
-- [ ] 7.1 (P) Show that a concurrent insert is never skipped
+- [x] 7.1 (P) Show that a concurrent insert is never skipped
   - Hold a transaction open having inserted a movement; let a second movement be
     recorded and committed while it is held; run an export
   - The second movement must **not** be carried yet, and after the first commits
@@ -610,4 +610,28 @@ service, the four AWS variables and a bucket created before
 `pnpm test:integration`. Not folded into this task: it is a change to the gate
 itself, and a gate quietly repaired by the change it was meant to judge is worth
 nothing.
+
+### 7.1 The design is no longer a claim
+
+`export-concurrency.integration-spec.ts` inserts EARLIER, holds its transaction
+open, records and commits LATER, and runs the export. Neither is carried — LATER
+sits above the horizon *because* EARLIER is still running, which is the export
+refusing to pass a transaction whose end it cannot see. EARLIER commits; the
+next run carries both, each exactly once.
+
+Replacing `pg_snapshot_xmin(pg_current_snapshot())` with
+`MAX(recorded_xid)` makes the second run report the tenant **up to date**:
+LATER was carried by the first run, the point reached moved past it, and EARLIER
+is below that point for ever. Not late — lost, and silently. That is the failure
+the whole two-phase transaction-id cursor exists to prevent, and it is now a red
+test rather than a paragraph in `research.md`.
+
+The first assertion cannot pass vacuously: the same listing that returns nothing
+in the first run returns both movements in the second, so a broken sweep would
+fail the test rather than satisfy it.
+
+One assertion was written and deleted: that the export holds nothing the
+transactional API waits on. It is real and it is requirement 5.6, which task 7.3
+owns — and the version written here leaned on a filler assertion that could not
+fail. Left for the task that says so.
 
