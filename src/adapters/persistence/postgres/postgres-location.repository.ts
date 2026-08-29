@@ -66,7 +66,9 @@ export class PostgresLocationRepository implements LocationRepository {
     return new Set(rows.map((row) => row.code as LocationCode));
   }
 
-  async list(): Promise<readonly ReferenceEntity<LocationCode>[]> {
+  async list(): Promise<
+    readonly (ReferenceEntity<LocationCode> & LocationAttributes)[]
+  > {
     const rows = await this.tx
       .select()
       .from(inventoryLocations)

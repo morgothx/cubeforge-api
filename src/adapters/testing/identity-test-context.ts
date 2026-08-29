@@ -11,6 +11,7 @@ import { createTenant } from '../../domain/tenant/tenant.entity';
 import { InMemoryApiKeyStore } from '../persistence/in-memory/in-memory-api-key-store';
 import { InMemoryCredentialStore } from '../persistence/in-memory/in-memory-credential-store';
 import { InMemoryIdentityStore } from '../persistence/in-memory/in-memory-identity-store';
+import { InMemoryInventoryStore } from '../persistence/in-memory/in-memory-inventory-store';
 import { InMemoryPlatformUnitOfWork } from '../persistence/in-memory/in-memory-platform-unit-of-work';
 import { InMemoryTenantScopedUnitOfWork } from '../persistence/in-memory/in-memory-tenant-scoped-unit-of-work';
 import { FixedClock } from './fixed-clock';
@@ -34,7 +35,15 @@ export function createIdentityTestContext() {
     byId: (id) => store.people.get(id) ?? null,
   });
   const apiKeys = new InMemoryApiKeyStore();
-  const tenantScoped = new InMemoryTenantScopedUnitOfWork(store, apiKeys);
+  // Constructed here rather than left to the unit of work's default, so a test
+  // can reach it: the moment a movement is recorded is the database's to
+  // decide, and the export partitions by exactly that.
+  const inventory = new InMemoryInventoryStore();
+  const tenantScoped = new InMemoryTenantScopedUnitOfWork(
+    store,
+    apiKeys,
+    inventory,
+  );
   const platform = new InMemoryPlatformUnitOfWork(store, credentials);
   const clock = new FixedClock(TEST_MOMENT);
   const identifiers = new SequentialIdentifierGenerator();
@@ -117,6 +126,7 @@ export function createIdentityTestContext() {
     store,
     credentials,
     apiKeys,
+    inventory,
     tenantScoped,
     platform,
     clock,

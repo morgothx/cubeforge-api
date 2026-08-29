@@ -171,7 +171,7 @@ skipped or duplicated, and they are worth being able to test without a database.
 
 ## 5. The work itself
 
-- [ ] 5.1 Carry one tenant
+- [x] 5.1 Carry one tenant
   - Read the cursor; replay its window or take a new horizon; read the
     movements; write one object per day recorded; write the catalogue; confirm
     the cursor
@@ -187,7 +187,7 @@ skipped or duplicated, and they are worth being able to test without a database.
   - _Requirements: 1.2, 1.3, 1.4, 2.1, 2.5, 3.1, 3.2, 3.3, 3.4, 5.7_
   - _Boundary: Export use cases_
 
-- [ ] 5.2 Carry every tenant, past the one that fails
+- [x] 5.2 Carry every tenant, past the one that fails
   - Ask the operator's view of the platform for the active tenants; carry each
     in its own transaction
   - Check the destination once, before the first tenant, so a bad configuration
@@ -497,3 +497,65 @@ Two probes: removing the export repositories from the real seam fails two tests,
 and removing `set_config('app.current_tenant')` fails all four — the second is
 the one that matters, because it shows the isolation here is the policy's and
 not a predicate this feature wrote for itself.
+
+### 5.1 Three transactions per tenant, not one — and 4.4's note was incomplete
+
+Task 4.4 recorded that the seam opens one transaction, so "the cursor moved but
+the objects did not" is a state the database cannot hold. True, and the wrong
+lesson to carry into this task: the state that actually costs a tenant its
+history is the *opposite* one.
+
+If claiming the window shared a transaction with the writing, a failed run would
+roll the claim back. The next run would read a horizon that has moved on, carry
+a wider window, and name its objects after it — leaving the half-written day's
+file beside a second copy of every movement in it. The objects are not in the
+transaction, so the one thing that has to survive a rollback is the record of
+what was attempted.
+
+So the claim commits, the objects are written with no transaction open, and the
+confirmation commits after. Writing the objects inside a transaction would also
+have been an export holding a database transaction open for the length of an
+upload, which is the one thing requirement 5.6 asks it not to do.
+
+### 5.1 The catalogue could not be exported through the port as it stood
+
+`ReferenceRepository.list()` returned `code`, `name` and two timestamps, and
+dropped the attributes — so `category` was unreachable, and requirement 1.4 and
+the `category` column decided in task 2.2 were unsatisfiable. Widened to
+`ReferenceEntity<Code> & Attributes`, in one change across the port, both
+PostgreSQL adapters and the double, for the reason this feature already learned
+once: a port cannot be widened in halves. Nothing downstream changed — the
+intersection is still assignable to `ReferenceEntity`, so the listing use cases
+and the HTTP layer did not move.
+
+### 5.1 A double that handed out identifiers no column would accept
+
+Every export test failed on `tenantSegment` refusing `tenant-1`. The check is
+right — a tenant identifier becomes a path segment, and one carrying a `/` would
+write outside its own prefix — and `SequentialIdentifierGenerator` was the
+looser one: the real identifiers live in `uuid` columns and could never have
+looked like that. It now hands out well-formed UUIDs, with the kind in the first
+group and the count in the last so a failing assertion still says what it was
+looking at. Nothing else in the suite depended on the old shape.
+
+Two smaller instances of the same thing, both in `InMemoryInventoryStore`: the
+export cursors now roll back with the rest of a discarded transaction, as rows
+in PostgreSQL do, and the moment a movement is recorded is movable, because
+`new Date()` can only ever produce today and the export partitions by exactly
+that day.
+
+### 5.2 A failure's class is decided where it happens
+
+`ExportFailed` is raised at the step that failed, not sorted out afterwards by
+reading an error message — matching on a driver's wording is how a rephrased
+library message silently turns every failure into the wrong kind. The original
+error travels as `cause` and stays out of the message, because a run's report is
+read by an operator acting for the whole platform and a driver's message can
+carry a row or a key in it.
+
+`reasonOf` has a fallback, and it covers exactly one thing: an error escaping
+from between the classified steps, which would be a defect in the export rather
+than in anything it talked to. It is reported rather than rethrown because one
+tenant's failure — including that kind — must not cost every other tenant its
+run.
+

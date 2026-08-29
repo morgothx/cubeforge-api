@@ -40,7 +40,16 @@ export interface ReferenceRepository<Code extends string, Attributes> {
    */
   declared(codes: readonly Code[]): Promise<ReadonlySet<Code>>;
 
-  list(): Promise<readonly ReferenceEntity<Code>[]>;
+  /**
+   * Every declared entity, with the attributes it was declared with.
+   *
+   * The attributes are part of the answer rather than dropped, because a
+   * catalogue that carries only a code and a name cannot label a chart by
+   * anything else — and `category` exists for exactly that. A caller wanting
+   * only the shared shape still gets it: the intersection is assignable to
+   * `ReferenceEntity` on its own.
+   */
+  list(): Promise<readonly (ReferenceEntity<Code> & Attributes)[]>;
 
   /**
    * There is no `delete`, here or in either implementation. Movements already

@@ -70,6 +70,16 @@ export class InMemoryInventoryStore {
     { carriedThrough?: bigint; startedWindow?: { from: bigint; to: bigint } }
   >();
 
+  /**
+   * What the database would stamp on the next recording.
+   *
+   * Movable, because the day a movement was *recorded* is the partition the
+   * export writes it into, and `new Date()` can only ever produce today. A test
+   * that cannot place movements on two days cannot show that a later run adds a
+   * file rather than rewriting one.
+   */
+  recordingMoment: () => Date = () => new Date();
+
   /** Consumes one transaction identifier, as committing a transaction does. */
   beginTransaction(): bigint {
     return this.nextTransaction++;
@@ -91,18 +101,46 @@ export class InMemoryInventoryStore {
         key,
         { ...movement, recordedXid: movement.recordedXid.toString() },
       ]),
+      // The cursors roll back with everything else, because in PostgreSQL they
+      // are rows in a transaction like any other. A double that kept a cursor
+      // move whose work was discarded would let through exactly the bug that
+      // costs a tenant a day of history.
+      [...this.exportCursors].map(([key, held]) => [
+        key,
+        {
+          carriedThrough: held.carriedThrough?.toString(),
+          startedWindow: held.startedWindow && {
+            from: held.startedWindow.from.toString(),
+            to: held.startedWindow.to.toString(),
+          },
+        },
+      ]),
     ]);
   }
 
   restore(snapshot: string): void {
-    const [products, locations, movements] = JSON.parse(snapshot) as [
+    const [products, locations, movements, cursors] = JSON.parse(snapshot) as [
       [string, Held<{ name: string; category: string | null }>][],
       [string, Held<{ name: string }>][],
       [string, SerializedMovement][],
+      [string, SerializedCursor][],
     ];
     this.products.clear();
     this.locations.clear();
     this.movements.clear();
+    this.exportCursors.clear();
+    for (const [key, held] of cursors) {
+      this.exportCursors.set(key, {
+        carriedThrough:
+          held.carriedThrough === undefined
+            ? undefined
+            : BigInt(held.carriedThrough),
+        startedWindow: held.startedWindow && {
+          from: BigInt(held.startedWindow.from),
+          to: BigInt(held.startedWindow.to),
+        },
+      });
+    }
     for (const [key, movement] of movements) {
       this.movements.set(key, {
         ...movement,
@@ -126,6 +164,12 @@ export class InMemoryInventoryStore {
 type SerializedMovement = Omit<RecordedMovement, 'recordedXid'> & {
   recordedXid: string;
 };
+
+/** The same shape the cursor table holds, with its identifiers as strings. */
+interface SerializedCursor {
+  carriedThrough?: string;
+  startedWindow?: { from: string; to: string };
+}
 
 function revive<A extends { readonly name: string }>(held: Held<A>): Held<A> {
   return {
@@ -183,12 +227,16 @@ export class InMemoryReferenceRepository<
     );
   }
 
-  list(): Promise<readonly ReferenceEntity<Code>[]> {
+  list(): Promise<readonly (ReferenceEntity<Code> & Attributes)[]> {
     const prefix = `${this.tenantId}:`;
     return Promise.resolve(
       [...this.held.entries()]
         .filter(([key]) => key.startsWith(prefix))
         .map(([key, held]) => ({
+          // The attributes first, so neither of them can shadow the shape every
+          // caller relies on: a product named `createdAt` would otherwise
+          // rewrite a timestamp.
+          ...held.attributes,
           code: key.slice(prefix.length) as Code,
           name: held.attributes.name,
           createdAt: held.createdAt,
@@ -229,7 +277,7 @@ export class InMemoryMovementRepository implements MovementRepository {
     const recorded = new Set<ExternalMovementId>();
     // One call, one transaction, one identifier — as the database does it.
     const recordedXid = this.store.beginTransaction();
-    const recordedAt = new Date();
+    const recordedAt = this.store.recordingMoment();
 
     for (const movement of movements) {
       const key = this.key(movement.externalId);

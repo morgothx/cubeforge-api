@@ -13,11 +13,32 @@ import {
 } from '../../domain/identifiers';
 
 /**
- * Predictable identifiers for tests. Each kind counts separately and carries its
- * own prefix, so an assertion that names an identifier says which kind it meant.
+ * Predictable identifiers for tests, in the shape the database actually stores:
+ * a UUID.
+ *
+ * They used to read `tenant-1`, which no `uuid` column would have accepted —
+ * the double was looser than the thing it stood for, and the export found it
+ * out. A tenant identifier becomes a path segment there, and the check that
+ * keeps one tenant from writing outside its own prefix rejects anything that is
+ * not a UUID; every export test failed on a fixture production could not have
+ * produced.
+ *
+ * Legibility is kept where it pays: the first group names the kind and the last
+ * counts, so an assertion that names an identifier still says which kind it
+ * meant and which one.
  */
 export class SequentialIdentifierGenerator implements IdentifierGenerator {
   private readonly counts = new Map<string, number>();
+
+  /** The first group of each kind's identifiers. Arbitrary, but stable. */
+  private static readonly KINDS: Readonly<Record<string, number>> = {
+    tenant: 1,
+    person: 2,
+    membership: 3,
+    'api-key': 4,
+    'sign-in': 5,
+    row: 6,
+  };
 
   tenantId(): TenantId {
     return tenantId(this.next('tenant'));
@@ -46,6 +67,20 @@ export class SequentialIdentifierGenerator implements IdentifierGenerator {
   private next(kind: string): string {
     const count = (this.counts.get(kind) ?? 0) + 1;
     this.counts.set(kind, count);
-    return `${kind}-${count}`;
+
+    const family = SequentialIdentifierGenerator.KINDS[kind];
+    if (family === undefined) {
+      throw new Error(`no identifier family is registered for "${kind}"`);
+    }
+
+    return [
+      family.toString(16).padStart(8, '0'),
+      '0000',
+      // Version 4 and the variant bits, so the value is a well-formed UUID and
+      // not merely a string of the right length.
+      '4000',
+      '8000',
+      count.toString(16).padStart(12, '0'),
+    ].join('-');
   }
 }

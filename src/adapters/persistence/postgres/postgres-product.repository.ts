@@ -75,7 +75,7 @@ export class PostgresProductRepository implements ProductRepository {
     return new Set(rows.map((row) => row.sku as Sku));
   }
 
-  async list(): Promise<readonly ReferenceEntity<Sku>[]> {
+  async list(): Promise<readonly (ReferenceEntity<Sku> & ProductAttributes)[]> {
     const rows = await this.tx
       .select()
       .from(inventoryProducts)
@@ -85,6 +85,9 @@ export class PostgresProductRepository implements ProductRepository {
     return rows.map((row) => ({
       code: parseSku(row.sku),
       name: row.name,
+      // Carried rather than dropped: it is the one attribute an analytical
+      // reader groups by, and the export is its first reader.
+      category: row.category,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     }));
