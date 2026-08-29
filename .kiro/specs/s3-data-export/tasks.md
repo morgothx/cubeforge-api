@@ -232,7 +232,7 @@ however unrelated their assertions are.
   - _Requirements: 2.6, 2.7_
   - _Boundary: Integration suite_
 
-- [ ] 7.2 (P) Show that what was written can actually be read
+- [x] 7.2 (P) Show that what was written can actually be read
   - Objects land under a key naming the tenant and the day recorded, and an
     independent reader gets the rows back with their types intact
   - A backdated movement appears in the partition of the day it was recorded,
@@ -663,4 +663,33 @@ first run — the compose file mounts the Docker socket, deliberately omitted he
 because that is for Floci's Lambda-backed services and S3 needs none of it; and
 the service container gets no health check, which is why the job waits on the
 port itself.
+
+### 7.2 Requirement 3.5 has two failure modes, and one test only covered one
+
+The obvious test refuses the catalogue key above the sink: the run fails, and
+the previous catalogue is still readable. It passes — and it goes on passing
+against a sink that deletes the object before writing it, because a refusal
+above the sink means the sink is never reached. Verified rather than assumed:
+the delete-then-write probe was run against the five original tests and **all
+five stayed green**.
+
+So the second failure mode is now its own test — the sink is asked to replace
+the object and fails *while writing it*, which is the case that decides how
+`put` may be built. The payload is contrived, and its comment says so: its only
+job is to fail at a real point in a real write. With that test present the
+delete-then-write probe fails, which is the whole reason it exists.
+
+Two failure modes, two tests: the write that never happened, and the write that
+happened and did not finish.
+
+### 7.2 What the probes had to break
+
+Five, all biting: partitioning by the day a movement occurred (2 tests), one
+fixed file name per day instead of one per window (the whole of 4.4), a key that
+does not name the tenant (2), moments declared as text (4), and the sink
+deleting before it writes (1).
+
+The reader is `hyparquet` throughout and the writer is `hyparquet-writer` — the
+point 1.4's note made, now load-bearing: a file only its own writer can read
+proves nothing about what Athena will meet.
 
