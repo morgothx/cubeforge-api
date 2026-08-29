@@ -1,3 +1,5 @@
+import type { ExportedColumn } from '../../domain/export/exported-row';
+
 /**
  * Loading the columnar writer, and nothing else.
  *
@@ -12,13 +14,6 @@
  * The modules are loaded once and remembered. A dynamic import per object
  * written would pay module resolution for every partition of every tenant.
  */
-
-/** A column of the file: what it is called and what kind of value it holds. */
-export interface ColumnDefinition {
-  readonly name: string;
-  /** The subset this feature writes. Widening it is a decision, not a typo. */
-  readonly type: 'STRING' | 'INT32' | 'INT64' | 'TIMESTAMP' | 'BOOLEAN';
-}
 
 /** A row as the exporter builds it: column name to value. */
 export type ColumnarRow = Record<
@@ -62,7 +57,7 @@ function loadReader(): Promise<Reader> {
  */
 export async function writeParquet(
   rows: readonly ColumnarRow[],
-  columns: readonly ColumnDefinition[],
+  columns: readonly ExportedColumn[],
 ): Promise<Uint8Array> {
   const { parquetWriteBuffer } = await loadWriter();
 

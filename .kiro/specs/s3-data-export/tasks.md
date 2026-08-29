@@ -60,7 +60,7 @@ the mistake this plan's predecessor found the hard way.
 Pure, no infrastructure. These are the rules that decide whether a movement is
 skipped or duplicated, and they are worth being able to test without a database.
 
-- [ ] 2.1 (P) Name a window, a cursor, and the moves between them
+- [x] 2.1 (P) Name a window, a cursor, and the moves between them
   - A half-open window over transaction identifiers, and a cursor that is either
     untouched, part-way through a window, or carried through a point
   - A cursor part-way through replays **that** window rather than computing a
@@ -71,7 +71,7 @@ skipped or duplicated, and they are worth being able to test without a database.
   - _Requirements: 2.1, 2.2, 6.6_
   - _Boundary: Export domain_
 
-- [ ] 2.2 (P) Decide where a row lands, and what a reader will see in it
+- [x] 2.2 (P) Decide where a row lands, and what a reader will see in it
   - The key a movement's partition is named by, carrying the tenant and the day
     the movement was **recorded**, plus the window, so a later run adds a file
     rather than rewriting one
@@ -84,7 +84,7 @@ skipped or duplicated, and they are worth being able to test without a database.
   - _Requirements: 1.3, 1.4, 4.1, 4.2, 4.3, 4.4_
   - _Boundary: Export domain_
 
-- [ ] 2.3 (P) Say what a run did
+- [x] 2.3 (P) Say what a run did
   - Per tenant: carried, already up to date, or failed with a reason
   - A reason names a class of problem and never a record, a key, or another
     tenant
@@ -354,3 +354,54 @@ because `pnpm lint --fix` had reformatted the block between writing and
 patching. The lint error it was meant to fix stayed, which is the only reason it
 was noticed. Read the file text after any tool that reformats, before patching
 it — the same trap recorded in `inventory-sync-api`'s notes.
+
+### 2.2 A tenant has no single prefix, and that is the right layout
+
+The key is `movements/tenant_id=…/recorded_date=…`, dataset first. A query engine
+points one table at one prefix and reads partition values out of the path below
+it, so `movements/` has to hold movements and nothing else, with the tenant as a
+partition of that table. Tenant-first reads more naturally and would force
+either a table per tenant or a table whose location mixes three datasets.
+
+The consequence is real and worth carrying forward: **everything of one tenant
+is three prefixes, not one.** Task 7.4, which sweeps a tenant's objects, has to
+ask for all three, and a test that asks for one would pass while proving a third
+of what it claims.
+
+A test in this task asserted the opposite — that a key starts with a tenant
+prefix — and failed. The code was right and the test was wrong, which is worth
+recording because it is the less common way round.
+
+### 2.2 The tenant identifier is checked before it becomes a path
+
+A key is a path, and a tenant carrying a `/` or a `..` would write into a prefix
+that is not its own. That is the one way this design could cross tenants with
+every query being correct, so `tenantSegment` refuses anything that is not a
+plain identifier.
+
+### 2.1 An empty window is not a window
+
+"Nothing to carry" is the absence of a window, not a window of zero width. The
+constructor refuses `from == to`, so the only way to express it is
+`decision: 'up-to-date'` — which is what stops a run writing an object for no
+rows and, worse, naming it after a range no movement is in.
+
+The cursor also refuses a horizon that has moved backwards after a finished run.
+Nothing legitimate does that; it means a restored database or a cursor from
+another world, and carrying a window backwards would rewrite objects that
+already exist holding something else.
+
+### 2.3 The report is read by someone entitled to every tenant
+
+Which is exactly why a failure reason names a class of problem and never a
+record: the operator running the export acts for the whole platform, and a
+reason carrying a SKU or an object key would put one tenant's contents in front
+of them for no reason. Asserted by a test that stringifies the whole report and
+looks for the shapes that must not be in it.
+
+### The columnar types live in the domain, once
+
+`parquet-runtime.ts` had its own copy of the column-type union. Two lists that
+must agree eventually disagree, so the adapter now imports `ExportedColumn` from
+the domain — which is also the layer the contract belongs to, since steps 7 and
+8 read those column names.

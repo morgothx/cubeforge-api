@@ -162,7 +162,7 @@ identical to the failed attempt's (2.3, 6.6).
 | `src/domain/export/window.spec.ts` | The window invariants, pure |
 | `src/domain/export/cursor.ts` | `ExportCursor` state and its transitions: idle, pending, exported |
 | `src/domain/export/cursor.spec.ts` | The transitions, including replay of a pending window |
-| `src/domain/export/partition.ts` | `PartitionDay`, `ObjectKey`, and the key each dataset lands under |
+| `src/domain/export/partition.ts` | `PartitionDay`, `ObjectKey`, `prefixFor`, and the key each dataset lands under |
 | `src/domain/export/partition.spec.ts` | Key construction, including the backdated case |
 | `src/domain/export/exported-row.ts` | `ExportedMovementRow`, `ExportedCatalogueRow` — the columns a reader sees |
 | `src/domain/export/report.ts` | `TenantOutcome`, `ExportReport`, and how a run's status is decided |
@@ -243,16 +243,21 @@ export interface ExportWindow {
 }
 
 export type ExportCursor =
-  | { readonly state: 'never-exported' }
-  | { readonly state: 'exported'; readonly through: TransactionId }
-  | { readonly state: 'pending'; readonly window: ExportWindow };
+  | { readonly state: 'never-carried' }
+  | { readonly state: 'carried'; readonly through: TransactionId }
+  | { readonly state: 'started'; readonly window: ExportWindow };
 ```
 
-A cursor in `pending` is a run that wrote something and did not finish. The next
+A cursor in `started` is a run that wrote something and did not finish. The next
 run **replays that window rather than computing a new one**, which is the whole
 of requirement 6.6: the same rows produce the same keys, and writing them again
 overwrites identical bytes. `research.md` §2 records why a run identifier in the
 key would have made this impossible.
+
+`ExportWindow` also answers `covers(identifier)`, so "is this movement in this
+window" is asked of the window rather than re-derived by each caller with a pair
+of comparisons — the half-open boundary is the kind of thing two callers write
+differently.
 
 ```ts
 export interface ExportCursorRepository {
@@ -354,7 +359,11 @@ every id already committed, so a first export carries the whole history once.
 | `occurred_at`, `recorded_at` | timestamp, UTC | both, deliberately (1.3) |
 
 `tenant_id` and `recorded_date` are **not** columns; they are the partition, and
-a reader gets them from the key. Products and locations carry `code`, `name`,
+a reader gets them from the key. The dataset comes **before** the tenant in that
+key — `movements/tenant_id=…/recorded_date=…` — because a query engine points one
+table at one prefix and reads partition values below it. The consequence is
+worth stating: a tenant has no single prefix, and anything meaning to sweep one
+tenant asks for three. Products and locations carry `code`, `name`,
 and `category` where present.
 
 ## Error handling
