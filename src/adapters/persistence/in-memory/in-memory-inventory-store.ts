@@ -16,6 +16,16 @@ import type { SubmittedMovement } from '../../../domain/inventory/movement';
  * listing shape needs. Constraining on it here is why the store can hold either
  * without knowing which it holds.
  */
+/**
+ * A movement as the table holds it: what was submitted, plus the two things the
+ * database fills in — when it was recorded, and the transaction that did it.
+ */
+export interface RecordedMovement extends SubmittedMovement {
+  readonly tenant: TenantId;
+  readonly recordedAt: Date;
+  readonly recordedXid: bigint;
+}
+
 interface Held<Attributes extends { readonly name: string }> {
   readonly attributes: Attributes;
   readonly createdAt: Date;
@@ -37,16 +47,50 @@ export class InMemoryInventoryStore {
   >();
   readonly locations = new Map<string, Held<{ readonly name: string }>>();
   /** Keyed by tenant and the source system's identifier, as the table is. */
-  readonly movements = new Map<
+  readonly movements = new Map<string, RecordedMovement>();
+
+  /**
+   * Stands in for the database's transaction counter.
+   *
+   * Movements recorded together share one identifier, because they are one
+   * transaction — the same as `pg_current_xact_id()` in the real table.
+   * Numbering rows individually would make a windowing bug invisible: every
+   * window boundary would fall between rows rather than between transactions,
+   * which is not a boundary the real thing can ever produce.
+   */
+  private nextTransaction = 1n;
+
+  /**
+   * Where each tenant's export has reached, keyed by tenant and dataset as the
+   * table is. It lives beside the movements because the two are read together
+   * and restored together when a transaction is rolled back.
+   */
+  readonly exportCursors = new Map<
     string,
-    SubmittedMovement & { tenant: TenantId }
+    { carriedThrough?: bigint; startedWindow?: { from: bigint; to: bigint } }
   >();
+
+  /** Consumes one transaction identifier, as committing a transaction does. */
+  beginTransaction(): bigint {
+    return this.nextTransaction++;
+  }
+
+  /**
+   * The identifier below which nothing is in flight. Nothing is ever in flight
+   * here, so it is simply the next one to be handed out.
+   */
+  get transactionHorizon(): bigint {
+    return this.nextTransaction;
+  }
 
   snapshot(): string {
     return JSON.stringify([
       [...this.products],
       [...this.locations],
-      [...this.movements],
+      [...this.movements].map(([key, movement]) => [
+        key,
+        { ...movement, recordedXid: movement.recordedXid.toString() },
+      ]),
     ]);
   }
 
@@ -54,7 +98,7 @@ export class InMemoryInventoryStore {
     const [products, locations, movements] = JSON.parse(snapshot) as [
       [string, Held<{ name: string; category: string | null }>][],
       [string, Held<{ name: string }>][],
-      [string, SubmittedMovement & { tenant: TenantId }][],
+      [string, SerializedMovement][],
     ];
     this.products.clear();
     this.locations.clear();
@@ -63,6 +107,11 @@ export class InMemoryInventoryStore {
       this.movements.set(key, {
         ...movement,
         occurredAt: new Date(movement.occurredAt),
+        recordedAt: new Date(movement.recordedAt),
+        // A bigint does not survive JSON, so it travels as a string. Restoring
+        // it as a number would quietly lose precision at the size real
+        // transaction identifiers reach.
+        recordedXid: BigInt(movement.recordedXid),
       });
     }
     for (const [key, held] of products) {
@@ -73,6 +122,10 @@ export class InMemoryInventoryStore {
     }
   }
 }
+
+type SerializedMovement = Omit<RecordedMovement, 'recordedXid'> & {
+  recordedXid: string;
+};
 
 function revive<A extends { readonly name: string }>(held: Held<A>): Held<A> {
   return {
@@ -174,6 +227,9 @@ export class InMemoryMovementRepository implements MovementRepository {
     movements: readonly SubmittedMovement[],
   ): Promise<ReadonlySet<ExternalMovementId>> {
     const recorded = new Set<ExternalMovementId>();
+    // One call, one transaction, one identifier — as the database does it.
+    const recordedXid = this.store.beginTransaction();
+    const recordedAt = new Date();
 
     for (const movement of movements) {
       const key = this.key(movement.externalId);
@@ -182,7 +238,12 @@ export class InMemoryMovementRepository implements MovementRepository {
         // nothing` skips it, and absent from what is returned.
         continue;
       }
-      this.store.movements.set(key, { ...movement, tenant: this.tenantId });
+      this.store.movements.set(key, {
+        ...movement,
+        tenant: this.tenantId,
+        recordedAt,
+        recordedXid,
+      });
       recorded.add(movement.externalId);
     }
 

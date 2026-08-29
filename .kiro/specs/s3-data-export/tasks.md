@@ -96,7 +96,7 @@ skipped or duplicated, and they are worth being able to test without a database.
 
 ## 3. The seams
 
-- [ ] 3.1 Declare what persistence and storage must offer, without providing it
+- [x] 3.1 Declare what persistence and storage must offer, without providing it
   - Reading the horizon and the movements inside a window; reading and moving a
     cursor in two phases; putting rows under a key and answering whether the
     destination is reachable at all
@@ -108,18 +108,19 @@ skipped or duplicated, and they are worth being able to test without a database.
   - _Requirements: 2.1, 2.5, 2.7, 3.3_
   - _Boundary: Application ports_
 
-- [ ] 3.2 Provide the doubles the use-case tests will run against
+- [x] 3.2 Provide the doubles the use-case tests will run against
   - In-memory cursors and windowed reads over the existing inventory store, and
     a sink that captures keys and rows
   - A sink that can be told to fail on a chosen key, because "the run died
     half-way" is the case the design exists for
-  - The in-memory seam hands out the two new repositories, here rather than with
-    the real one: a use case reaches persistence only through the seam, so a
-    use-case test cannot run until the in-memory seam offers them. The real
-    seam waits for 6.1 because it *constructs* the repositories, which do not
-    exist yet
-  - Done when a use-case test can drive a whole tenant export with no database
-    and no emulator running
+  - The seam is **not** touched here. Widening it was planned for this task and
+    cannot be done in halves: adding a member to the port makes every
+    implementation of it incomplete at once, so the in-memory path and the real
+    path have to land together — and the real one constructs repositories that
+    do not exist until 4.1 and 4.2. Moved to 4.4, which is still before the use
+    cases that need it
+  - Done when the doubles round-trip a cursor and a window on their own, with no
+    database and no emulator running
   - _Depends: 3.1_
   - _Requirements: 6.6_
   - _Boundary: In-memory adapters_
@@ -154,6 +155,19 @@ skipped or duplicated, and they are worth being able to test without a database.
   - _Depends: 1.3, 1.4, 3.1_
   - _Requirements: 4.6, 4.7, 8.2_
   - _Boundary: Storage adapters_
+
+- [ ] 4.4 Widen the tenant-scoped seam to carry the export
+  - The two new repositories join the ones the seam hands out, in **both** the
+    real construction path and the in-memory one, in one change
+  - A port cannot be widened in halves: adding a member makes every
+    implementation incomplete at once. It is also deliberately after the
+    repositories exist, because the real seam constructs them
+  - Done when an export reads a tenant's movements through the same seam a
+    request uses, with row-level security applying unchanged, and a use-case
+    test reaches the same repositories through the in-memory one
+  - _Depends: 4.1, 4.2, 3.2_
+  - _Requirements: 7.1_
+  - _Boundary: Integration — persistence seam_
 
 ## 5. The work itself
 
@@ -190,24 +204,13 @@ skipped or duplicated, and they are worth being able to test without a database.
 
 ## 6. Wiring
 
-- [ ] 6.1 Widen the tenant-scoped seam to carry the export
-  - The two new repositories join the ones the real seam hands out, inside the
-    transaction it opens; the in-memory side was widened in 3.2
-  - This is deliberately after the repositories exist: the seam constructs them,
-    so it cannot be widened before there is anything to construct
-  - Done when an export reads a tenant's movements through the same seam a
-    request uses, with row-level security applying unchanged
-  - _Depends: 4.1, 4.2_
-  - _Requirements: 7.1_
-  - _Boundary: Integration — persistence seam_
-
-- [ ] 6.2 Give the operator a command, and the application a module
+- [ ] 6.1 Give the operator a command, and the application a module
   - Bind the ports to the adapters; import the feature into the application
   - A command that runs a full export, or one named tenant, with no interactive
     input, and exits reporting success only if every tenant was carried
   - Done when the command runs against the local stack end to end, prints a
     report per tenant, and returns a non-zero status when any tenant failed
-  - _Depends: 5.2, 6.1, 4.3_
+  - _Depends: 5.2, 4.4, 4.3_
   - _Requirements: 5.1, 5.2, 5.4, 5.5_
   - _Boundary: Integration — module and entry point_
 
@@ -225,7 +228,7 @@ however unrelated their assertions are.
     is a claim. It must be shown to fail when the horizon comparison is replaced
     by a plain maximum
   - Done when it passes with the horizon and fails without it
-  - _Depends: 6.2_
+  - _Depends: 6.1_
   - _Requirements: 2.6, 2.7_
   - _Boundary: Integration suite_
 
@@ -238,7 +241,7 @@ however unrelated their assertions are.
     as no entries; a failed catalogue write leaves the previous one readable
   - Done when every assertion above holds against the emulator and the reader is
     not the library that wrote the file
-  - _Depends: 6.2_
+  - _Depends: 6.1_
   - _Requirements: 3.2, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 4.4, 4.6, 4.7_
   - _Boundary: Integration suite_
 
@@ -251,7 +254,7 @@ however unrelated their assertions are.
     flight, asserted against the real application rather than reasoned about
   - Done when the second run writes the same keys as the first attempted, and
     the whole thing fails if objects are named by run instead of by window
-  - _Depends: 6.2_
+  - _Depends: 6.1_
   - _Requirements: 2.3, 2.4, 2.8, 5.6, 6.1, 6.2, 6.4, 6.5, 6.6_
   - _Boundary: Integration suite_
 
@@ -261,7 +264,7 @@ however unrelated their assertions are.
   - A failure naming one tenant says nothing about any other
   - Done when reading every object under one tenant's prefix yields only that
     tenant's movements, compared against what the database says that tenant has
-  - _Depends: 6.2_
+  - _Depends: 6.1_
   - _Requirements: 1.2, 4.5, 7.1, 7.2, 7.3_
   - _Boundary: Integration suite_
 
@@ -405,3 +408,40 @@ looks for the shapes that must not be in it.
 must agree eventually disagree, so the adapter now imports `ExportedColumn` from
 the domain — which is also the layer the contract belongs to, since steps 7 and
 8 read those column names.
+
+### 3.2 A port cannot be widened in halves
+
+The plan had the in-memory seam widened here and the real one in 6.1. That is
+not implementable: adding a member to `TenantScopedRepositories` makes **every**
+implementation of it incomplete at once, so `tsc` fails on the PostgreSQL path
+the moment the in-memory path is filled. The two are one atomic change.
+
+And it has to happen before the use cases, because a use case reaches
+persistence only through the seam — so it cannot wait for group 6 either. Moved
+to **4.4**, immediately after the repositories it constructs and before the use
+cases that consume it. The old 6.2 became 6.1.
+
+Second instance of the same shape in two features: in `inventory-sync-api` the
+seam produced a task-graph cycle at 1.3, fixed the same way. Worth saying plainly
+for the next feature that touches it: **the tenant-scoped seam is always its own
+task, and it always lands after the adapters and before the use cases.**
+
+### 3.2 A double looser than the database hides the bug it exists to catch
+
+Movements recorded in one call share one transaction identifier, because they
+are one transaction. The first version of that test asserted that a window
+covering both returns both — which is **also true** when rows are numbered
+individually, so the probe walked straight through it and the test proved
+nothing.
+
+What separates the two models is how far the horizon moves: one call advances it
+by exactly one. Rewritten that way, the probe bites. Third instance of the rule
+that a probe which fails nothing is a claim about the probe until it has been
+read.
+
+### 3.1 The rows are type aliases, not interfaces
+
+An interface has no implicit index signature, so it cannot be handed to an
+encoder that takes a record of columns without a cast — and that cast is the
+kind that stays right until somebody adds a field. Written as type aliases, the
+assignment is checked.

@@ -212,8 +212,11 @@ The design had them the other way round; corrected here rather than left to be
 noticed by whoever runs them.
 
 The one file two tasks both want is `tenant-scoped-unit-of-work.ts`, on both
-sides of the seam, exactly as in the previous feature. It is a two-line addition
-and should land before the repositories that fill it.
+sides of the seam, exactly as in the previous feature — and it is **one** task,
+not two. Adding a member to the port makes every implementation of it incomplete
+at once, so the in-memory path and the real path cannot land separately; and
+because a use case reaches persistence only through the seam, it must land
+before the use cases and after the repositories it constructs.
 
 ## Components and Interfaces
 

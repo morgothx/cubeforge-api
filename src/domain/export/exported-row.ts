@@ -32,7 +32,7 @@ export interface ExportedColumn {
  * other makes a question unanswerable later, and adding the missing one means
  * rewriting history somebody has already read.
  */
-export interface ExportedMovementRow {
+export type ExportedMovementRow = {
   readonly external_id: string;
   readonly sku: string;
   readonly location_code: string;
@@ -40,14 +40,24 @@ export interface ExportedMovementRow {
   readonly quantity: number;
   readonly occurred_at: Date;
   readonly recorded_at: Date;
-}
+};
 
 /** A product or a place, as exported: enough to label a number in a chart. */
-export interface ExportedCatalogueRow {
+export type ExportedCatalogueRow = {
   readonly code: string;
   readonly name: string;
   readonly category: string | null;
-}
+};
+
+/**
+ * Any exported row.
+ *
+ * Written as type aliases rather than interfaces on purpose: an interface has
+ * no implicit index signature, so it cannot be handed to an encoder that takes
+ * a record of columns without a cast. The cast would be the kind that is right
+ * until somebody adds a field.
+ */
+export type ExportedRow = ExportedMovementRow | ExportedCatalogueRow;
 
 export const MOVEMENT_COLUMNS: readonly ExportedColumn[] = [
   { name: 'external_id', type: 'STRING' },
