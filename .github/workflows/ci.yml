@@ -15,11 +15,24 @@ jobs:
     name: lint, types, tests, build
     runs-on: ubuntu-latest
 
-    # The integration suite reaches a real PostgreSQL, on purpose: row-level
-    # security is most of what this backend guarantees, and nothing but the
-    # database can enforce it. Floci and AWS are not involved — no test in this
-    # repository touches either.
+    # The integration suite reaches a real PostgreSQL and a real object store,
+    # on purpose. Row-level security is most of what this backend guarantees and
+    # nothing but the database can enforce it; and a Parquet file only its own
+    # writer can read proves nothing about what an analytical engine will meet,
+    # so the export suites write real objects and read them back.
+    #
+    # The object store is Floci, the local emulator, exactly as it is in
+    # development. No job in this repository has, or may be given, credentials
+    # for a real AWS account.
     services:
+      floci:
+        image: floci/floci:latest
+        ports:
+          - 4566:4566
+        env:
+          FLOCI_HOSTNAME: localhost
+          FLOCI_DEFAULT_REGION: us-east-1
+
       postgres:
         image: postgres:17-alpine
         env:
@@ -53,6 +66,15 @@ jobs:
       POSTGRES_AUTHENTICATOR_PASSWORD: ci-only-authenticator
       AUTH_TOKEN_SECRET: ci-only-signing-secret-not-used-anywhere-else
 
+      # The emulator, and throwaway credentials it does not check. The export
+      # refuses any endpoint whose host is not local, so these values cannot
+      # reach a real account even if someone changed the keys.
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      EXPORT_BUCKET: cubeforge-exports
+
     steps:
       - uses: actions/checkout@v4
 
@@ -81,6 +103,23 @@ jobs:
       - run: pnpm db:bootstrap
 
       - run: pnpm db:migrate
+
+      # The emulator answers later than the job starts, and a service container
+      # has no health check that would hold the job back. Waiting here rather
+      # than inside the suite keeps "the emulator was not up yet" from arriving
+      # disguised as a failing assertion. The bucket itself is arranged by the
+      # suites that need it, so nothing has to be created here.
+      - name: wait for the object store
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail --max-time 2 http://localhost:4566 > /dev/null 2>&1; then
+              echo "the emulator answered after ${attempt}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "the emulator never answered on port 4566" >&2
+          exit 1
 
       - run: pnpm test:integration
 

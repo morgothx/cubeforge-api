@@ -1,5 +1,4 @@
 import {
-  CreateBucketCommand,
   DeleteObjectCommand,
   ListObjectsV2Command,
   S3Client,
@@ -12,6 +11,7 @@ import {
   MOVEMENT_COLUMNS,
 } from '../../src/domain/export/exported-row';
 import type { ObjectKey } from '../../src/domain/export/partition';
+import { useExportDestination } from './support/object-storage';
 
 const config = loadObjectStorageConfig(process.env);
 
@@ -49,6 +49,8 @@ const movements = [
  * about what an analytical engine will meet.
  */
 describe('the export sink, against the emulator', () => {
+  useExportDestination();
+
   const client = new S3Client({
     endpoint: config.endpoint,
     region: config.region,
@@ -57,14 +59,6 @@ describe('the export sink, against the emulator', () => {
   });
 
   const sink = new ParquetExportSink(config);
-
-  beforeAll(async () => {
-    try {
-      await client.send(new CreateBucketCommand({ Bucket: config.bucket }));
-    } catch {
-      // Already there from a previous run, which is the ordinary case.
-    }
-  });
 
   afterAll(async () => {
     client.destroy();

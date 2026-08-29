@@ -635,3 +635,32 @@ transactional API waits on. It is real and it is requirement 5.6, which task 7.3
 owns — and the version written here leaned on a filler assertion that could not
 fail. Left for the task that says so.
 
+### The gate, repaired — and a second defect it uncovered
+
+Fixed in its own commit, after 7.1, once it was clear the gap would only widen:
+`.github/workflows/ci.yml` now runs Floci as a service alongside PostgreSQL,
+sets the four AWS variables and `EXPORT_BUCKET`, waits for the emulator to
+answer before the integration run, and no longer claims that nothing here
+touches either.
+
+Preparing it exposed something worse than the workflow. **The bucket was created
+inside `export-sink`'s `beforeAll`, and `export-command` and
+`export-concurrency` depended on that** — alphabetically the suite that created
+it runs *last*, so against a fresh emulator both of the others fail with
+`NoSuchBucket`. They passed locally only because the bucket survives between
+runs on a developer's machine. Two suites written in tasks 6.1 and 7.1 were
+passing for the wrong reason, and CI is where that would have surfaced.
+
+The destination is now a prerequisite arranged by `useExportDestination()` in
+`test/integration/support/object-storage.ts`, the way the migrated database is a
+prerequisite — not a side effect of whichever suite happens to go first.
+Verified by deleting the bucket outright and running the whole integration suite
+against an empty emulator: 264 tests, 32 suites, green, and the bucket back.
+
+What is **not** verified: that `floci/floci:latest` runs as a GitHub Actions
+service container. It cannot be checked from here. Two things to watch on the
+first run — the compose file mounts the Docker socket, deliberately omitted here
+because that is for Floci's Lambda-backed services and S3 needs none of it; and
+the service container gets no health check, which is why the job waits on the
+port itself.
+

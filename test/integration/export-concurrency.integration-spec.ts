@@ -15,6 +15,7 @@ import { ExportModule } from '../../src/export.module';
 import { tenantId, type TenantId } from '../../src/domain/identifiers';
 import { runtimePool, seed } from './support/database';
 import { seedTenant, useIntegrationDatabase } from './support/fixtures';
+import { useExportDestination } from './support/object-storage';
 
 const config = loadObjectStorageConfig(process.env);
 
@@ -38,6 +39,7 @@ const INSERT = `INSERT INTO stock_movements
  */
 describe('a movement that commits after a later one', () => {
   useIntegrationDatabase();
+  useExportDestination();
 
   const client = new S3Client({
     endpoint: config.endpoint,

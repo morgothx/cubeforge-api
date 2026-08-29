@@ -20,6 +20,7 @@ import { prefixFor } from '../../src/domain/export/partition';
 import { tenantId, type TenantId } from '../../src/domain/identifiers';
 import { asPersonInTenant, seed } from './support/database';
 import { seedTenant, useIntegrationDatabase } from './support/fixtures';
+import { useExportDestination } from './support/object-storage';
 
 const config = loadObjectStorageConfig(process.env);
 
@@ -34,6 +35,7 @@ const config = loadObjectStorageConfig(process.env);
  */
 describe('the export command, wired', () => {
   useIntegrationDatabase();
+  useExportDestination();
 
   const client = new S3Client({
     endpoint: config.endpoint,
