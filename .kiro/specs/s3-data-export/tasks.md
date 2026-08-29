@@ -35,7 +35,7 @@ the mistake this plan's predecessor found the hard way.
   - _Requirements: 2.2, 6.3_
   - _Boundary: Persistence schema_
 
-- [ ] 1.3 (P) Read the destination from the environment, and refuse without it
+- [x] 1.3 (P) Read the destination from the environment, and refuse without it
   - Bucket, endpoint, region and credentials, read from the environment and
     never from a value written into the repository
   - A missing setting is refused by name rather than discovered as a failure
@@ -45,7 +45,7 @@ the mistake this plan's predecessor found the hard way.
   - _Requirements: 8.1, 8.3, 8.4_
   - _Boundary: Storage configuration_
 
-- [ ] 1.4 (P) Take on the two dependencies, and prove the awkward one imports
+- [x] 1.4 (P) Take on the two dependencies, and prove the awkward one imports
   - The object-storage client and the columnar writer, added as reviewed
     dependencies
   - The writer is published only as an ES module and this codebase is CommonJS;
@@ -309,3 +309,48 @@ is flaky, so it was fixed rather than re-run until green.
 One full integration run in this session failed a single unidentified test and
 was green on the two runs after it. It is recorded here rather than dismissed:
 if it reappears, this is the second sighting, not the first.
+
+### 1.4 The import survives compilation; it does not survive Jest
+
+The design's reasoning was right and incomplete. `module: nodenext` emits the
+dynamic import **unchanged** into the CommonJS output — confirmed by reading
+`dist/adapters/storage/parquet-runtime.js`, which still says
+`import('hyparquet-writer')` — and Node 22 runs it with no flag at all. The
+compiled round trip works.
+
+**Jest is the one that cannot**: its VM refuses a dynamic import without
+`--experimental-vm-modules`, and that is a property of the test runner, not of
+the code or the runtime. `createRequire` does not help — Jest patches the module
+registry, so a "real" require lands back in Jest's CommonJS loader and tries to
+parse an ES module as script.
+
+So the four test scripts now run Jest through `node --experimental-vm-modules`.
+CI calls `pnpm test` and `pnpm test:integration`, so it inherits the change. The
+production entry point needs nothing.
+
+This is exactly what the task was for: had it been discovered inside task 4.3,
+it would have arrived wearing a costume — an adapter, a use case and a run
+around it — and looked like a bug in the sink.
+
+### 1.4 The reader is a second library on purpose
+
+`readParquet` has no production caller and is not dead code: a round trip
+written and read by the same library proves nothing about the file an
+analytical engine will meet. `hyparquet` reads what `hyparquet-writer` wrote,
+and the integration suites in group 7 read the real objects with it.
+
+### 1.3 The destination refuses to be a real account
+
+Requirement 8.3 says the export targets the local emulator. Enforced rather than
+assumed: an endpoint whose host is not the emulator is refused at load. A `.env`
+copied from somewhere with real values fails at startup instead of writing one
+tenant's history somewhere it cannot be taken back from. If a real deployment is
+ever wanted, that is a deliberate change to this function, which is the point.
+
+### A patch that did not apply, again
+
+The second of two edits to `parquet-runtime.ts` silently matched nothing,
+because `pnpm lint --fix` had reformatted the block between writing and
+patching. The lint error it was meant to fix stayed, which is the only reason it
+was noticed. Read the file text after any tool that reformats, before patching
+it — the same trap recorded in `inventory-sync-api`'s notes.
