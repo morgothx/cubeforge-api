@@ -245,7 +245,7 @@ however unrelated their assertions are.
   - _Requirements: 3.2, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 4.4, 4.6, 4.7_
   - _Boundary: Integration suite_
 
-- [ ] 7.3 (P) Show that a failed run finishes rather than repeats
+- [x] 7.3 (P) Show that a failed run finishes rather than repeats
   - A run whose sink fails part-way, then a second run: every movement appears
     exactly once, under the same keys the failed run was writing
   - A tenant that fails does not stop the others, and its cursor does not move
@@ -692,4 +692,36 @@ deleting before it writes (1).
 The reader is `hyparquet` throughout and the writer is `hyparquet-writer` — the
 point 1.4's note made, now load-bearing: a file only its own writer can read
 proves nothing about what Athena will meet.
+
+### 7.3 The keys are compared against what was attempted, not against a pattern
+
+The failing sink remembers every key it was asked for. The second run's keys are
+then compared against **that list** rather than against a shape this test wrote
+for itself — a test that rebuilt the expected key from the window would agree
+with the implementation by construction and would keep agreeing with it after
+both were wrong together.
+
+Naming objects by run instead of by window fails it, which is the probe the task
+named. So does moving the point reached before the objects are written, which
+turns the retry into a run that carries nothing and leaves the first attempt's
+half-written day beside a second copy of every movement in it.
+
+### 7.3 What requirement 5.6 actually guards, stated precisely
+
+The export as designed **cannot** block a writer, and the reason is not the
+three transactions: PostgreSQL's MVCC lets an `INSERT` proceed alongside a
+reader whatever the reader's transaction is doing. So a probe that only merged
+the run into one transaction would not have made the test fail, and saying it
+would have been a claim about a probe nobody read.
+
+The probe that does make it fail merges the run into one transaction **and**
+takes `LOCK TABLE stock_movements IN EXCLUSIVE MODE` inside it — a lock held
+across every object written. That is the regression this test guards: somebody
+making the export "consistent" by locking the table it reads. Under it the
+request finishes only after the export does, and the ordering assertion catches
+it.
+
+The same probe also fails the two recovery tests, which is the defect 5.1's note
+predicted from the other direction: with the claim inside the run's transaction,
+a failed run rolls its own window back.
 
