@@ -6,10 +6,6 @@ import { ParquetExportSink } from '../../src/adapters/storage/parquet-export-sin
 import { readParquet } from '../../src/adapters/storage/parquet-runtime';
 import { ExportTenantUseCase } from '../../src/application/export/export-tenant.use-case';
 import { RunExportUseCase } from '../../src/application/export/run-export.use-case';
-import type {
-  ColumnarFile,
-  ExportSink,
-} from '../../src/application/ports/export-sink';
 import {
   TENANT_SCOPED_UNIT_OF_WORK,
   type TenantScopedUnitOfWork,
@@ -25,6 +21,7 @@ import { tenantId, type TenantId } from '../../src/domain/identifiers';
 import { asPersonInTenant, seed } from './support/database';
 import { seedTenant, useIntegrationDatabase } from './support/fixtures';
 import {
+  RefusingOn,
   exportDestination,
   useExportDestination,
 } from './support/object-storage';
@@ -322,28 +319,4 @@ describe('the objects the export leaves behind', () => {
 /** hyparquet may hand a moment back as a `Date` or as epoch milliseconds. */
 function momentOf(value: unknown): Date {
   return value instanceof Date ? value : new Date(Number(value));
-}
-
-/**
- * The real sink with one key taken away from it.
- *
- * A double would not do: the assertion is about the object that stays readable
- * in storage after a write that failed, so the write has to be a real one and
- * the failure has to happen where a real one would.
- */
-class RefusingOn implements ExportSink {
-  constructor(
-    private readonly inner: ExportSink,
-    private readonly refused: ObjectKey,
-  ) {}
-
-  put(file: ColumnarFile): Promise<void> {
-    return file.key === this.refused
-      ? Promise.reject(new Error('refusing to write this object'))
-      : this.inner.put(file);
-  }
-
-  reachable(): Promise<void> {
-    return this.inner.reachable();
-  }
 }

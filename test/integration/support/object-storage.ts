@@ -1,4 +1,9 @@
 import { CreateBucketCommand, S3Client } from '@aws-sdk/client-s3';
+import type {
+  ColumnarFile,
+  ExportSink,
+} from '../../../src/application/ports/export-sink';
+import type { ObjectKey } from '../../../src/domain/export/partition';
 import { loadObjectStorageConfig } from '../../../src/adapters/storage/object-storage-config';
 import type { ObjectStorageConfig } from '../../../src/adapters/storage/object-storage-config';
 
@@ -56,4 +61,28 @@ export function useExportDestination(): void {
 function alreadyThere(error: unknown): boolean {
   const name = error instanceof Error ? error.name : '';
   return name === 'BucketAlreadyOwnedByYou' || name === 'BucketAlreadyExists';
+}
+
+/**
+ * The real sink with one key taken away from it.
+ *
+ * A double would not do for the suites that use this: what they assert is what
+ * survives *in storage* after a run that failed, so the writes that do happen
+ * have to be real ones.
+ */
+export class RefusingOn implements ExportSink {
+  constructor(
+    private readonly inner: ExportSink,
+    private readonly refused: ObjectKey,
+  ) {}
+
+  put(file: ColumnarFile): Promise<void> {
+    return file.key === this.refused
+      ? Promise.reject(new Error('refusing to write this object'))
+      : this.inner.put(file);
+  }
+
+  reachable(): Promise<void> {
+    return this.inner.reachable();
+  }
 }

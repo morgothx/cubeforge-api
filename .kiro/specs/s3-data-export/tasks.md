@@ -258,7 +258,7 @@ however unrelated their assertions are.
   - _Requirements: 2.3, 2.4, 2.8, 5.6, 6.1, 6.2, 6.4, 6.5, 6.6_
   - _Boundary: Integration suite_
 
-- [ ] 7.4 (P) Show that no tenant appears under another's name
+- [x] 7.4 (P) Show that no tenant appears under another's name
   - Two tenants holding the same SKU export to two sets of objects, and neither
     tenant's rows appear under the other's prefix
   - A failure naming one tenant says nothing about any other
@@ -724,4 +724,32 @@ it.
 The same probe also fails the two recovery tests, which is the defect 5.1's note
 predicted from the other direction: with the claim inside the run's transaction,
 a failed run rolls its own window back.
+
+### 7.4 The sweep asks for three prefixes, because 2.2's note said it would have to
+
+Two tenants made to look alike on purpose — the same SKU, the same location
+code, the same movement identifiers — so that nothing but the tenant tells their
+rows apart and the quantities are what a leak would show up as. Everything under
+each tenant's **three** prefixes is read back and compared against what that
+tenant's own reader sees in the database, not against a list this test wrote:
+the two would have agreed by construction.
+
+The note in task 2.2 predicted exactly this shape and it was right. A sweep of
+`movements/` alone would have passed while proving a third of the claim, and the
+catalogue is where the tenant's own product names live.
+
+### 7.4 Isolation stops being the database's job the moment a row becomes a file
+
+The transactional half proves this twice over, in the repository predicate and
+in the policy. Neither applies to an object in a bucket — once a row is a file,
+the only thing keeping one tenant's history out of another's reach is the key it
+was written under. So the probe that matters is writing every tenant's movements
+under one shared name, and it fails three of the four tests.
+
+Two more bite: carrying `tenant_id` as a column as well as a partition fails the
+published-columns assertion, and a failure that repeats what the sink said —
+rather than naming a class of problem — puts an object key in front of an
+operator reading about a different tenant.
+
+`RefusingOn` moved to `support/object-storage.ts` on its third copy.
 

@@ -38,6 +38,7 @@ import {
 } from './support/application';
 import { seedTenant, useIntegrationDatabase } from './support/fixtures';
 import {
+  RefusingOn,
   exportDestination,
   useExportDestination,
 } from './support/object-storage';
@@ -355,24 +356,6 @@ class FailingAfter implements ExportSink {
     }
     this.written += 1;
     return this.inner.put(file);
-  }
-
-  reachable(): Promise<void> {
-    return this.inner.reachable();
-  }
-}
-
-/** The real sink with one key taken away from it. */
-class RefusingOn implements ExportSink {
-  constructor(
-    private readonly inner: ExportSink,
-    private readonly refused: ObjectKey,
-  ) {}
-
-  put(file: ColumnarFile): Promise<void> {
-    return file.key === this.refused
-      ? Promise.reject(new Error('refusing to write this object'))
-      : this.inner.put(file);
   }
 
   reachable(): Promise<void> {
