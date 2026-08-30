@@ -117,7 +117,7 @@ get back, and they are worth being able to test without an engine.
 
 ## 4. Reaching the engine for real
 
-- [ ] 4.1 Submit a question, wait for it, and read all of it
+- [x] 4.1 Submit a question, wait for it, and read all of it
   - Submitted, then polled until answered or a deadline passes; a question that
     outlives its deadline is **stopped**, not abandoned, because work nobody is
     waiting for still costs something where this runs for real
@@ -441,3 +441,41 @@ exactly one test, and it is the one that had to exist.
 nothing produces any of them — the adapter that raises them is 4.1. Recorded
 here because the previous feature shipped a reason nothing could emit and its
 validation gate is what noticed. **4.1 owes a producer for all four.**
+
+### 4.1 The debt from 3.1 is paid
+
+All four reasons now have a producer: `store-rejected` and `store-unreachable`
+from the status a refused call came back with, `question-timed-out` from the
+deadline, `question-failed` from an engine that answered `FAILED` or `CANCELLED`
+and from any step that raised something unclassified. The previous feature
+shipped a reason nothing could emit; this one will not.
+
+Classification lives in the engine adapter because **that is the last place the
+status code exists**. One layer up there is an exception carrying a driver's
+wording, and matching on those is how a rephrased library message turns every
+failure into the wrong kind.
+
+### 4.1 Split into two files so the interesting half has no engine in it
+
+The design named one file. Everything worth getting right here — waiting,
+giving up, following pages — is behaviour the local engine can never exercise:
+it answers in milliseconds and returns small results in a single page. So the
+runner works against four named operations and the engine adapter is the only
+file holding a client. Design's file plan corrected.
+
+### 4.1 A test whose two rows were both the header
+
+"Drops the header row and only that one" had a page whose every row equalled the
+column names, so dropping row zero unconditionally produced the same answer and
+the probe walked straight through. The distinguishing case — a first page whose
+first row is real data — is now its own test, and the probe fails it.
+
+**Third instance this feature.** The pattern is consistent enough to name: a
+test that asserts what is kept needs a case where the wrong rule would keep
+something different, and two rows that look alike is not that case.
+
+### 4.1 My fake was looser than the thing it stood for, again
+
+The refusal test built an `Error` wearing the right `name` and `reason` rather
+than a real `AnalyticsUnavailable`, and `askingAs` recognises the class, not the
+shape. The failing test was the fake being wrong, not the code.

@@ -187,7 +187,8 @@ sequenceDiagram
 | `src/application/analytics/read-exported-stock.use-case.spec.ts` | With the double, including the labelled answer |
 | `src/application/analytics/analytics-failure.ts` | `AnalyticsUnavailable` and its closed reason set |
 | `src/application/analytics/analytics-failure.spec.ts` | Classification, and what a reason may not carry |
-| `src/adapters/analytics/athena-query-runner.ts` | Submit, wait against a deadline, stop, and fetch every page |
+| `src/adapters/analytics/athena-query-runner.ts` | Waiting against a deadline, stopping, and following every page |
+| `src/adapters/analytics/athena-engine.ts` | The only file that speaks to the client, and where a refusal is classified |
 | `src/adapters/analytics/athena-analytics.ts` | The seam's real implementation, and the only file holding a statement |
 | `src/adapters/analytics/analytics-config.ts` | Catalogue, workgroup and result location from the environment |
 | `src/adapters/analytics/analytics-config.spec.ts` | Every missing setting named at once |
@@ -366,6 +367,12 @@ export interface QueryRunner {
   run(statement: string, deadline: Date): Promise<QueryResult>;
 }
 ```
+
+**Two files, not one.** The plan named a single one, and the split is what makes
+the paragraph below testable: the local engine answers in milliseconds and
+returns small results in one page, so neither the deadline nor the paging would
+ever be reached by pointing a test at it. The runner works against four named
+operations and the engine adapter is the only file holding a client.
 
 **The runner follows the continuation token until there is none.** A result
 arrives in pages of at most a thousand rows in a real deployment, and the first
