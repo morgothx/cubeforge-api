@@ -3,6 +3,9 @@ import {
   ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { createServer, type Server } from 'node:http';
+import { AddressInfo } from 'node:net';
+import { ExportFailed } from '../../src/application/export/export-failure';
 import { readParquet } from '../../src/adapters/storage/parquet-runtime';
 import { ParquetExportSink } from '../../src/adapters/storage/parquet-export-sink';
 import { loadObjectStorageConfig } from '../../src/adapters/storage/object-storage-config';
@@ -154,6 +157,38 @@ describe('the export sink, against the emulator', () => {
     await expect(sink.reachable()).resolves.toBeUndefined();
   });
 
+  it('tells a refused credential from a destination that is not there', async () => {
+    // The emulator accepts every credential — deliberately, it is a local
+    // emulator — so a rejection cannot be produced against it at all. A three
+    // line server that answers 403 can, and it is still local: nothing here
+    // reaches, or may reach, a real account.
+    const refusing = await serverAnswering(403);
+    try {
+      const rejected = new ParquetExportSink({
+        ...config,
+        endpoint: refusing.endpoint,
+      });
+
+      // Two different diagnoses, because an operator does one thing about a
+      // wrong key and another about a destination that is not there.
+      expect(await refusalOf(rejected)).toEqual(
+        new ExportFailed('storage-rejected', expect.anything()),
+      );
+      await rejected.close();
+    } finally {
+      await refusing.close();
+    }
+
+    const missing = new ParquetExportSink({
+      ...config,
+      bucket: 'cubeforge-not-a-bucket',
+    });
+    expect(await refusalOf(missing)).toEqual(
+      new ExportFailed('storage-unreachable', expect.anything()),
+    );
+    await missing.close();
+  });
+
   it('refuses a destination that does not exist, before writing anything', async () => {
     // 8.1 and 8.2 as a caller meets them: a bad destination costs a run
     // nothing, because it is discovered before the first tenant is touched.
@@ -166,3 +201,45 @@ describe('the export sink, against the emulator', () => {
     await missing.close();
   });
 });
+
+/**
+ * A local server that answers every request with one status.
+ *
+ * Bound to the loopback address on a port the operating system picks, so it is
+ * as local as the emulator is and cannot outlive the test that started it.
+ */
+async function serverAnswering(
+  status: number,
+): Promise<{ endpoint: string; close: () => Promise<void> }> {
+  const server: Server = createServer((_request, response) => {
+    response.writeHead(status);
+    response.end();
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+
+  return {
+    endpoint: `http://127.0.0.1:${port}`,
+    close: () =>
+      new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      ),
+  };
+}
+
+/**
+ * What a sink threw when asked whether it could be reached.
+ *
+ * Returned rather than matched inline, so the assertion can name the type as
+ * well as the reason: a plain object carrying a `reason` field would satisfy a
+ * loose match and prove nothing about what a run will actually catch.
+ */
+async function refusalOf(sink: ParquetExportSink): Promise<unknown> {
+  try {
+    await sink.reachable();
+  } catch (error) {
+    return error;
+  }
+  throw new Error('the sink answered that it was reachable');
+}

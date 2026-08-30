@@ -194,6 +194,18 @@ describe('running an export over every tenant', () => {
     expect(sink.keys()).toEqual([]);
   });
 
+  it('reports a refused credential as refused, not as unreachable', async () => {
+    sink.rejectsCredentials();
+
+    // The diagnosis the sink made survives the step that called it: an operator
+    // fixes a wrong key and a missing bucket differently, and the run must not
+    // flatten the two into one message.
+    await expect(
+      runExport.execute({ correlationId: RUN }),
+    ).rejects.toMatchObject({ reason: 'storage-rejected' });
+    expect(sink.keys()).toEqual([]);
+  });
+
   it('carries one correlation identifier through what it reports', async () => {
     const run = await runExport.execute({ correlationId: RUN });
 

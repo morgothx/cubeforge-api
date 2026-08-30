@@ -753,3 +753,41 @@ operator reading about a different tenant.
 
 `RefusingOn` moved to `support/object-storage.ts` on its third copy.
 
+### The gate found a reason nothing could produce
+
+`/kiro-validate-impl` returned NO-GO on one finding: `ExportFailureReason`
+declared `storage-rejected` and no code path could emit it. Every failed
+`reachable()` was reported as `storage-unreachable`, so requirement 8.2's first
+obligation held — stop before writing anything — and its second did not: an
+operator was never told the credential was the problem.
+
+Checking it turned up the harder half. **Floci accepts every credential**, so a
+rejection cannot be produced against the emulator at all:
+
+```
+good credentials, real bucket   : accepted
+good credentials, missing bucket: name=NotFound status=404
+bad credentials, real bucket    : accepted
+```
+
+Adding the classification alone would therefore have been a claim with no probe
+behind it. The test answers that with a three-line local server that replies
+403 — as local as the emulator, and nothing here reaches or may reach a real
+account. `reachable()` now classifies by status, and the two diagnoses reach an
+operator distinctly:
+
+```
+export refused: the export failed: storage-rejected
+export refused: the export failed: storage-unreachable
+```
+
+The mechanism this rests on is that `failingAs` passes an already-classified
+failure through untouched: `reachable()` is called inside a step labelled
+"unreachable", and the sink's own diagnosis has to survive it. That was
+load-bearing and untested, and now has its own spec — removing the pass-through
+fails two tests.
+
+The in-memory sink grew `rejectsCredentials()` beside `unreachable()` for the
+reason every double in this feature has been corrected for: one that collapsed
+the two would let a run report the wrong diagnosis with everything still green.
+

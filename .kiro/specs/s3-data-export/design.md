@@ -468,7 +468,8 @@ the object key.
 | 7.1 | `runInTenant` plus row-level security |
 | 7.2, 7.3 | `ExportFailureReason` is a closed union naming no records |
 | 7.4 | One correlation identifier per run |
-| 8.1, 8.2 | `object-storage-config.ts` and `reachable()` |
+| 8.1 | `object-storage-config.ts`, refusing by name before a connection is opened |
+| 8.2 | `reachable()`, which classifies the refusal by its status: 401 or 403 is a rejected credential, anything else is a destination that is not there |
 | 8.3 | Endpoint and credentials come from the environment; the emulator is the only target |
 | 8.4 | No configuration value is written into the repository |
 

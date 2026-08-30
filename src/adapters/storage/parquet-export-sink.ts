@@ -4,6 +4,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { ExportFailed } from '../../application/export/export-failure';
 import type {
   ColumnarFile,
   ExportSink,
@@ -61,9 +62,17 @@ export class ParquetExportSink implements ExportSink {
    * part-moved. `HeadBucket` costs nothing and answers both questions.
    */
   async reachable(): Promise<void> {
-    await this.client.send(
-      new HeadBucketCommand({ Bucket: this.config.bucket }),
-    );
+    try {
+      await this.client.send(
+        new HeadBucketCommand({ Bucket: this.config.bucket }),
+      );
+    } catch (error) {
+      // Classified here, where the HTTP status still exists. One layer up there
+      // is only an exception with a driver's wording in it, and an operator
+      // does one thing about a key the destination refused and quite another
+      // about a destination that is not there.
+      throw new ExportFailed(reasonRefusing(error), error);
+    }
   }
 
   /**
@@ -93,4 +102,22 @@ export class ParquetExportSink implements ExportSink {
   onModuleDestroy(): Promise<void> {
     return this.close();
   }
+}
+
+/**
+ * Which class of problem a refused `HeadBucket` is.
+ *
+ * Only the two the caller can act on. Anything else — no route to the host, a
+ * bucket that does not exist, a connection refused — is the destination not
+ * being there, which is what "unreachable" says.
+ */
+function reasonRefusing(
+  error: unknown,
+): 'storage-rejected' | 'storage-unreachable' {
+  const status = (error as { $metadata?: { httpStatusCode?: number } })
+    ?.$metadata?.httpStatusCode;
+
+  return status === 401 || status === 403
+    ? 'storage-rejected'
+    : 'storage-unreachable';
 }

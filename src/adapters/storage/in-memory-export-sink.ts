@@ -1,3 +1,4 @@
+import { ExportFailed } from '../../application/export/export-failure';
 import type {
   ColumnarFile,
   ExportSink,
@@ -20,7 +21,7 @@ import type { ObjectKey } from '../../domain/export/partition';
 export class InMemoryExportSink implements ExportSink {
   private readonly written = new Map<ObjectKey, ColumnarFile>();
   private readonly failing = new Set<ObjectKey>();
-  private reachableDestination = true;
+  private refusal: ExportFailed | null = null;
 
   /** Makes one key fail, so a run can be killed exactly half-way. */
   failOn(key: ObjectKey): void {
@@ -28,7 +29,24 @@ export class InMemoryExportSink implements ExportSink {
   }
 
   unreachable(): void {
-    this.reachableDestination = false;
+    this.refusal = new ExportFailed(
+      'storage-unreachable',
+      new Error('the destination is unreachable'),
+    );
+  }
+
+  /**
+   * A destination that answers, and refuses the credential.
+   *
+   * Distinct from unreachable on purpose: the real sink tells the two apart by
+   * the status it got back, and a double that collapsed them would let a run
+   * report the wrong diagnosis with every test still green.
+   */
+  rejectsCredentials(): void {
+    this.refusal = new ExportFailed(
+      'storage-rejected',
+      new Error('the credential was refused'),
+    );
   }
 
   keys(): ObjectKey[] {
@@ -48,8 +66,8 @@ export class InMemoryExportSink implements ExportSink {
   }
 
   reachable(): Promise<void> {
-    return this.reachableDestination
+    return this.refusal === null
       ? Promise.resolve()
-      : Promise.reject(new Error('the destination is unreachable'));
+      : Promise.reject(this.refusal);
   }
 }
