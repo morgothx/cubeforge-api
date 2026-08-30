@@ -235,7 +235,7 @@ parallel however unrelated their assertions are.
   - _Requirements: 2.1, 2.3, 2.4, 4.4_
   - _Boundary: Integration suite_
 
-- [ ] 7.2 (P) Show that an answer can be drawn without repair
+- [x] 7.2 (P) Show that an answer can be drawn without repair
   - Quantities as numbers and moments as moments, from the real engine over real
     objects
   - The same question asked twice returns its entries in the same order
@@ -877,3 +877,45 @@ answers are checked against and has to be recognisable, while the name only has
 to be free. Worth stating generally — **a fixture that seeds in `beforeAll`
 inherits the previous suite's leftovers**, and any of it that must be unique
 platform-wide has to be generated rather than chosen.
+
+### 7.2 The decoder was never the thing in doubt
+
+`decodeRows` is unit tested and will turn text into numbers all day. What only
+a real engine can show is that the text arriving is the text the decoder was
+written for — and the local engine reports **every column as `varchar`**, so a
+result typed from what it says would have passed every unit test and failed
+here. That is why these assertions are worth their runtime rather than being a
+slower copy of the ones already passing.
+
+A probe that leaves quantities as text fails three tests.
+
+### 7.2 One narrative carries 3.1 and 3.2 together
+
+Export, ask, record something new **without exporting**, ask again, export,
+ask a third time. In the middle the answer must not have changed and its
+moment must not have moved — the new movement is already in the transactional
+database and still belongs after the line the answer draws. At the end both
+must move together.
+
+The middle assertion alone would pass against a watermark that never advanced,
+and the last one alone would pass against an answer dated from the clock. Two
+probes, one each: a moment read from `new Date()` rather than from the mark
+fails the middle, and it is the pair that makes "not yet" mean something other
+than "never".
+
+### 7.2 Ordering needs data a wrong statement could reorder
+
+Recorded out of order, and two kinds on one day, so `ORDER BY` has something to
+get wrong. Asked twice and compared — and then compared against the order the
+statement *declares*, because two runs agreeing tells you only that the engine
+is deterministic today, not that the order is the one a chart was promised.
+
+A probe removing the explicit order fails two tests.
+
+### 7.2 Three states, all three seen against the real engine
+
+A tenant recorded but not carried answers `never-exported`; a quiet period
+answers with no entries; a period with activity answers with them. The first
+two draw the same empty chart and only one of them means the data is missing.
+The probe the task named — a default moment in place of "never carried" — fails
+exactly the first.
