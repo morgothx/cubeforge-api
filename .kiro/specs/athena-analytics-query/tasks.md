@@ -202,7 +202,7 @@ get back, and they are worth being able to test without an engine.
 
 ## 6. Wiring
 
-- [ ] 6.1 Give the caller a route, and the application a module
+- [x] 6.1 Give the caller a route, and the application a module
   - Bind the ports to the adapters; import the feature into the application —
     this one **is** reachable by a request, unlike the export's
   - The tenant comes from the path, the same place every other tenant-scoped
@@ -676,3 +676,141 @@ The constraint the table exists to protect is untouched and is the one the lint
 rule actually enforces: no adapter, no driver, no repository. `tenant-authorization`
 imports `TenantScopedRepositories` as a type only, so nothing on this path
 reaches PostgreSQL at runtime.
+
+### 6.1 A fifth reason, because the four described a store that answers
+
+`not-configured` joins the closed set. An absent setting was going to be
+reported as `store-unreachable`, and the reason set's own comment is the
+argument against that: each one is "a different thing to do". An operator
+supplies a value here; "unreachable" sends them to look at a host that is
+answering fine. It has a producer, which is the debt 3.1 recorded and 4.1 paid
+for the other four.
+
+The missing keys travel as the cause, so they reach a log and no response. Env
+key names are not a secret, but a message a caller can read is a message that
+describes this platform's insides to whoever asks.
+
+### 6.1 The API must start without analytical configuration, and now cannot fail to
+
+`AnalyticsModule` is imported by `AppModule`, so anything it reads while the
+graph is assembled is read on every boot. A provider factory calling
+`loadAnalyticsConfig` would make an API missing `ANALYTICS_DATABASE` refuse to
+start — taking sign-in, inventory and everything else down over a capability
+none of them touch. `DeferredAnalytics` builds at the first question instead.
+
+The export is the deliberate opposite and is right to be: it is a command,
+nothing else is running, and refusing early costs nobody anything. **The same
+requirement produces opposite answers in the two modules**, which is worth
+saying out loud, because the export's validation gate found this trap from the
+other side.
+
+A failed build is not remembered, so a setting supplied to a running process
+takes effect at the next question rather than at the next deployment.
+
+### 6.1 The fifth bucket made four hand-written skip lists a real bug
+
+`ThrottlerModule` is global: a bucket a route does not skip counts that route.
+Every skip list on the platform was written by hand as "the buckets that
+existed when I was written", and there were **four** of them — inventory's, and
+two inside the authentication controller. Adding an analytics bucket required
+editing all four, and missing one would have been invisible: the route keeps
+working and simply spends somebody else's allowance.
+
+They are derived from one registry now. `everyBucketExcept` refuses a name
+nothing registers, and a bucket named but never registered fails a test rather
+than being skipped everywhere and counting nothing.
+
+**A probe restored inventory's hand-written list and every test passed.** The
+derivation made the mistake unrepresentable but nothing was *watching* — no
+test had ever asserted what a controller actually skips. It does now, read off
+the decorator's own metadata, and the probe fails four tests.
+
+### 6.1 A constant that exists in the types and not at runtime
+
+Reading that metadata needs the key `@SkipThrottle` writes under.
+`@nestjs/throttler` declares `THROTTLER_SKIP` in its type definitions and does
+not export it: importing it type-checks and yields `undefined` at runtime, which
+turned every lookup into a miss and every assertion into two empty objects
+comparing equal.
+
+It is discovered instead — apply the decorator to a throwaway class, read back
+which key appeared. A library that changes its key now throws here rather than
+letting the suite pass vacuously. **A test that reads a framework's internals
+has to prove it found them.**
+
+### 6.1 The bucket had never been emptied, and every question paid for it
+
+`analytics-queries` began failing roughly two runs in three, in isolation, with
+`the engine answered FAILED`. Nothing in this task touched it, and 4.4 had
+recorded three clean runs — those runs were luck.
+
+The engine's own reason, captured rather than guessed:
+
+```
+IO Error: Could not connect to server error for HTTP GET to
+'http://floci:4566/cubeforge-exports/?prefix=movements%2F'
+```
+
+The local engine rebuilds a view over the **whole** prefix on every question,
+whichever table is being asked about. Nothing had ever emptied the export
+bucket, so the cost of one question grew with every tenant every run had ever
+exported, until the emulator started failing to reach its own object store
+mid-query. It read as an intermittent defect in the analytics and was neither:
+it was a fixture that never reset.
+
+Emptied once in `globalSetup`, before any suite starts. That is the distinction
+4.3 drew from the other side — a suite clearing the bucket between its own tests
+is reaching into whatever runs next, while a prerequisite of the run is arranged
+once, before anything is using it, exactly as the database is migrated. **The
+whole integration run went from ~200s to ~105s.**
+
+### 6.1 The fifth Floci gap: an empty prefix is an error, not zero rows
+
+With the bucket now actually empty at the start of a run, a new failure
+appeared — and it is a fidelity gap rather than a defect:
+
+```
+IO Error: No files found that match the pattern "s3://…/movements/**"
+```
+
+Real Athena reads an empty partition as zero rows, which is exactly what
+requirement 3.3 wants: a tenant nothing has ever been carried for answers
+"never exported". The local engine cannot build the view at all, so **a store
+before its first export cannot be asked anything locally**, and no local test
+can distinguish the correct behaviour there from this one.
+
+The adapter is **not** taught to recognise that message. Matching on a driver's
+wording is the mistake this repository has refused four times, for the same
+reason each time. The fixture arranges around the gap instead:
+`useAnalyticalStore()` guarantees a catalogue and one exported tenant, and says
+in its own comment why the second half is needed.
+
+Fifth gap in this feature, after: no partitions needed, every column typed as
+text, parameters dropped, and `glue:GetTable` undeserialisable.
+
+### 6.1 Two platform guards demanded the new route, which is what they are for
+
+`declaration-drift` and `route-inventory` both failed the moment the controller
+existed, each naming the route rather than a count. `role-matrix` then failed
+because it covers every route the application serves — so the analytical route
+is exercised for all six principals, which is 5.2 and 5.3 arriving a task early
+and for free. None of the three was edited to stop complaining; each was given
+what it asked for.
+
+`role-matrix` also needed the suite timeout the analytics suites carry, and for
+the same reason: one of its routes now asks a polled engine, once per principal
+it admits, and that does not fit Jest's five-second default. It fitted while
+every route there was a single indexed query.
+
+### 6.1 Files the design's plan did not name
+
+Four, each recorded rather than quietly added:
+`throttling-buckets.ts` and `platform-throttling.ts` (the registry and its
+composition — split so the names stay a leaf and no import cycle forms),
+`deferred-analytics.ts` (7.1's timing, which the plan implied and did not
+place), and `analytics-failure.filter.ts` (the platform maps errors to
+responses in a filter; a controller `try`/`catch` would have been the first
+exception to that).
+
+`analytics-route.integration-spec.ts` is 6.1's own local-stack proof, kept
+separate from the `analytics-http` file the plan reserves for 7.3.

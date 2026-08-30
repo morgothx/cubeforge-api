@@ -5,18 +5,14 @@ import {
 } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CorrelationMiddleware } from './adapters/http/correlation.middleware';
-import { throttlerOptions } from './adapters/http/credential-throttling';
-import {
-  inventoryThrottlerOptions,
-  loadInventoryThrottlingConfig,
-} from './adapters/http/inventory-throttling';
+import { platformThrottlerOptions } from './adapters/http/platform-throttling';
 import { PrincipalMiddleware } from './adapters/http/principal.middleware';
-import { loadThrottlingConfig } from './adapters/http/throttling.config';
 import { AuthenticationModule } from './authentication.module';
 import { AuthorizationModule } from './authorization.module';
 import { SystemModule } from './system.module';
 import { IdentityModule } from './identity.module';
 import { InventoryModule } from './inventory.module';
+import { AnalyticsModule } from './analytics.module';
 
 /**
  * Composition root. Ports declared in `application/ports` are bound to their
@@ -31,18 +27,17 @@ import { InventoryModule } from './inventory.module';
      * credential limits would disappear without a single test noticing.
      *
      * Every bucket is therefore visible to every throttled handler, and each
-     * one skips the buckets that are not its own. That is explicit rather than
-     * clever, and it is why the bucket names are exported constants.
+     * one skips the buckets that are not its own — derived from the single
+     * registry in `throttling-buckets.ts` rather than listed per route, so a
+     * new bucket cannot start counting four features' routes by omission.
      */
-    ThrottlerModule.forRoot([
-      ...throttlerOptions(loadThrottlingConfig(process.env)),
-      ...inventoryThrottlerOptions(loadInventoryThrottlingConfig(process.env)),
-    ]),
+    ThrottlerModule.forRoot(platformThrottlerOptions(process.env)),
     SystemModule,
     AuthenticationModule,
     AuthorizationModule,
     IdentityModule,
     InventoryModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule implements NestModule {

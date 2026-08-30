@@ -7,7 +7,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
-import { INVENTORY_BY_CREDENTIAL } from './inventory-throttling';
 import { RefreshSessionUseCase } from '../../application/authentication/refresh-session.use-case';
 import { SignInUseCase } from '../../application/authentication/sign-in.use-case';
 import { SignOutUseCase } from '../../application/authentication/sign-out.use-case';
@@ -27,6 +26,7 @@ import {
 } from './dto/requests';
 import { toSessionResponse, type SessionResponse } from './dto/responses';
 import { Access } from './access/access.decorator';
+import { everyBucketExcept } from './throttling-buckets';
 
 /**
  * The only routes that take no actor: presenting the credential *is* the
@@ -61,10 +61,7 @@ export class AuthenticationController {
   @Post('sign-in')
   @Access({ public: true })
   @UseGuards(CredentialThrottlerGuard)
-  @SkipThrottle({
-    [REDEMPTION_BY_ORIGIN]: true,
-    [INVENTORY_BY_CREDENTIAL]: true,
-  })
+  @SkipThrottle(everyBucketExcept(SIGN_IN_BY_ORIGIN, SIGN_IN_BY_ADDRESS))
   @HttpCode(HttpStatus.OK)
   async store(@Body() body: SignInRequest): Promise<SessionResponse> {
     return toSessionResponse(
@@ -103,11 +100,7 @@ export class AuthenticationController {
   @UseGuards(CredentialThrottlerGuard)
   // Counted by origin only: a setup token names nobody until it is looked up,
   // so there is no address to count by.
-  @SkipThrottle({
-    [SIGN_IN_BY_ORIGIN]: true,
-    [SIGN_IN_BY_ADDRESS]: true,
-    [INVENTORY_BY_CREDENTIAL]: true,
-  })
+  @SkipThrottle(everyBucketExcept(REDEMPTION_BY_ORIGIN))
   @HttpCode(HttpStatus.NO_CONTENT)
   async establish(@Body() body: RedeemSetupTokenRequest): Promise<void> {
     await this.redeem.execute({

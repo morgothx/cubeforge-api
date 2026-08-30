@@ -19,6 +19,14 @@ import {
 } from './support/application';
 import { seed } from './support/database';
 import { useIntegrationDatabase } from './support/fixtures';
+import { useAnalyticalStore } from './support/analytics';
+
+// One of the routes below asks a polled analytical engine, once per principal
+// it admits. That does not fit Jest's five-second default, and it fitted while
+// every route here was a single indexed query — which is exactly how this
+// arrives as an intermittent failure rather than an obvious one. Same fix, and
+// same reason, as the analytics suites.
+jest.setTimeout(30_000);
 
 type Headers = Record<string, string>;
 
@@ -68,6 +76,14 @@ interface RouteCase {
  */
 describe('the role matrix', () => {
   useIntegrationDatabase();
+  /**
+   * The analytical route is one of the routes below, and it can answer nobody —
+   * admitted or refused — without a catalogue and a store with something in it.
+   * Arranged here rather than inherited from whichever suite happened to run
+   * first: that is the lesson the previous feature's CI taught, and an export
+   * suite running in between empties what it left behind.
+   */
+  useAnalyticalStore();
 
   let app: INestApplication<App>;
 
@@ -248,6 +264,17 @@ describe('the role matrix', () => {
               },
             ],
           }),
+    },
+    {
+      key: 'GET /tenants/:tenantId/analytics/movements',
+      admits: ['admin', 'editor', 'viewer'],
+      call: (world, headers) =>
+        request(server())
+          .get(
+            `/tenants/${world.acme.id}/analytics/movements` +
+              '?from=2026-08-01&to=2026-08-31',
+          )
+          .set(headers),
     },
     {
       key: 'GET /tenants/:tenantId/inventory/stock',

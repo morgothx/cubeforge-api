@@ -208,6 +208,7 @@ describe('the route inventory, against the real application', () => {
       'DELETE /tenants/:tenantId/members/:membershipId',
       'GET /me',
       'GET /tenants',
+      'GET /tenants/:tenantId/analytics/movements',
       'GET /tenants/:tenantId/api-keys',
       'GET /tenants/:tenantId/inventory/locations',
       'GET /tenants/:tenantId/inventory/products',
@@ -271,6 +272,11 @@ describe('the route inventory, against the real application', () => {
       'GET /tenants/:tenantId/inventory/stock': {
         roles: ['admin', 'editor', 'viewer'],
         machines: true,
+      },
+      // No `machines`. An analytical question is expensive, and admitting keys
+      // would let an automated client decide how often that cost is paid.
+      'GET /tenants/:tenantId/analytics/movements': {
+        roles: ['admin', 'editor', 'viewer'],
       },
       'POST /tenants/:tenantId/inventory/movements': {
         roles: ['admin', 'editor'],

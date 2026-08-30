@@ -17,9 +17,16 @@ import type { ThrottlingConfig } from './throttling.config';
  * operations with different tolerances, and sharing a bucket would let a burst
  * of one lock out the other.
  */
-export const SIGN_IN_BY_ORIGIN = 'sign-in-origin';
-export const SIGN_IN_BY_ADDRESS = 'sign-in-address';
-export const REDEMPTION_BY_ORIGIN = 'redemption-origin';
+export {
+  SIGN_IN_BY_ORIGIN,
+  SIGN_IN_BY_ADDRESS,
+  REDEMPTION_BY_ORIGIN,
+} from './throttling-buckets';
+import {
+  SIGN_IN_BY_ORIGIN,
+  SIGN_IN_BY_ADDRESS,
+  REDEMPTION_BY_ORIGIN,
+} from './throttling-buckets';
 
 /**
  * Counting by origin and by address, because either one alone is avoidable.

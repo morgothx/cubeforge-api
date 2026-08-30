@@ -1,38 +1,17 @@
-import { Injectable, Logger, type ExecutionContext } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import type { ThrottlerOptions } from '@nestjs/throttler';
+import type { Request } from 'express';
 import {
-  ThrottlerGuard,
-  type ThrottlerLimitDetail,
-  type ThrottlerOptions,
-} from '@nestjs/throttler';
-import type { Request, Response } from 'express';
-import { createHash } from 'node:crypto';
-import { correlationOf } from './correlation.middleware';
-import {
-  REDEMPTION_BY_ORIGIN,
-  SIGN_IN_BY_ADDRESS,
-  SIGN_IN_BY_ORIGIN,
-} from './credential-throttling';
-import { resolvedActor } from './principal.middleware';
+  BucketThrottlerGuard,
+  callerOf,
+  everyBucketExcept,
+  INVENTORY_BY_CREDENTIAL,
+} from './throttling-buckets';
 
-/** The bucket name, referred to by `@SkipThrottle` elsewhere. */
-export const INVENTORY_BY_CREDENTIAL = 'inventory-credential';
+export { INVENTORY_BY_CREDENTIAL };
 
-/**
- * Every bucket that is not this feature's.
- *
- * `ThrottlerModule` is `@Global`, so one registration holds every bucket and a
- * throttled handler is counted by all of them unless it says otherwise. An
- * inventory route counted by `sign-in-address` would be counted by a tracker
- * that reads an email out of a body it does not have.
- *
- * Written as one exported object rather than repeated per handler, so adding a
- * bucket to the platform is one edit here instead of one per route.
- */
-export const OTHER_BUCKETS = {
-  [SIGN_IN_BY_ORIGIN]: true,
-  [SIGN_IN_BY_ADDRESS]: true,
-  [REDEMPTION_BY_ORIGIN]: true,
-} as const;
+/** Every bucket an inventory route must not be counted by. */
+export const OTHER_BUCKETS = everyBucketExcept(INVENTORY_BY_CREDENTIAL);
 
 export interface InventoryThrottlingConfig {
   readonly windowSeconds: number;
@@ -88,88 +67,14 @@ export function inventoryThrottlerOptions(
       ttl: config.windowSeconds * 1000,
       limit: config.requestsPerCredential,
       getTracker: (request: Record<string, unknown>) =>
-        credentialOf(request as unknown as Request),
+        callerOf(request as unknown as Request),
     },
   ];
 }
 
-/**
- * Which credential is asking.
- *
- * Hashed for the same reason the credential throttler hashes an address: this
- * value reaches a storage key and, for a person, it is an identifier of a human.
- *
- * A caller with no principal falls back to the network origin. It will be
- * refused by the guard a moment later anyway, and bucketing every anonymous
- * request together is what stops an unauthenticated flood from consuming the
- * allowance of whoever shares its address.
- */
-function credentialOf(request: Request): string {
-  const actor = resolvedActor(request);
-  const identity =
-    actor === null
-      ? `origin:${request.ip ?? 'unknown'}`
-      : actor.kind === 'machine'
-        ? `key:${actor.apiKeyId}`
-        : `person:${actor.personId}`;
-
-  return createHash('sha256').update(identity).digest('hex');
-}
-
-/**
- * Refuses with 429 and says how long to wait.
- *
- * The wait is the one thing a throttled caller has to be told: an integration
- * that cannot tell "slow down" from "broken" will either give up or hammer.
- *
- * **The library's own header is not enough.** For a *named* bucket it emits
- * `Retry-After-inventory-credential`, and no HTTP client in the world honours
- * that — a caller would have to know this platform's bucket names to find it.
- * The plain `Retry-After` is set here as well, which is the one an ordinary
- * client, proxy or retry library already understands.
- */
+/** The platform guard, named for the routes that mount it. */
 @Injectable()
-export class InventoryThrottlerGuard extends ThrottlerGuard {
-  private readonly log = new Logger(InventoryThrottlerGuard.name);
-
-  /**
-   * One allowance per credential, across the whole feature.
-   *
-   * The stock key includes the controller and the handler, which would give a
-   * caller sixty requests *per route* — sixty reads and sixty writes and sixty
-   * batches, four hundred and twenty a minute against a limit that says sixty.
-   * The bucket and the tracker are the whole key here, so listing the catalogue
-   * spends the same allowance as submitting a batch.
-   *
-   * Found by a test that exhausted the allowance with reads and then wrote
-   * successfully. Nothing about the configuration looked wrong.
-   */
-  protected generateKey(
-    _context: ExecutionContext,
-    tracker: string,
-    name: string,
-  ): string {
-    return `${name}-${tracker}`;
-  }
-
-  protected async throwThrottlingException(
-    context: ExecutionContext,
-    detail: ThrottlerLimitDetail,
-  ): Promise<void> {
-    const http = context.switchToHttp();
-    const request = http.getRequest<Request>();
-
-    const seconds = Math.max(1, Math.ceil(detail.timeToBlockExpire));
-    http.getResponse<Response>().setHeader('Retry-After', seconds);
-
-    // The bucket key is a hash, so this groups a caller's requests for an
-    // operator reading logs without naming the person or the key behind them.
-    this.log.warn(
-      `${correlationOf(request)} throttled: ${detail.limit} inventory requests exhausted for bucket ${detail.key.slice(0, 12)}`,
-    );
-    return super.throwThrottlingException(context, detail);
-  }
-}
+export class InventoryThrottlerGuard extends BucketThrottlerGuard {}
 
 function positiveInteger(
   raw: string | undefined,

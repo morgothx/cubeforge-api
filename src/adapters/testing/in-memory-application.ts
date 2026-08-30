@@ -18,6 +18,9 @@ import type { PasswordHasher } from '../../application/ports/password-hasher';
 import { PASSWORD_HASHER } from '../../application/ports/password-hasher';
 import { PLATFORM_UNIT_OF_WORK } from '../../application/ports/platform-unit-of-work';
 import { TENANT_SCOPED_UNIT_OF_WORK } from '../../application/ports/tenant-scoped-unit-of-work';
+import { TENANT_SCOPED_ANALYTICS } from '../../application/ports/tenant-scoped-analytics';
+import type { TenantScopedAnalytics } from '../../application/ports/tenant-scoped-analytics';
+import { InMemoryAnalytics } from '../analytics/in-memory-analytics';
 import { throttlerOptions } from '../http/credential-throttling';
 import type { ThrottlingConfig } from '../http/throttling.config';
 import { InMemoryAuthenticatorUnitOfWork } from '../persistence/in-memory/in-memory-authenticator-unit-of-work';
@@ -69,6 +72,12 @@ export interface InMemoryApplicationOptions {
    * declared is refused needs a route nobody declared.
    */
   readonly controllers?: readonly Type<unknown>[];
+  /**
+   * The analytical seam. Defaults to an empty double rather than to the real
+   * adapter, because the real one reads settings this suite has none of — and
+   * because a route test that reached an engine would be measuring the engine.
+   */
+  readonly analytics?: TenantScopedAnalytics;
 }
 
 /**
@@ -116,6 +125,8 @@ export async function createInMemoryApplication(
     .useValue(options.hasher)
     .overrideProvider(ACCESS_TOKEN_ISSUER)
     .useValue(options.tokens)
+    .overrideProvider(TENANT_SCOPED_ANALYTICS)
+    .useValue(options.analytics ?? new InMemoryAnalytics())
     // The throttling limits are read from the environment at module definition
     // time, which a test cannot influence — so the resolved options are
     // replaced instead.

@@ -389,6 +389,7 @@ later in the only environment where it is visible.
 
 ```ts
 export type AnalyticsFailureReason =
+  | 'not-configured'
   | 'store-unreachable'
   | 'store-rejected'
   | 'question-timed-out'

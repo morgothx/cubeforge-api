@@ -11,6 +11,15 @@
  * and its validation gate is what noticed.
  */
 export type AnalyticsFailureReason =
+  /**
+   * The settings naming the catalogue, the pool and the results location are
+   * absent or incomplete. Its own class rather than a kind of unreachable,
+   * because the two are different work: an operator supplies a value here,
+   * where "unreachable" sends them to look at a host that is answering fine.
+   * The missing keys are named in the log and in nothing that leaves the
+   * process.
+   */
+  | 'not-configured'
   | 'store-unreachable'
   | 'store-rejected'
   | 'question-timed-out'
