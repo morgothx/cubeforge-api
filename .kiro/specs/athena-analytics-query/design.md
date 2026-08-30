@@ -192,7 +192,8 @@ sequenceDiagram
 | `src/adapters/analytics/athena-analytics.ts` | The seam's real implementation, and the only file holding a statement |
 | `src/adapters/analytics/analytics-config.ts` | Catalogue, workgroup and result location from the environment |
 | `src/adapters/analytics/analytics-config.spec.ts` | Every missing setting named at once |
-| `src/adapters/analytics/catalogue-definition.ts` | The three tables and their partition arrangement, as data |
+| `src/adapters/analytics/catalogue-definition.ts` | The four tables and their partition arrangement, as data |
+| `src/adapters/analytics/glue-catalogue.ts` | Applying that definition, and creating what the engine writes to |
 | `src/adapters/analytics/catalogue-definition.spec.ts` | The arrangement, asserted as the values it will send |
 | `src/adapters/analytics/in-memory-analytics.ts` | The double the use-case tests run against |
 | `src/adapters/http/analytics.controller.ts` | The one route |

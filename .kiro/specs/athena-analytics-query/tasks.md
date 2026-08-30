@@ -133,7 +133,7 @@ get back, and they are worth being able to test without an engine.
   - _Requirements: 6.1, 6.2_
   - _Boundary: Analytics adapters_
 
-- [ ] 4.2 Describe the exported layout to the engine, and give the operator a
+- [x] 4.2 Describe the exported layout to the engine, and give the operator a
       command
   - The four tables over the four prefixes, with the columns the export already
     publishes and nothing renamed on the way through
@@ -479,3 +479,44 @@ something different, and two rows that look alike is not that case.
 The refusal test built an `Error` wearing the right `name` and `reason` rather
 than a real `AnalyticsUnavailable`, and `askingAs` recognises the class, not the
 shape. The failing test was the fake being wrong, not the code.
+
+### 4.2 A fourth Floci gap: `glue:GetTable` cannot be deserialized
+
+The obvious integration test reads the tables back and asserts what they say.
+It cannot: the JS SDK refuses the response with *"Epoch timestamps must be
+expressed as floating point numbers or their string representation"*.
+
+Traced rather than guessed. The raw response is fine except for one field —
+`LastAccessTime: null`, where real AWS sends a number or omits it. The AWS CLI
+(Python) tolerates the null; the JS SDK does not. Everything else came back
+exactly as sent, projection properties included, which is how it was confirmed
+that the catalogue itself is correct and only the read-back is unusable.
+
+So the suite asserts **the command's own report** — which tables it created,
+which it updated — plus what the engine actually answers. That is the better
+test regardless: the report is what an operator reads, and an answer from real
+objects is what the catalogue is *for*.
+
+Fourth gap in this feature, after: no partitions needed, every column typed as
+text, and parameters dropped.
+
+### 4.2 The columns are derived from the export, not restated
+
+There is one list of movement columns on this platform, and the catalogue reads
+it. A column added upstream therefore cannot drift from the one an engine was
+told about — the alternative is two lists that agree until the day they do not,
+and the disagreement surfaces as a chart with a missing series.
+
+The published columnar type is translated to the engine's spelling in one table,
+and a probe that describes a quantity as text fails the test that checks it.
+
+### 4.2 What is asserted where, and why the split matters here most
+
+The unit spec asserts **the values the command sends**; the integration suite
+asserts **that the command runs, repeats safely, and leaves an engine that
+answers**. Nothing asserts the partition arrangement is correct, because nothing
+locally can: the emulator infers partitions from the key path and answers either
+way.
+
+This is the task the "declared, not verified" section of `design.md` was written
+for, and the split is what keeps that honest rather than merely stated.
