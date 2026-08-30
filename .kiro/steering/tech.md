@@ -1,6 +1,6 @@
 # Technology
 
-*Updated: 2026-08-13*
+*Updated: 2026-08-29*
 
 ## Stack
 
@@ -15,8 +15,9 @@
 | Semantic layer | Cube.dev |
 | Serverless compute | AWS Lambda + API Gateway |
 | Local AWS | Floci emulator on `localhost:4566` |
+| Columnar format | Parquet, written with `hyparquet-writer`, read back with `hyparquet` |
 | Validation | class-validator + class-transformer, at the HTTP edge |
-| Tests | Jest — unit (no infrastructure) and integration (real PostgreSQL) |
+| Tests | Jest — unit (no infrastructure) and integration (real PostgreSQL and Floci) |
 
 ## Decisions worth remembering
 
@@ -42,6 +43,21 @@ contradicts the reason pnpm was chosen.
 **NestJS over bare Express.** Its module system, dependency injection and Guards
 map directly onto the authorization requirements. Guards in particular are why
 role enforcement can be infrastructure rather than per-route code.
+
+**The export cursor counts transactions, never moments.** `recorded_at` is the
+moment a transaction *began*, and two concurrent inserts commit in whatever
+order they finish — so a movement whose transaction started earlier and
+committed later would fall below a timestamp cursor for ever and be skipped
+silently. The line the export will not cross is
+`pg_snapshot_xmin(pg_current_snapshot())`: the identifier below which nothing is
+still in flight. Anything that later needs "everything since last time" wants
+this shape and not a timestamp.
+
+**The columnar file is read back by a different library from the one that wrote
+it.** A file only its own writer can read proves nothing about what a query
+engine will meet, so the round trip in the tests crosses a library boundary on
+purpose. The writer is ESM-only, which is why Jest runs under
+`node --experimental-vm-modules` (see Configuration).
 
 **Cube.dev is not serverless.** It needs a persistent pre-aggregation cache and
 warm connections, which Lambda's execution model would defeat. It runs as a
@@ -78,10 +94,12 @@ These are the baseline, not per-endpoint judgment calls:
   exists precisely for the day a use case forgets to scope. Each layer has a
   test suite that neutralizes the other, so neither can be credited for the
   other's work.
-- **Three database identities, and the runtime is never the owner.** A table
+- **Four database identities, and the runtime is never the owner.** A table
   owner bypasses row-level security unless `FORCE` is set, so `cubeforge_app`
-  (tenant-scoped) and `cubeforge_operator` (platform) are deliberately not the
-  owner; `cubeforge_migrator` owns the schema and never serves a request. Their
+  (tenant-scoped), `cubeforge_operator` (platform) and `cubeforge_authenticator`
+  (reads credentials, with no tenant context, because resolving an API key must
+  discover which tenant it belongs to) are deliberately not the owner;
+  `cubeforge_migrator` owns the schema and never serves a request. Their
   passwords are set from the environment by `pnpm db:bootstrap`, never by a
   migration, so no secret enters version control.
 - **Tenant context is transaction-local.** `set_config('app.current_tenant', …,
@@ -115,6 +133,20 @@ These are the baseline, not per-endpoint judgment calls:
   confirmed to fail with row-level security disabled, with a policy missing, or
   with a repository predicate removed. A test that has never failed has not been
   shown to test anything.
+- **Run the probe, and read what it did.** A probe that fails nothing is a claim
+  about the probe until somebody looks. Two have walked straight through a test
+  that appeared to cover them, and both taught something the reasoning had
+  missed — so the result is read, and when a probe does not bite, that is
+  recorded rather than assumed away.
+- **A double may never be looser than the thing it stands for.** This has cost
+  four separate bugs: test identifiers no `uuid` column would accept, a rollback
+  the double did not perform, a horizon that moved only when *that* tenant wrote
+  something, and an emulator that accepts every credential. When the real thing
+  cannot produce a condition, arrange something local that can — a three-line
+  server answering 403 is still local.
+- **Whichever layer answers first hides the other**, so each has to be asserted
+  where nothing stands in front of it: a repository predicate behind a policy, a
+  missing grant in front of a missing policy.
 
 ## Configuration
 
@@ -123,6 +155,12 @@ registered, and drizzle-kit loads it for its own config — but scripts and test
 runs must ask for it, which they do with `node --env-file-if-exists=.env`. The
 `-if-exists` form matters: CI supplies the environment directly and has no file.
 
+Jest runs through `node --experimental-vm-modules`. One dependency is published
+only as an ES module, and Jest's VM refuses a dynamic import without the flag —
+a property of the test runner, not of the code: the compiled output imports it
+under plain Node with no flag at all. `createRequire` does not help, because
+Jest patches the module registry.
+
 Connection settings are validated once at startup rather than at first query,
 reporting every missing key at once, and refuse to start if a runtime identity
 is pointed at the schema owner.
@@ -130,6 +168,8 @@ is pointed at the schema owner.
 ## Local environment
 
 `docker compose up -d` provides Floci (4566), PostgreSQL (5432) and Cube.dev
-(4000 REST/playground, 15432 SQL API). Container runtime state must never be
+(4000 REST/playground, 15432 SQL API). CI runs Floci and PostgreSQL as service
+containers for the same reason, so the integration suite exercises the same
+things there as here. Container runtime state must never be
 written into the source tree; bind mounts that a root container writes to are
 shadowed by named volumes.

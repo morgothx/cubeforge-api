@@ -1,6 +1,6 @@
 # Product
 
-*Updated: 2026-08-13*
+*Updated: 2026-08-29*
 
 ## What this is
 
@@ -45,9 +45,10 @@ not just the outcome.
   never per-route by hand.
 - **Transactional API** — idempotent, rate-limited, validated endpoints suitable
   for retrying clients and upstream ERP-style integrations.
-- **Analytical pipeline** — scheduled export of historical data to columnar
-  storage, queried by a separate analytical engine, so heavy analysis never
-  touches the transactional database.
+- **Analytical pipeline** — export of historical data to columnar storage,
+  partitioned by tenant and by day, so heavy analysis never touches the
+  transactional database. It runs today as an operator command; *when* it runs
+  is a deployment decision, deliberately not a cron inside the API process.
 - **Semantic layer** — business metrics defined once and served to the frontend,
   rather than re-implemented per chart.
 
@@ -84,14 +85,18 @@ Two rules apply platform-wide and every feature inherits them:
 
 ## Known gaps
 
-Neither is an oversight; both are the next feature's to close.
+**Both gaps recorded here on 2026-08-13 are closed.** Provisioning a tenant now
+names its first administrator and reports who that turned out to be, so no
+membership is written by hand; and the acting principal is resolved from a
+verified bearer token or API key rather than read from a header and believed.
+Recorded rather than deleted, because "the principal used to be trusted input"
+explains why the resolver is shaped the way it is.
 
-- **A tenant's first administrator has no route.** Creating a member requires an
-  administrator to already exist, so the first membership is currently written
-  directly.
-- **The acting principal is trusted input.** It is read from request headers by
-  a middleware that refuses to be constructed in production. Nothing verifies
-  that a caller is who they claim to be yet.
+What is genuinely open is one thing:
+
+- **The exported data has no reader yet.** Movements and catalogue land in
+  object storage as Parquet, partitioned for a query engine, and nothing queries
+  them. That is the next feature's to close, and the layout was chosen for it.
 
 ## Explicit non-goals
 

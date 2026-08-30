@@ -1,6 +1,6 @@
 # Structure
 
-*Updated: 2026-08-13*
+*Updated: 2026-08-29*
 
 ## Organizing principle
 
@@ -33,14 +33,24 @@ src/
     <aggregate>/               # one file per use case
   adapters/
     http/                      # controllers, DTOs, filters, middleware
+    cli/                       # arguments, output and exit status for commands
     persistence/postgres/      # Drizzle schema and repository implementations
     persistence/in-memory/     # the same ports, for tests
+    storage/                   # object storage and the columnar encoding
+    crypto/                    # hashing, token issuing, secret generation
     system/                    # clock, identifier generation
     testing/                   # deterministic adapters used only by tests
   <feature>.module.ts          # binds this feature's ports to adapters
   app.module.ts                # imports feature modules
   main.ts                      # Express bootstrap
+scripts/                       # operator and setup entry points, run by pnpm
+drizzle/                       # migrations, numbered in the order they land
 ```
+
+An operator command keeps its testable parts in `adapters/cli/` and leaves
+`scripts/` a thin bootstrap. `scripts/` is outside `rootDir` for the unit
+tests, so anything with a decision in it — parsing arguments, deciding an exit
+status, formatting a report — belongs in `src/` where it can be tested.
 
 Adapters are grouped by the technology behind them, not by the port they
 implement, because that is the axis along which they get replaced: swapping
@@ -82,6 +92,14 @@ acquired a dependency on the framework it was kept away from.
 `main.ts` and the eventual `lambda.ts` share the same `AppModule`, which is what
 keeps serverless a deployment mode rather than a parallel architecture.
 
+**A feature module is not always imported by `app.module.ts`.** One whose entry
+point is a command rather than a route is booted by that command with
+`NestFactory.createApplicationContext`, and the API never sees it — otherwise
+the API would refuse to start over configuration it never uses.
+`export.module.ts` is the first. The test for whether a module belongs in
+`AppModule` is whether a request can reach it, not whether it is part of the
+product.
+
 ## Working with the generator
 
 **Do not use `nest g` for structure.** The generator assumes Nest's
@@ -99,13 +117,22 @@ Create files by hand, in the layer they belong to.
 - **Tokens**: `SCREAMING_SNAKE_CASE` constants colocated with the port.
 - **Tests**: `*.spec.ts` beside the unit under test, run by `pnpm test` with no
   infrastructure. `*.integration-spec.ts` under `test/integration/`, run by
-  `pnpm test:integration` against the local database, single-worker because they
-  share one and reset it by truncating.
+  `pnpm test:integration` against the local database and the emulator,
+  single-worker because they share one and reset it by truncating. A
+  prerequisite an integration suite needs — a migrated database, a bucket that
+  exists — is arranged by a fixture the suite calls, never as a side effect of
+  whichever suite happens to run first.
 
 ## Beyond src
 
 - `.kiro/steering/` — project memory (this directory).
-- `.kiro/specs/` — per-feature requirements, design and tasks.
+- `.kiro/specs/` — per-feature requirements, design and tasks. Each `tasks.md`
+  ends with `## Implementation Notes`: the findings from building it that the
+  next feature should not have to rediscover.
+- `scripts/` — entry points run through `pnpm`, one per operator task.
+- `drizzle/` — migrations, numbered in the order they land rather than the order
+  a design imagined them.
+- `test/integration/support/` — the fixtures every integration suite shares.
 - `cube/model/` — Cube.dev semantic models. Runtime state written here by the
   container is shadowed by a named volume and must never be committed.
 - `docker-compose.yml` — the whole local environment in one command.
