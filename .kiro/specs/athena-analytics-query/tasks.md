@@ -223,7 +223,7 @@ get back, and they are worth being able to test without an engine.
 Each writes its own spec file. Three tasks appending to one file are not
 parallel however unrelated their assertions are.
 
-- [ ] 7.1 (P) Show that no tenant reaches another's numbers
+- [x] 7.1 (P) Show that no tenant reaches another's numbers
   - Two tenants holding the same product and the same location, so nothing but
     the tenant tells their rows apart and a leak shows up as the other's number
   - What each tenant is told, compared against what the export wrote for that
@@ -814,3 +814,66 @@ exception to that).
 
 `analytics-route.integration-spec.ts` is 6.1's own local-stack proof, kept
 separate from the `analytics-http` file the plan reserves for 7.3.
+
+### 7.1 The expectations are read out of the bucket, not written into the file
+
+Every assertion in this suite is derived from the objects the export actually
+wrote — listed under the tenant's own prefixes and read back with `hyparquet`,
+the library that did not write them — and then aggregated the way the statement
+says it should be. A list of expected rows typed into the file would agree with
+the engine only until somebody changed both, and would stop being evidence the
+moment it did.
+
+The oracle needs its own probe, and got one: pointed at the *other* tenant's
+prefixes it fails the comparison, which is what proves it is reading per-tenant
+objects rather than everything in the bucket.
+
+### 7.1 Two tenants alike in everything but the tenant
+
+Same product code, same location code, same days, same kinds. Nothing but
+`tenant_id` tells their rows apart, so a lost predicate cannot hide behind a
+difference in the data.
+
+The **names differ**, and that is the part worth keeping. Dropping the tenant
+from the movements side gives a tenant the other's *number*, which a quantity
+check catches. Dropping it from the **catalogue** side gives a tenant the
+other's *label* with its own number beside it — a leak no quantity check would
+ever notice, and the probe proves it: `a widget belonging to Globex` appears in
+Acme's answer.
+
+Three probes, three distinct failures: no tenant in the movements statement
+(2 tests), none on the catalogue side of the join (2), none on the movements
+side of the join (1).
+
+### 7.1 Nobody appears, and there is nowhere for anybody to
+
+A person is seeded in each tenant so that "no person is named" has somebody to
+not name, and neither identifier nor address appears in any of the four
+answers. That alone is an accident of the data, so the entries' key sets are
+asserted as well: three fields each, exactly. A column added to an answer fails
+here rather than being noticed by whoever reads a chart six months later — and
+a probe adding `recordedBy` to the on-hand entry fails two tests.
+
+### 7.1 A `beforeAll` seeds before the cleanup runs
+
+The suite failed as a whole, roughly one run in three, and only in the full
+integration run — never in isolation. Captured rather than left unattributed,
+which is what 4.3 recorded and did not manage:
+
+```
+error: duplicate key value violates unique constraint "tenants_name_unique"
+  at seedTenant … at lookAlikeTenant
+```
+
+Tenant names are unique platform-wide, and this suite seeds in `beforeAll` —
+which runs **before** the per-test cleanup. So a tenant called "Acme" left
+behind by whichever suite happened to run last collides with this one's, and
+whether it does depends entirely on suite order and on what the previous run
+left. In isolation there is nothing to collide with, which is exactly why six
+runs of the file alone said nothing.
+
+The name is generated now and the label kept separate: the label is what the
+answers are checked against and has to be recognisable, while the name only has
+to be free. Worth stating generally — **a fixture that seeds in `beforeAll`
+inherits the previous suite's leftovers**, and any of it that must be unique
+platform-wide has to be generated rather than chosen.
