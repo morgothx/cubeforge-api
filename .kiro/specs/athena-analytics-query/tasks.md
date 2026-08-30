@@ -31,7 +31,7 @@ other.
   - _Requirements: 3.1, 3.3_
   - _Boundary: Integration — the export's published data_
 
-- [ ] 1.2 (P) Read the analytical destination from the environment, and refuse
+- [x] 1.2 (P) Read the analytical destination from the environment, and refuse
       without it
   - Catalogue, workgroup, result location, endpoint, region and credentials,
     read from the environment and never from a value written into the repository
@@ -45,7 +45,7 @@ other.
   - _Requirements: 7.1, 7.2, 7.3_
   - _Boundary: Analytics configuration_
 
-- [ ] 1.3 (P) Take on the two clients, and reach the emulator with them
+- [x] 1.3 (P) Take on the two clients, and reach the emulator with them
   - The query client and the catalogue client, added as reviewed dependencies
   - Done when a throwaway question submitted through the client comes back
     answered, from a test that runs under the repository's own build
@@ -318,3 +318,39 @@ A fourth, outside the code entirely: **no call this feature makes is authorized
 locally.** The permissions a real deployment needs are listed in `design.md`
 under Out of boundary, so that work starts from an inventory rather than from a
 stack trace.
+
+### 1.2 A shared refusal needs a probe that removes it, not one that bends it
+
+Relaxing the shared host list for one host broke only the analytics test — each
+feature's test names its own endpoint, so a partial relaxation is caught by
+whichever test uses that host. The probe that means something for a check with
+two callers is removing it entirely, and that one fails **both**: the export's
+refusal and the analytics'.
+
+Worth keeping in mind for anything else that moves out to be shared. A test per
+caller proves the caller wired it up; only removing the shared thing proves the
+callers depend on it.
+
+### 1.2 Where the setting is read is part of the requirement
+
+The export reads its configuration when its module is built, which is right for
+a command: nothing else is running, and refusing early costs nothing. The
+analytics must not, and the requirement says why — it refuses to *answer*. An
+API that refused to *boot* over a setting one route uses would take every other
+route down with it, which is the same trap the export's validation gate found
+from the other side.
+
+The loader is written so either is possible; the caller decides. Task 6.1 is
+where that decision is actually made.
+
+### 1.3 The clients answer, and the question is whether they answer
+
+The assertion is not that a submission is accepted — a question taken and never
+finished would satisfy that and prove nothing. It waits for the question to
+settle and requires it to have succeeded, which a probe confirmed: a question
+the engine cannot answer reads as `FAILED` and fails the test.
+
+The suite also creates the location the engine writes its answers to. That is
+the catalogue command's job from 4.2 onwards, and this suite arranges it itself
+because it asks a question before that command exists — noted so it is removed
+rather than duplicated when 4.2 lands.

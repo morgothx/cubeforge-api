@@ -1,3 +1,5 @@
+import { requireLocalEmulator } from '../aws/require-local-emulator';
+
 export interface ObjectStorageCredentials {
   readonly accessKeyId: string;
   readonly secretAccessKey: string;
@@ -20,13 +22,6 @@ const KEYS = [
   'AWS_ACCESS_KEY_ID',
   'AWS_SECRET_ACCESS_KEY',
 ] as const;
-
-/**
- * Hosts this project is allowed to write to. The platform targets a local
- * emulator and never a real account, and exporting a tenant's history to
- * somebody's real bucket is not a thing to learn about from a bill.
- */
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'floci']);
 
 /**
  * The export's destination, validated before a run begins.
@@ -61,7 +56,7 @@ export function loadObjectStorageConfig(env: Env): ObjectStorageConfig {
     string,
   ];
 
-  requireLocalEmulator(endpoint);
+  requireLocalEmulator(endpoint, 'AWS_ENDPOINT_URL');
 
   return {
     bucket,
@@ -69,30 +64,4 @@ export function loadObjectStorageConfig(env: Env): ObjectStorageConfig {
     region,
     credentials: { accessKeyId, secretAccessKey },
   };
-}
-
-/**
- * Refuses an endpoint that is not the local emulator.
- *
- * Steering states it as a rule rather than a preference: everything here talks
- * to Floci, and a real deployment would be a deliberate, human-approved step.
- * Enforcing it in code rather than trusting a `.env` means a copied production
- * value fails at startup instead of writing one tenant's history somewhere it
- * cannot be taken back from.
- */
-function requireLocalEmulator(endpoint: string): void {
-  let host: string;
-  try {
-    host = new URL(endpoint).hostname;
-  } catch {
-    throw new Error(`AWS_ENDPOINT_URL is not a URL: "${endpoint}"`);
-  }
-
-  if (!LOCAL_HOSTS.has(host)) {
-    throw new Error(
-      `AWS_ENDPOINT_URL must point at the local emulator, got "${host}". ` +
-        'This project never writes to a real account; a real deployment is a ' +
-        'deliberate, human-approved step outside this path.',
-    );
-  }
 }
