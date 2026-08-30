@@ -182,7 +182,7 @@ get back, and they are worth being able to test without an engine.
 
 ## 5. The questions themselves
 
-- [ ] 5.1 (P) Answer what is on hand
+- [x] 5.1 (P) Answer what is on hand
   - Admitted to administrators, editors and viewers alike
   - Done when a tenant with movements across two products gets both, each named,
     and a tenant that has never been carried is reported as such rather than as
@@ -191,7 +191,7 @@ get back, and they are worth being able to test without an engine.
   - _Requirements: 1.1, 1.3, 3.3, 5.2_
   - _Boundary: Analytics use cases_
 
-- [ ] 5.2 (P) Answer what moved, day by day
+- [x] 5.2 (P) Answer what moved, day by day
   - The period comes from the caller, and a question without one or with one too
     long never reaches the engine
   - Done when a period holding three days of activity yields three days, and a
@@ -608,3 +608,71 @@ label would be the smaller half of that problem.
 time. The `Pick` that held the gap through 4.3 is gone rather than left behind
 — which is the point of putting the gap in the type system: the compiler is what
 notices when it closes.
+
+### 5.1 The kind of caller is the only layer left, and that is the design
+
+Every other tenant-scoped use case checks the role again from inside its own
+transaction — the second layer that makes a use case refuse when called from a
+queue consumer or a scheduled job rather than from its route. That layer is
+**unavailable here by construction**: a membership lives in PostgreSQL, and 3.4
+forbids reading it to answer a question. The role check is the guard's alone.
+
+What survives is the part that needs no records: `tenantOf` admits a tenant
+member and nothing else, so an operator, a person acting in no tenant and a
+**machine** are all refused before the seam is reached. Decision 7 excludes
+machines deliberately — an analytical question is expensive, and admitting keys
+would let an automated client decide how often that cost is paid.
+
+`tenantActedIn`, the sibling that admits machines and which the inventory reads
+use, fails both refusal tests when substituted. Narrowing either role list to
+administrators fails both role tests.
+
+### 5.1 The use case owes the same shape of failure the port promises
+
+`tenantOf` throws synchronously. A non-`async` `execute` would let that escape
+as a synchronous throw while every other failure arrived as a rejection — one
+promise, two shapes, and a caller reaching for `.catch` without awaiting would
+see only one of them.
+
+Caught by the tests written first, which is the **second instance** of exactly
+this in this feature: task 3.2 had to make the double's refusal `async` for the
+same reason. Worth stating as a rule now that it has happened twice: anything
+that can refuse before it starts still owes the shape of failure its return type
+declares.
+
+### 5.2 The period is not validated here, and that is not an omission
+
+1.4 and 1.5 are satisfied by the type, not by a check. `MovementHistoryQuery`
+requires a `Period`, `periodFrom` is the only way to make one, and it refuses an
+unbounded or over-long span — so a refused period never becomes a query and can
+never reach the engine. A use case re-checking it would be checking something
+that cannot arrive.
+
+Two tests hold that shut. One asserts the refusal happens with the seam never
+consulted, which needed a counting wrapper: "the call rejected" cannot tell a
+period refused before the engine from a question that ran and then failed. The
+other is a `@ts-expect-error` on a query built without a period — an assertion
+that fails the build the day the field becomes optional.
+
+### 5.2 A probe that matched and still measured nothing
+
+The first run of the role probe reported four tests passing out of twenty. Not a
+weak assertion — the patch had dropped a closing bracket, so both suites failed
+to compile and the four that ran were a third file's.
+
+The repository's recurring trap wearing a new face: three previous instances
+were patches that matched **nothing**, this one matched and produced garbage.
+The reading that gives it away is the same either way — a probe's test *count*
+has to be the number the suite normally runs, and "4 passed" where twenty were
+expected is not a green run.
+
+### 5.2 One line of the design corrected
+
+The allowed-dependencies table listed `src/domain/**`, `src/application/ports/**`
+and Nest decorators, which forbids `ActorContext` — a use case cannot know who
+is asking without it. The table now names the application's own pure helpers.
+
+The constraint the table exists to protect is untouched and is the one the lint
+rule actually enforces: no adapter, no driver, no repository. `tenant-authorization`
+imports `TenantScopedRepositories` as a type only, so nothing on this path
+reaches PostgreSQL at runtime.

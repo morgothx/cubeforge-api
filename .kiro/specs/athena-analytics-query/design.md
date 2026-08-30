@@ -91,7 +91,7 @@ owning spec's notes, and that spec's suites are re-run.
 | Layer | May import |
 |---|---|
 | `src/domain/analytics/**` | `src/domain/**` only |
-| `src/application/analytics/**` | `src/domain/**`, `src/application/ports/**`, Nest decorators |
+| `src/application/analytics/**` | `src/domain/**`, `src/application/ports/**`, the application's own pure helpers (`actor-context.ts`, `tenant-authorization.ts`), Nest decorators |
 | `src/adapters/**` | anything |
 
 Specific to this feature:
