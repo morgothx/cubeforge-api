@@ -1,0 +1,287 @@
+# Implementation Plan — athena-analytics-query
+
+Ordered so that nothing waits on something that does not exist yet. The
+foundation settles what the analytical side is allowed to know and how it is
+configured; the domain group decides what a question and an answer are; and the
+engine is reached only once there is something to ask it.
+
+The port and its double come before both, so the use cases can be written and
+exercised without an engine — and the statements that satisfy that port for real
+are a separate group, which is what lets the two proceed without waiting on each
+other.
+
+`(P)` marks a task that can run alongside its siblings.
+
+## 1. Foundation
+
+- [ ] 1.1 Let the export say how far it got
+  - The export publishes, per tenant, the moment its last successful run
+    finished, as a fourth dataset beside the ones it already writes
+  - The moment comes from the platform clock rather than the wall, because it is
+    the one value this whole feature reports and an untestable one would be
+    worse than none
+  - Written **after** the point reached is confirmed, never before: a run that
+    dies between the two leaves a mark that is behind the data, and an answer
+    that understates how current it is beats one that claims a completeness the
+    data does not have
+  - Record in `s3-data-export`'s notes that a revalidation trigger fired, and
+    re-run that feature's suites — this is a change to a spec already validated
+  - Done when a tenant that has been carried has a mark a reader can find, a
+    tenant that never has does not, and the previous feature's suites are green
+  - _Requirements: 3.1, 3.3_
+  - _Boundary: Integration — the export's published data_
+
+- [ ] 1.2 (P) Read the analytical destination from the environment, and refuse
+      without it
+  - Catalogue, workgroup, result location, endpoint, region and credentials,
+    read from the environment and never from a value written into the repository
+  - Every missing setting reported together, because a configuration reported
+    one key per attempt is a configuration fixed one attempt per afternoon
+  - The refusal that keeps this project off a real account moves to one place
+    both features share rather than being written twice
+  - Done when a configuration with no catalogue is refused naming the catalogue,
+    the example environment documents every setting the analytics reads, and the
+    export's own refusal still behaves exactly as it did
+  - _Requirements: 7.1, 7.2, 7.3_
+  - _Boundary: Analytics configuration_
+
+- [ ] 1.3 (P) Take on the two clients, and reach the emulator with them
+  - The query client and the catalogue client, added as reviewed dependencies
+  - Done when a throwaway question submitted through the client comes back
+    answered, from a test that runs under the repository's own build
+  - _Requirements: 6.1_
+  - _Boundary: Dependencies_
+
+## 2. What a question and an answer are
+
+Pure, no infrastructure. These decide what a caller may ask for and what they
+get back, and they are worth being able to test without an engine.
+
+- [ ] 2.1 (P) Name a day, a period, and what is too much
+  - A period covering both of its ends, so a caller asking for one day names it
+    twice and means it
+  - A period that ends before it starts is unrepresentable, and there is no way
+    to express one with no end at all — which is how an unbounded question is
+    prevented rather than checked for
+  - The longest span answerable in one question is named, and refusing says what
+    it is
+  - Done when the refusals are exercised in isolation and a caller cannot
+    construct a period the engine would be asked to scan without bound
+  - _Requirements: 1.4, 1.5_
+  - _Boundary: Analytics domain_
+
+- [ ] 2.2 (P) Say what an answer is
+  - Entries, plus the moment through which they are complete; or a tenant that
+    has never been carried out of the transactional database
+  - A period with nothing in it is an answer, not a refusal
+  - Done when a tenant with no activity and a tenant never exported are
+    distinguishable from each other, and neither is mistaken for a failure
+  - _Requirements: 3.1, 3.3, 4.2_
+  - _Boundary: Analytics domain_
+
+- [ ] 2.3 (P) Turn what the engine sends into what a reader needs
+  - Every value arrives as text, whichever engine sent it; the declaration
+    decides what each one becomes
+  - A declared column the answer does not carry is refused loudly rather than
+    read as absent
+  - Done when a number, a moment and a day come back as such, and a version that
+    types the result from the engine's own metadata instead is shown to produce
+    text for every column against the local engine
+  - _Requirements: 4.1_
+  - _Boundary: Analytics domain_
+
+## 3. The seams
+
+- [ ] 3.1 Declare what the analytical store must offer, and how it fails
+  - The two questions, with the tenant bound when the seam hands the object over
+    and absent from every method — so a question naming a tenant is not
+    expressible rather than merely refused
+  - The closed set of reasons a question can fail for, classified where the
+    failure happens rather than read back out of a message afterwards
+  - Done when the use cases can be written against this and nothing in the
+    application layer mentions a statement, a catalogue or a page
+  - _Depends: 2.1, 2.2_
+  - _Requirements: 1.6, 2.2, 2.5, 6.3_
+  - _Boundary: Application ports_
+
+- [ ] 3.2 Provide the double the use-case tests run against
+  - Answers, empty answers, a tenant never carried, and each failure reason
+    available on demand
+  - It refuses a tenant identifier the real seam would refuse, because a double
+    looser than the thing it stands for hides the bug it exists to catch
+  - Done when a use case can be exercised end to end with no engine and no
+    emulator running
+  - _Depends: 3.1_
+  - _Requirements: 2.5, 3.3_
+  - _Boundary: In-memory adapters_
+
+## 4. Reaching the engine for real
+
+- [ ] 4.1 Submit a question, wait for it, and read all of it
+  - Submitted, then polled until answered or a deadline passes; a question that
+    outlives its deadline is **stopped**, not abandoned, because work nobody is
+    waiting for still costs something where this runs for real
+  - Every page followed until none names another. A result arrives in pages in a
+    real deployment and in one page locally, so a runner that read the first
+    page would answer a busy month with part of it and no error
+  - A refusal classified by what came back, so a rejected credential and an
+    absent destination are different diagnoses
+  - Done when a result spanning more than one page comes back whole against a
+    fabricated page boundary, and a question that outlives its deadline is
+    stopped and reported as timed out
+  - _Depends: 1.3_
+  - _Requirements: 6.1, 6.2_
+  - _Boundary: Analytics adapters_
+
+- [ ] 4.2 Describe the exported layout to the engine, and give the operator a
+      command
+  - The four tables over the four prefixes, with the columns the export already
+    publishes and nothing renamed on the way through
+  - The partition arrangement, with the tenant as the injected kind so that a
+    question not naming a tenant fails at the engine itself
+  - Running the command twice is safe, because an operator will
+  - The place the engine writes its results has to exist before the first
+    question is asked, and nothing else creates it — so this command does
+  - The suite needs objects to point the tables at, so it arranges them the way
+    the export's own suites do: seed a tenant, run an export, then ask
+  - Done when the command creates the tables against the local stack and a
+    question over them answers from objects the export actually wrote. **The
+    arrangement is asserted as the values the command sends**, not as engine
+    behaviour: the local engine needs none of it and would answer either way
+  - _Depends: 1.2, 1.3_
+  - _Requirements: 3.5_
+  - _Boundary: Analytics adapters_
+
+- [ ] 4.3 Bind the tenant, read the mark, and answer what moved
+  - The real seam behind the port: one file holding every statement, so the
+    dialect surface is reviewable in one place
+  - The tenant refused unless it is a plain identifier, the same check applied
+    before a tenant becomes a path segment, and for the same reason — this is
+    the one way a tenant reaches a statement
+  - An explicit order on every statement, and the tenant's mark read for every
+    answer, so an answer knows how far it reaches
+  - Done when two tenants holding the same product get their own daily numbers
+    from objects the export actually wrote, and a version with the tenant
+    removed from the statement is shown to return the other tenant's rows
+  - _Depends: 1.1, 3.1, 4.1, 4.2_
+  - _Requirements: 1.2, 2.1, 2.4, 3.1, 3.2, 4.3_
+  - _Boundary: Analytics adapters_
+
+- [ ] 4.4 Answer what is on hand, named rather than only coded
+  - The second statement, in the same file, joining the catalogue so a reader
+    gets the product's current name beside its code
+  - Not parallel with the task before it despite being a separate question: both
+    statements live in one file, deliberately, and two tasks editing it at once
+    is the kind of overlap this plan exists to avoid
+  - Done when a tenant's on-hand total matches what its movements sum to, each
+    entry carries the name the catalogue currently holds, and a product renamed
+    since the last export reads with its new name
+  - _Depends: 4.3_
+  - _Requirements: 1.1, 1.3_
+  - _Boundary: Analytics adapters_
+
+## 5. The questions themselves
+
+- [ ] 5.1 (P) Answer what is on hand
+  - Admitted to administrators, editors and viewers alike
+  - Done when a tenant with movements across two products gets both, each named,
+    and a tenant that has never been carried is reported as such rather than as
+    having nothing
+  - _Depends: 3.2_
+  - _Requirements: 1.1, 1.3, 3.3, 5.2_
+  - _Boundary: Analytics use cases_
+
+- [ ] 5.2 (P) Answer what moved, day by day
+  - The period comes from the caller, and a question without one or with one too
+    long never reaches the engine
+  - Done when a period holding three days of activity yields three days, and a
+    period holding none yields an answer with no entries rather than a refusal
+  - _Depends: 2.1, 3.2_
+  - _Requirements: 1.2, 4.2, 5.2_
+  - _Boundary: Analytics use cases_
+
+## 6. Wiring
+
+- [ ] 6.1 Give the caller a route, and the application a module
+  - Bind the ports to the adapters; import the feature into the application —
+    this one **is** reachable by a request, unlike the export's
+  - The tenant comes from the path, the same place every other tenant-scoped
+    request takes it; the period is validated before anything is read; and one
+    caller is limited in how often they may ask
+  - The configuration is read at the first question rather than at startup: the
+    requirement is that the analytics refuses to *answer*, and an API refusing
+    to *boot* would take every other route down with it
+  - Done when the route answers for a member of the tenant against the local
+    stack, and the API still starts with no analytical configuration present at
+    all
+  - _Depends: 4.4, 5.2_
+  - _Requirements: 5.1, 5.4, 5.5, 7.1_
+  - _Boundary: Integration — module and inbound edge_
+
+## 7. Proving the properties, not the happy path
+
+Each writes its own spec file. Three tasks appending to one file are not
+parallel however unrelated their assertions are.
+
+- [ ] 7.1 (P) Show that no tenant reaches another's numbers
+  - Two tenants holding the same product and the same location, so nothing but
+    the tenant tells their rows apart and a leak shows up as the other's number
+  - What each tenant is told, compared against what the export wrote for that
+    tenant rather than against a list this test invented
+  - Nothing identifying a person appears in any answer
+  - Done when it passes with the tenant bound and fails with it removed from the
+    statement
+  - _Depends: 6.1_
+  - _Requirements: 2.1, 2.3, 2.4, 4.4_
+  - _Boundary: Integration suite_
+
+- [ ] 7.2 (P) Show that an answer can be drawn without repair
+  - Quantities as numbers and moments as moments, from the real engine over real
+    objects
+  - The same question asked twice returns its entries in the same order
+  - A period with no activity answers with no entries; a tenant never carried
+    answers as never carried
+  - Every answer carries the moment it is complete through, and that moment
+    moves when the export runs again
+  - Done when every assertion above holds against the emulator, and a version
+    reporting a default moment instead of "never carried" fails it
+  - _Depends: 6.1_
+  - _Requirements: 3.1, 3.2, 4.1, 4.2, 4.3_
+  - _Boundary: Integration suite_
+
+- [ ] 7.3 (P) Show what the route does when it cannot answer
+  - The three roles may ask; a caller with no active membership is answered
+    exactly as for a tenant that does not exist
+  - An unreachable store reports the answer unavailable **and the transactional
+    database is not consulted**, asserted rather than reasoned about
+  - A failure names a class of problem and carries no statement, no location and
+    no credential, filed against the request's correlation identifier
+  - Done when the whole thing fails if a failure is allowed to repeat what the
+    engine said
+  - _Depends: 6.1_
+  - _Requirements: 2.5, 3.4, 5.2, 5.3, 6.1, 6.2, 6.3, 6.4_
+  - _Boundary: Integration suite_
+
+## Implementation Notes
+
+*Findings worth inheriting are recorded here as the work proceeds.*
+
+### Before starting: what no local test will settle
+
+Three claims in this plan are written for an engine the local one only imitates,
+and `design.md` says so at length. They are repeated here because they are easy
+to forget while a suite is green:
+
+1. **The partition arrangement** (4.2). The local engine infers partitions from
+   the key path and needs none of it, so it answers whether the arrangement is
+   right or wrong. The assertion is on what the command *sends*.
+2. **The injected refusal** (4.2). That a question without a tenant fails at the
+   engine has no local probe. The tenant bound by the seam (4.3) is the layer
+   that actually holds, and nothing in this plan relies on the other.
+3. **Every statement's dialect** (4.3). What runs locally is not what will run
+   in a deployment. Hence one file, and constructs both engines accept.
+
+A fourth, outside the code entirely: **no call this feature makes is authorized
+locally.** The permissions a real deployment needs are listed in `design.md`
+under Out of boundary, so that work starts from an inventory rather than from a
+stack trace.
