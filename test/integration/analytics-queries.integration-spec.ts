@@ -20,6 +20,12 @@ const storage = exportDestination();
 
 const AUGUST = periodFrom(day('2026-08-01'), day('2026-08-31'));
 
+// Seeding two tenants, exporting both, applying the catalogue and then asking
+// four questions of an engine that polls is honest work, and it does not fit in
+// Jest's five-second default. It fitted while these tests used one tenant, which
+// is how it arrived as an intermittent failure rather than an obvious one.
+jest.setTimeout(60_000);
+
 const INSERT = `INSERT INTO stock_movements
     (id, tenant_id, external_id, sku, location_code, kind, quantity, occurred_at, recorded_at)
   VALUES ($1, $2, $3, 'ACME-001', 'WH-1', $4, $5, $6, $7)`;
@@ -220,6 +226,105 @@ describe('asking the exported data a question', () => {
     // No mark, so no claim about how current anything is — and emphatically not
     // an empty answer, which would read as "nothing moved".
     expect(answer).toEqual({ state: 'never-exported' });
+  });
+
+  it('answers what is on hand, named as the catalogue names it', async () => {
+    const acme = await tenantWith([
+      {
+        externalId: 'ERP-1',
+        kind: 'receipt',
+        quantity: 12,
+        recorded: '2026-08-27',
+      },
+      {
+        externalId: 'ERP-2',
+        kind: 'sale',
+        quantity: -4,
+        recorded: '2026-08-28',
+      },
+    ]);
+    await catalogued();
+
+    const answer = await subject.askAs(acme, (q) => q.stockOnHand());
+
+    // The total is what the movements sum to, and the name comes from the
+    // exported catalogue — which is the reason the catalogue is exported at
+    // all. A chart resolving its own labels would put that load back on the
+    // database this whole pipeline exists to keep out of the way.
+    expect(answer.state === 'answered' && answer.entries).toEqual([
+      { sku: 'ACME-001', name: 'A widget', onHand: 8 },
+    ]);
+  });
+
+  it('names a product renamed since the last export by its new name', async () => {
+    const acme = await tenantWith([
+      {
+        externalId: 'ERP-1',
+        kind: 'receipt',
+        quantity: 3,
+        recorded: '2026-08-27',
+      },
+    ]);
+
+    await seed((database) =>
+      database.query(
+        `UPDATE inventory_products SET name = $2 WHERE tenant_id = $1`,
+        [acme, 'A better widget'],
+      ),
+    );
+    await context
+      .get(RunExportUseCase)
+      .execute({ correlationId: randomUUID(), onlyTenant: acme });
+    await catalogued();
+
+    const answer = await subject.askAs(acme, (q) => q.stockOnHand());
+
+    // Once, and currently. The catalogue is replaced whole every run precisely
+    // so a reader never has to choose between two names for one product.
+    expect(answer.state === 'answered' && answer.entries).toEqual([
+      { sku: 'ACME-001', name: 'A better widget', onHand: 3 },
+    ]);
+  });
+
+  it('gives two look-alike tenants their own totals', async () => {
+    const acme = await tenantWith([
+      {
+        externalId: 'ERP-1',
+        kind: 'receipt',
+        quantity: 5,
+        recorded: '2026-08-27',
+      },
+    ]);
+    const globex = await tenantWith([
+      {
+        externalId: 'ERP-1',
+        kind: 'receipt',
+        quantity: 91,
+        recorded: '2026-08-27',
+      },
+    ]);
+    await catalogued();
+
+    const forAcme = await subject.askAs(acme, (q) => q.stockOnHand());
+    const forGlobex = await subject.askAs(globex, (q) => q.stockOnHand());
+
+    // Two tables are joined here, so there are two places the tenant could be
+    // lost rather than one.
+    expect(forAcme.state === 'answered' && forAcme.entries).toEqual([
+      { sku: 'ACME-001', name: 'A widget', onHand: 5 },
+    ]);
+    expect(forGlobex.state === 'answered' && forGlobex.entries).toEqual([
+      { sku: 'ACME-001', name: 'A widget', onHand: 91 },
+    ]);
+  });
+
+  it('answers a tenant never carried as never exported, whichever question', async () => {
+    const { id } = await seedTenant();
+    await catalogued();
+
+    await expect(
+      subject.askAs(tenantId(id), (q) => q.stockOnHand()),
+    ).resolves.toEqual({ state: 'never-exported' });
   });
 
   it('refuses a tenant identifier that is not one', async () => {

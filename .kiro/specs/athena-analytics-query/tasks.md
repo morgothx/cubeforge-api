@@ -167,7 +167,7 @@ get back, and they are worth being able to test without an engine.
   - _Requirements: 1.2, 2.1, 2.4, 3.1, 3.2, 4.3_
   - _Boundary: Analytics adapters_
 
-- [ ] 4.4 Answer what is on hand, named rather than only coded
+- [x] 4.4 Answer what is on hand, named rather than only coded
   - The second statement, in the same file, joining the catalogue so a reader
     gets the product's current name beside its code
   - Not parallel with the task before it despite being a separate question: both
@@ -559,3 +559,52 @@ Not claimed as the fix for the flake — that connection is unproven. Claimed as
 what it is: a suite reaching outside its own prefixes, found while looking, and
 exactly the shape that produces intermittent failures in whichever suite runs
 next.
+
+### 4.4 The flake, caught and named
+
+The unattributed integration failure recorded in 4.3 reproduced here — three
+runs of one suite, one or two failures each time, always the tests that seed
+**two** tenants. Captured this time, and it is not a correctness problem at all:
+
+```
+thrown: "Exceeded timeout of 5000 ms for a test."
+```
+
+Those tests seed two tenants, run two exports, apply the catalogue and then ask
+four questions of an engine that polls. That is honest work and it does not fit
+in Jest's five-second default. It fitted while the tests used one tenant, which
+is exactly why it arrived as an intermittent failure rather than an obvious one
+— and why the earlier full-run failure appeared under load and vanished on a
+quiet machine.
+
+Both analytics suites now carry a suite-level timeout, the same fix
+`inventory-throttling` needed in the previous feature and for the same reason: a
+verification run cannot be trusted while it is flaky, so it is fixed rather than
+re-run until green.
+
+**Two probe readings had to be discarded and retaken.** The first run of probes
+B and C reported a `movementsByDay` test failing, which neither probe touched —
+that was this timeout, not the probe. Retaken after the fix, each breaks exactly
+the three `stockOnHand` tests and nothing else. A probe read against a flaky
+suite measures the flake.
+
+### 4.4 Two tables, two places to lose the tenant
+
+Joining on `tenant_id` alone would be one condition where the layout wants two,
+and both probes prove it: constraining only the movements side and constraining
+only the catalogue side each fail three tests. With the tenant projected as an
+injected column, an engine would additionally refuse a question that left either
+table unconstrained — belt over braces, and not something any local test can
+show.
+
+The join is an inner one on purpose. A movement whose product is not in the
+catalogue would vanish; that cannot happen because the transactional API refuses
+a movement naming a product nobody declared, and if it ever could, a missing
+label would be the smaller half of that problem.
+
+### 4.4 The port is satisfied, and now says so
+
+`AthenaAnalytics` declares `implements TenantScopedAnalytics` for the first
+time. The `Pick` that held the gap through 4.3 is gone rather than left behind
+— which is the point of putting the gap in the type system: the compiler is what
+notices when it closes.

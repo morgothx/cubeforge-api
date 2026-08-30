@@ -21,6 +21,12 @@ import {
 const analytics = loadAnalyticsConfig(process.env);
 const storage = exportDestination();
 
+// Applying the catalogue, running an export and asking the engine, twice over.
+// Same reason as the sibling suite: real work against two services does not fit
+// in five seconds, and a suite that sometimes does is worse than one that never
+// does.
+jest.setTimeout(60_000);
+
 const INSERT = `INSERT INTO stock_movements
     (id, tenant_id, external_id, sku, location_code, kind, quantity, occurred_at, recorded_at)
   VALUES ($1, $2, $3, 'ACME-001', 'WH-1', 'receipt', $4, $5, $6)`;
