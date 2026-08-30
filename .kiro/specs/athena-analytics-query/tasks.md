@@ -152,7 +152,7 @@ get back, and they are worth being able to test without an engine.
   - _Requirements: 3.5_
   - _Boundary: Analytics adapters_
 
-- [ ] 4.3 Bind the tenant, read the mark, and answer what moved
+- [x] 4.3 Bind the tenant, read the mark, and answer what moved
   - The real seam behind the port: one file holding every statement, so the
     dialect surface is reviewable in one place
   - The tenant refused unless it is a plain identifier, the same check applied
@@ -520,3 +520,42 @@ way.
 
 This is the task the "declared, not verified" section of `design.md` was written
 for, and the split is what keeps that honest rather than merely stated.
+
+### 4.3 The probe the task named, and what it actually produced
+
+Removing the tenant from the statement does not merely widen the answer — it
+hands one tenant the sum of every tenant in the bucket. Acme, which received
+ten, is told **745**, along with days and kinds belonging to nobody it knows.
+
+Three tests fail on it. That is the failure the seam exists to prevent, and it
+is now a red test rather than a paragraph.
+
+Three more probes bite: dropping the period bound, dropping the explicit order,
+and returning a default moment where the tenant has no mark.
+
+### 4.3 The gap between the two questions is kept in the types
+
+This task answers one of the port's two questions and 4.4 answers the other.
+Rather than ship a `stockOnHand` that compiles and throws, the class hands out
+`Pick<TenantAnalytics, 'movementsByDay'>` and does not claim to implement the
+port yet. The compiler holds the gap until 4.4 closes it.
+
+Written the other way first, and corrected before the probes — a throwing method
+is a lie that type-checks.
+
+### 4.3 A suite that emptied the whole bucket
+
+Two tests failed in one full integration run and passed in the three runs after
+it, and I did not capture which — recorded plainly because it is the **second
+sighting** of an unattributed integration failure in this repository.
+
+Looking for a cause turned up a real hazard, whether or not it was the cause:
+`export-sink` deleted **every object in the bucket** between its tests, and
+asserted about `movements/` across every tenant. Harmless while the export was
+the only thing writing there; not any more, now that the analytics suites write
+and read the same bucket. Both are now scoped to the tenant that suite owns.
+
+Not claimed as the fix for the flake — that connection is unproven. Claimed as
+what it is: a suite reaching outside its own prefixes, found while looking, and
+exactly the shape that produces intermittent failures in whichever suite runs
+next.

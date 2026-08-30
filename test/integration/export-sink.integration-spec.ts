@@ -18,8 +18,21 @@ import { useExportDestination } from './support/object-storage';
 
 const config = loadObjectStorageConfig(process.env);
 
+/** The one tenant this suite writes under, so its cleanup can be its own. */
+const SUITE_TENANT = '018f2c00-0000-7000-8000-00000000ac01';
+
 const KEY =
-  'movements/tenant_id=018f2c00-0000-7000-8000-00000000ac01/recorded_date=2026-08-28/1-2.parquet' as ObjectKey;
+  `movements/tenant_id=${SUITE_TENANT}/recorded_date=2026-08-28/1-2.parquet` as ObjectKey;
+
+/**
+ * Only what this suite writes.
+ *
+ * It used to empty the whole bucket between tests, which was harmless while the
+ * export was the only thing writing to it. It is not any more — the analytics
+ * suites write there too — and a suite reaching outside its own prefixes is how
+ * a green test becomes an intermittent failure in whichever suite ran next.
+ */
+const OWNED = [`movements/tenant_id=${SUITE_TENANT}/`, 'products/tenant_id=x/'];
 
 const movements = [
   {
@@ -69,13 +82,15 @@ describe('the export sink, against the emulator', () => {
   });
 
   beforeEach(async () => {
-    const listed = await client.send(
-      new ListObjectsV2Command({ Bucket: config.bucket }),
-    );
-    for (const object of listed.Contents ?? []) {
-      await client.send(
-        new DeleteObjectCommand({ Bucket: config.bucket, Key: object.Key }),
+    for (const prefix of OWNED) {
+      const listed = await client.send(
+        new ListObjectsV2Command({ Bucket: config.bucket, Prefix: prefix }),
       );
+      for (const object of listed.Contents ?? []) {
+        await client.send(
+          new DeleteObjectCommand({ Bucket: config.bucket, Key: object.Key }),
+        );
+      }
     }
   });
 
@@ -139,7 +154,12 @@ describe('the export sink, against the emulator', () => {
       rows: [movements[0]],
     });
 
-    expect(await objectsUnder('movements/')).toEqual([KEY]);
+    // Under this suite's own tenant, not under every tenant's movements: the
+    // bucket is shared now, and asking about all of them would be asserting
+    // something about whoever ran before.
+    expect(await objectsUnder(`movements/tenant_id=${SUITE_TENANT}/`)).toEqual([
+      KEY,
+    ]);
     expect(await readParquet(await sink.read(KEY))).toHaveLength(1);
   });
 
