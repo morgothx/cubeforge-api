@@ -5,6 +5,7 @@ import { ExportTenantUseCase } from './application/export/export-tenant.use-case
 import { RunExportUseCase } from './application/export/run-export.use-case';
 import { EXPORT_SINK } from './application/ports/export-sink';
 import { PersistenceModule } from './persistence.module';
+import { SystemModule } from './system.module';
 
 /**
  * The export, wired.
@@ -24,7 +25,10 @@ import { PersistenceModule } from './persistence.module';
  * row-level security rather than restate it.
  */
 @Module({
-  imports: [PersistenceModule],
+  // `SystemModule` for the clock. It is `@Global`, which only publishes it to
+  // an application that imported it somewhere — and this module is booted on
+  // its own by the command, with no `AppModule` above it to have done so.
+  imports: [PersistenceModule, SystemModule],
   providers: [
     {
       provide: EXPORT_SINK,

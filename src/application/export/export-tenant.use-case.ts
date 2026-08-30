@@ -3,6 +3,7 @@ import { nextWindow } from '../../domain/export/cursor';
 import {
   CATALOGUE_COLUMNS,
   MOVEMENT_COLUMNS,
+  WATERMARK_COLUMNS,
   type ExportedCatalogueRow,
   type ExportedMovementRow,
 } from '../../domain/export/exported-row';
@@ -10,12 +11,14 @@ import {
   catalogueKey,
   movementsKey,
   partitionDay,
+  watermarkKey,
   type CatalogueDataset,
   type PartitionDay,
 } from '../../domain/export/partition';
 import type { CarriedCounts } from '../../domain/export/report';
 import type { ExportWindow } from '../../domain/export/window';
 import type { TenantId } from '../../domain/identifiers';
+import { CLOCK, type Clock } from '../ports/clock';
 import type { DatasetName } from '../ports/export-cursor.repository';
 import {
   EXPORT_SINK,
@@ -59,6 +62,7 @@ export class ExportTenantUseCase {
     @Inject(TENANT_SCOPED_UNIT_OF_WORK)
     private readonly tenants: TenantScopedUnitOfWork,
     @Inject(EXPORT_SINK) private readonly sink: ExportSink,
+    @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   /**
@@ -100,10 +104,29 @@ export class ExportTenantUseCase {
     await this.writeCatalogue(tenantId, 'products', readings.products);
     await this.writeCatalogue(tenantId, 'locations', readings.locations);
 
+    if (window !== null) {
+      await this.confirm(tenantId, window);
+    }
+
+    // **Last, and after the point reached is confirmed.** A run that dies
+    // between the two leaves a mark that is *behind* the data, so a reader
+    // understates how current an answer is and the next run repairs it. Writing
+    // it first would leave one that is ahead, and a mark claiming a
+    // completeness the data does not have is worse than no mark at all.
+    //
+    // Written on any run that succeeded, including one that found nothing new:
+    // such a run is still evidence that the data is complete as of now, and a
+    // mark that only moved when something was carried would freeze for a quiet
+    // tenant while its answers stayed perfectly current.
+    await this.write({
+      key: watermarkKey(tenantId),
+      columns: WATERMARK_COLUMNS,
+      rows: [{ complete_through: this.clock.now() }],
+    });
+
     if (window === null) {
       return { status: 'up-to-date' };
     }
-    await this.confirm(tenantId, window);
 
     // **Carrying nothing is being up to date, and the emptiness has to be
     // decided from the rows rather than from the cursor.** The horizon is the

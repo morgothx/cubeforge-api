@@ -14,6 +14,15 @@ export type ObjectKey = Branded<string, 'ObjectKey'>;
 export type CatalogueDataset = 'products' | 'locations';
 
 /**
+ * Everything the export publishes.
+ *
+ * The mark is a dataset of its own rather than a column on the movements,
+ * because a query engine points one table at one prefix: `movements/` has to
+ * hold movements and nothing else.
+ */
+export type Dataset = 'movements' | 'watermarks' | CatalogueDataset;
+
+/**
  * A tenant identifier as it appears in a path.
  *
  * Checked rather than trusted. A key is a path, and a tenant carrying a slash
@@ -56,10 +65,7 @@ export function tenantSegment(tenantId: string): string {
  * of one tenant is three prefixes, one per dataset, and anything that means to
  * sweep a tenant has to ask for all three.
  */
-export function prefixFor(
-  dataset: 'movements' | CatalogueDataset,
-  tenantId: string,
-): string {
+export function prefixFor(dataset: Dataset, tenantId: string): string {
   return `${dataset}/${tenantSegment(tenantId)}`;
 }
 
@@ -98,4 +104,15 @@ export function catalogueKey(
   dataset: CatalogueDataset,
 ): ObjectKey {
   return `${prefixFor(dataset, tenantId)}${dataset}.parquet` as ObjectKey;
+}
+
+/**
+ * Where a tenant says how far it has been carried.
+ *
+ * One fixed name per tenant, so a run replaces the previous mark rather than
+ * leaving a trail of them: a reader wants to know how current the data is, not
+ * how many times it has been exported.
+ */
+export function watermarkKey(tenantId: string): ObjectKey {
+  return `${prefixFor('watermarks', tenantId)}watermark.parquet` as ObjectKey;
 }

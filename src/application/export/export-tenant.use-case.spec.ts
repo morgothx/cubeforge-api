@@ -1,12 +1,14 @@
 import { InMemoryExportSink } from '../../adapters/storage/in-memory-export-sink';
 import {
   createIdentityTestContext,
+  TEST_MOMENT,
   type IdentityTestContext,
 } from '../../adapters/testing/identity-test-context';
 import {
   catalogueKey,
   movementsKey,
   partitionDay,
+  watermarkKey,
 } from '../../domain/export/partition';
 import type { ObjectKey } from '../../domain/export/partition';
 import type { ExportedMovementRow } from '../../domain/export/exported-row';
@@ -105,7 +107,11 @@ describe('exporting one tenant', () => {
     context = createIdentityTestContext();
     acme = await context.seedTenant('Acme');
     sink = new InMemoryExportSink();
-    exportTenant = new ExportTenantUseCase(context.tenantScoped, sink);
+    exportTenant = new ExportTenantUseCase(
+      context.tenantScoped,
+      sink,
+      context.clock,
+    );
     record = new RecordMovementsUseCase(context.tenantScoped, context.clock);
     await catalogueFor(acme);
   });
@@ -182,6 +188,48 @@ describe('exporting one tenant', () => {
     await expect(cursorOf()).resolves.toMatchObject({ state: 'carried' });
   });
 
+  it('says how far it carried the tenant, on any run that succeeded', async () => {
+    await recordOn(RECORDED.first);
+
+    await exportTenant.execute({ tenantId: acme });
+
+    // The moment comes from the platform clock, so the one value this whole
+    // pipeline reports downstream is a value a test can name.
+    expect(sink.rowsAt(watermarkKey(acme))).toEqual([
+      { complete_through: TEST_MOMENT },
+    ]);
+
+    // A run that finds nothing new still succeeded, and the data is still
+    // complete as of now. A mark that only moved when something was carried
+    // would freeze for a quiet tenant while its answers stayed current — the
+    // same trap the transaction horizon set in the previous feature.
+    //
+    // The clock has to move for this to mean anything. Asserting the mark is
+    // still *present* after a quiet run passes against an implementation that
+    // never wrote it again, because the first run's mark is still sitting
+    // there — which is what a probe caught this test doing.
+    const later = new Date('2026-02-02T00:00:00.000Z');
+    context.clock.advanceTo(later);
+
+    const second = await exportTenant.execute({ tenantId: acme });
+    expect(second).toEqual({ status: 'up-to-date' });
+    expect(sink.rowsAt(watermarkKey(acme))).toEqual([
+      { complete_through: later },
+    ]);
+  });
+
+  it('leaves no mark for a tenant whose run failed', async () => {
+    await recordOn(RECORDED.first);
+    sink.failOn(catalogueKey(acme, 'products'));
+
+    await expect(exportTenant.execute({ tenantId: acme })).rejects.toThrow();
+
+    // Absence is the answer for a tenant nothing has been carried for, and it
+    // has to stay absent when a run dies — a mark written before the work
+    // finished would claim a completeness the data does not have.
+    expect(sink.keys()).not.toContain(watermarkKey(acme));
+  });
+
   it('partitions by the day a movement was recorded, not the day it occurred', async () => {
     await recordOn(RECORDED.second, acme, { occurredAt: OCCURRED });
 
@@ -227,6 +275,9 @@ describe('exporting one tenant', () => {
     expect(sink.keys()).toEqual([
       catalogueKey(globex, 'products'),
       catalogueKey(globex, 'locations'),
+      // Its mark too: a tenant with nothing declared has still been looked at,
+      // and an answer about it is still current as of now.
+      watermarkKey(globex),
     ]);
     expect(sink.rowsAt(catalogueKey(globex, 'products'))).toEqual([]);
   });
@@ -266,6 +317,7 @@ describe('exporting one tenant', () => {
     const finished = await new ExportTenantUseCase(
       context.tenantScoped,
       retry,
+      context.clock,
     ).execute({ tenantId: acme });
 
     expect(finished).toEqual({

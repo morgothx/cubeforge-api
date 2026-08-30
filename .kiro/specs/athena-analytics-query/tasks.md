@@ -14,7 +14,7 @@ other.
 
 ## 1. Foundation
 
-- [ ] 1.1 Let the export say how far it got
+- [x] 1.1 Let the export say how far it got
   - The export publishes, per tenant, the moment its last successful run
     finished, as a fourth dataset beside the ones it already writes
   - The moment comes from the platform clock rather than the wall, because it is
@@ -265,6 +265,39 @@ parallel however unrelated their assertions are.
 ## Implementation Notes
 
 *Findings worth inheriting are recorded here as the work proceeds.*
+
+### 1.1 The upstream suite did exactly what it was written to do
+
+`export-isolation` asserts that nothing lands outside the datasets it knows
+about, and its own comment said why: "a fourth dataset appearing is exactly the
+kind of thing a per-tenant sweep would never see." A fourth dataset appeared,
+and it failed. The guarded set and the published-columns contract were widened
+deliberately, which is a different act from a test being repaired to stop
+complaining.
+
+### 1.1 A test of mine passed for the wrong reason, and a probe said so
+
+"The mark still says the same thing after a quiet run" passes against an
+implementation that never writes it again — the first run's mark is simply still
+sitting there. The probe that moves the write to the carried-only path walked
+straight through it.
+
+Fixed by advancing the test clock between the two runs, so the assertion is that
+the mark **moved**, not that it exists. `FixedClock` already had `advanceTo`;
+the test just was not using it.
+
+That the mark moves on a quiet run is the whole point: a run finding nothing new
+still proves the data is complete as of now, and one that only advanced when
+something was carried would freeze for a quiet tenant while its answers stayed
+perfectly current — the same shape as the horizon bug in the previous feature.
+
+### 1.1 The module needed a clock it never had
+
+`ExportModule` is booted on its own by the command, with no `AppModule` above
+it, so `SystemModule` being `@Global` published nothing to it. It imports it
+now. A module that is deliberately outside the application graph inherits
+nothing from the application graph, which is obvious once written down and was
+not before.
 
 ### Before starting: what no local test will settle
 

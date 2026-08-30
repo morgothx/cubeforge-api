@@ -4,6 +4,7 @@ import {
   partitionDay,
   prefixFor,
   tenantSegment,
+  watermarkKey,
 } from './partition';
 import { transactionId, windowFrom } from './window';
 
@@ -120,5 +121,25 @@ describe('where exported rows land', () => {
     // tenants without any query being wrong.
     expect(() => tenantSegment('../other-tenant')).toThrow();
     expect(() => tenantSegment('')).toThrow();
+  });
+});
+
+describe('where a tenant says how far it has been carried', () => {
+  it('names one place per tenant, so a run replaces rather than adds', () => {
+    expect(watermarkKey(TENANT)).toBe(
+      `watermarks/tenant_id=${TENANT}/watermark.parquet`,
+    );
+    expect(watermarkKey(TENANT)).toBe(watermarkKey(TENANT));
+  });
+
+  it('keeps the mark out of the datasets a reader queries for rows', () => {
+    // Its own prefix, not a column on the movements: a table pointed at
+    // `movements/` must find movements and nothing else.
+    expect(watermarkKey(TENANT)).not.toContain('movements/');
+    expect(watermarkKey(TENANT)).not.toContain('products/');
+  });
+
+  it('refuses a tenant that is not a path segment', () => {
+    expect(() => watermarkKey('../elsewhere')).toThrow('path segment');
   });
 });

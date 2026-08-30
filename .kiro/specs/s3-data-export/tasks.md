@@ -791,3 +791,31 @@ The in-memory sink grew `rejectsCredentials()` beside `unreachable()` for the
 reason every double in this feature has been corrected for: one that collapsed
 the two would let a run report the wrong diagnosis with everything still green.
 
+### A revalidation trigger fired, on 2026-08-29
+
+`athena-analytics-query` needs to tell a reader how current an answer is, and it
+may not ask the transactional database. The only completeness marker this
+feature had was `export_cursors.exported_through` — an `xid8`, not a moment, and
+on the wrong side of that rule.
+
+So this feature now publishes one: `watermarks/tenant_id=…/watermark.parquet`,
+one row, the moment its last successful run for that tenant finished. Its own
+boundary already claimed the fact — "how far each tenant has been carried" — and
+the gap was only that it kept it to itself.
+
+Three things about it belong here rather than downstream:
+
+- **Written after the point reached is confirmed, never before.** A run that
+  dies between the two leaves a mark behind the data, so a reader understates
+  how current an answer is and the next run repairs it. Ahead of the data it
+  would claim a completeness the data does not have. Same asymmetry as the
+  two-phase cursor.
+- **Written on any successful run, including one that carried nothing.** Such a
+  run is still evidence the data is complete as of now.
+- **The moment comes from the platform `Clock`**, which `ExportTenantUseCase`
+  gained for this. The one value this pipeline reports downstream should not be
+  read off the wall.
+
+The full suites were re-run: 518 unit tests, 279 integration tests, lint,
+typecheck and build clean. `export-isolation` failed first, correctly — it
+guards the set of datasets and a fourth had appeared.

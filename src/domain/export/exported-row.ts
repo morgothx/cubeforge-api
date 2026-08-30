@@ -57,7 +57,20 @@ export type ExportedCatalogueRow = {
  * a record of columns without a cast. The cast would be the kind that is right
  * until somebody adds a field.
  */
-export type ExportedRow = ExportedMovementRow | ExportedCatalogueRow;
+/**
+ * How far a tenant has been carried.
+ *
+ * A moment, though the cursor that decides it is a transaction identifier. The
+ * two answer different questions: the identifier says which movements belong to
+ * a run, and this says how current the exported data is to somebody who will
+ * never see a transaction identifier and should not have to.
+ */
+export type ExportedWatermarkRow = {
+  readonly complete_through: Date;
+};
+
+export type ExportedRow =
+  ExportedMovementRow | ExportedCatalogueRow | ExportedWatermarkRow;
 
 export const MOVEMENT_COLUMNS: readonly ExportedColumn[] = [
   { name: 'external_id', type: 'STRING' },
@@ -76,4 +89,8 @@ export const CATALOGUE_COLUMNS: readonly ExportedColumn[] = [
   // Free text on a product today, and the one attribute a later feature will
   // want to group by. Named here so step 8 is not surprised by it.
   { name: 'category', type: 'STRING' },
+];
+
+export const WATERMARK_COLUMNS: readonly ExportedColumn[] = [
+  { name: 'complete_through', type: 'TIMESTAMP' },
 ];

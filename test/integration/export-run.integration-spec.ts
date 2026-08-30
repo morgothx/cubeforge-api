@@ -20,6 +20,7 @@ import {
   PLATFORM_UNIT_OF_WORK,
   type PlatformUnitOfWork,
 } from '../../src/application/ports/platform-unit-of-work';
+import { CLOCK, type Clock } from '../../src/application/ports/clock';
 import {
   TENANT_SCOPED_UNIT_OF_WORK,
   type TenantScopedUnitOfWork,
@@ -105,6 +106,7 @@ describe('a run that fails, and the application while one is in flight', () => {
       new ExportTenantUseCase(
         context.get<TenantScopedUnitOfWork>(TENANT_SCOPED_UNIT_OF_WORK),
         sink,
+        context.get<Clock>(CLOCK),
       ),
     );
   }

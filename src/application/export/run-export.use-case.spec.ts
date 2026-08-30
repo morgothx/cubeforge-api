@@ -79,7 +79,7 @@ describe('running an export over every tenant', () => {
     runExport = new RunExportUseCase(
       context.platform,
       sink,
-      new ExportTenantUseCase(context.tenantScoped, sink),
+      new ExportTenantUseCase(context.tenantScoped, sink, context.clock),
     );
     tenants = [];
     for (const name of ['Acme', 'Globex', 'Initech', 'Umbrella']) {

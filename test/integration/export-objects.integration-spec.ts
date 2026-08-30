@@ -6,6 +6,7 @@ import { ParquetExportSink } from '../../src/adapters/storage/parquet-export-sin
 import { readParquet } from '../../src/adapters/storage/parquet-runtime';
 import { ExportTenantUseCase } from '../../src/application/export/export-tenant.use-case';
 import { RunExportUseCase } from '../../src/application/export/run-export.use-case';
+import { CLOCK, type Clock } from '../../src/application/ports/clock';
 import {
   TENANT_SCOPED_UNIT_OF_WORK,
   type TenantScopedUnitOfWork,
@@ -276,6 +277,7 @@ describe('the objects the export leaves behind', () => {
     const attempt = new ExportTenantUseCase(
       context.get<TenantScopedUnitOfWork>(TENANT_SCOPED_UNIT_OF_WORK),
       refusing,
+      context.get<Clock>(CLOCK),
     );
 
     await expect(attempt.execute({ tenantId: tenant })).rejects.toThrow();

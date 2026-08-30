@@ -11,6 +11,7 @@ import {
   PLATFORM_UNIT_OF_WORK,
   type PlatformUnitOfWork,
 } from '../../src/application/ports/platform-unit-of-work';
+import { CLOCK, type Clock } from '../../src/application/ports/clock';
 import {
   TENANT_SCOPED_UNIT_OF_WORK,
   type TenantScopedUnitOfWork,
@@ -36,8 +37,12 @@ import {
 
 const config = exportDestination();
 
-/** The three prefixes one tenant's data lives under. Never one. */
-const DATASETS = ['movements', 'products', 'locations'] as const;
+/**
+ * The prefixes one tenant's data lives under. Never one — and now four: the
+ * export publishes how far it carried each tenant, so an analytical reader can
+ * say how current an answer is without asking the transactional database.
+ */
+const DATASETS = ['movements', 'products', 'locations', 'watermarks'] as const;
 
 const RECORDED = new Date('2026-08-27T02:00:00.000Z');
 const OCCURRED = new Date('2026-08-20T09:00:00.000Z');
@@ -134,6 +139,7 @@ describe('what one tenant can find under another tenant name', () => {
       new ExportTenantUseCase(
         context.get<TenantScopedUnitOfWork>(TENANT_SCOPED_UNIT_OF_WORK),
         sink,
+        context.get<Clock>(CLOCK),
       ),
     );
   }
@@ -270,6 +276,7 @@ describe('what one tenant can find under another tenant name', () => {
     expect([...columns].sort()).toEqual([
       'category',
       'code',
+      'complete_through',
       'external_id',
       'kind',
       'location_code',
