@@ -1,3 +1,4 @@
+import { requireWellFormedTenant } from '../identifiers';
 import type { ExportWindow } from './window';
 
 declare const brand: unique symbol;
@@ -23,15 +24,6 @@ export type CatalogueDataset = 'products' | 'locations';
 export type Dataset = 'movements' | 'watermarks' | CatalogueDataset;
 
 /**
- * A tenant identifier as it appears in a path.
- *
- * Checked rather than trusted. A key is a path, and a tenant carrying a slash
- * or a `..` would write into a prefix that is not its own — the one way this
- * design could cross tenants without any query being wrong.
- */
-const IDENTIFIER = /^[0-9a-fA-F-]{36}$/;
-
-/**
  * The day a movement was recorded, in UTC.
  *
  * UTC rather than local time, so a partition means the same thing on the
@@ -45,9 +37,7 @@ export function partitionDay(recordedAt: Date): PartitionDay {
 
 /** One tenant's segment of a path. Never a whole prefix on its own. */
 export function tenantSegment(tenantId: string): string {
-  if (!IDENTIFIER.test(tenantId)) {
-    throw new Error(`a tenant identifier is not a path segment: "${tenantId}"`);
-  }
+  requireWellFormedTenant(tenantId, 'a path segment');
   return `tenant_id=${tenantId}/`;
 }
 

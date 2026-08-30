@@ -92,7 +92,7 @@ get back, and they are worth being able to test without an engine.
 
 ## 3. The seams
 
-- [ ] 3.1 Declare what the analytical store must offer, and how it fails
+- [x] 3.1 Declare what the analytical store must offer, and how it fails
   - The two questions, with the tenant bound when the seam hands the object over
     and absent from every method — so a question naming a tenant is not
     expressible rather than merely refused
@@ -104,7 +104,7 @@ get back, and they are worth being able to test without an engine.
   - _Requirements: 1.6, 2.2, 2.5, 6.3_
   - _Boundary: Application ports_
 
-- [ ] 3.2 Provide the double the use-case tests run against
+- [x] 3.2 Provide the double the use-case tests run against
   - Answers, empty answers, a tenant never carried, and each failure reason
     available on demand
   - It refuses a tenant identifier the real seam would refuse, because a double
@@ -397,3 +397,47 @@ cover nothing.
 draw an empty chart, and only one of them means the data is missing. The union
 is what forces a reader to narrow before reaching for entries — the type is the
 guard, not a convention.
+
+### 3.1 "A tenant identifier is a UUID" is not the export's fact
+
+The rule lived as a private regex in the export's `partition.ts`, and the
+analytics seam needs the same one for the same reason: a tenant identifier stops
+being a value and becomes **part of something that is parsed** — a path there, a
+statement here — and that is the one way a tenant could reach somewhere that is
+not its own with every query still correct.
+
+Moved to `domain/identifiers.ts`, where tenant identifiers live, with the caller
+naming what the value was about to become so each refusal still says who refused
+and why. Removing it fails **three** tests across two features, which is what a
+shared rule owes — the lesson task 1.2 recorded, now with a second instance.
+
+Deliberately **not** folded into `tenantId` itself. That one parses an
+identifier arriving from outside, where a malformed value must become a refusal
+indistinguishable from a tenant that does not exist. Throwing there would answer
+the question the platform's disclosure rules say must not be answered.
+
+### 3.2 The double and the real seam must agree on *how* they refuse
+
+The refusal was written synchronously, so it threw where the port promises a
+rejection. Every caller awaiting it saw no difference; one reaching for `.catch`
+without awaiting would have missed it entirely.
+
+Made `async`. Worth stating as a rule rather than a fix: a double owes the shape
+of the real thing's failures, not only their existence, and 4.3 has to refuse
+the same identifier at the same point in the same way.
+
+### 3.2 What the double models, and why each one
+
+Three properties, one per bug this repository has already paid for: the tenant is
+bound and checked, a tenant never carried answers differently from one with
+nothing to say, and **the period filters**. That last one would be easy to skip —
+a double returning everything passes every use-case test while the use case asks
+the engine for a tenant's whole history. The probe that ignores the period fails
+exactly one test, and it is the one that had to exist.
+
+### 3.1 Four reasons, and a debt to 4.1
+
+`AnalyticsFailureReason` declares four classes of problem and, at this task,
+nothing produces any of them — the adapter that raises them is 4.1. Recorded
+here because the previous feature shipped a reason nothing could emit and its
+validation gate is what noticed. **4.1 owes a producer for all four.**
