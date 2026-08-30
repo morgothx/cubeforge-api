@@ -57,7 +57,7 @@ other.
 Pure, no infrastructure. These decide what a caller may ask for and what they
 get back, and they are worth being able to test without an engine.
 
-- [ ] 2.1 (P) Name a day, a period, and what is too much
+- [x] 2.1 (P) Name a day, a period, and what is too much
   - A period covering both of its ends, so a caller asking for one day names it
     twice and means it
   - A period that ends before it starts is unrepresentable, and there is no way
@@ -70,7 +70,7 @@ get back, and they are worth being able to test without an engine.
   - _Requirements: 1.4, 1.5_
   - _Boundary: Analytics domain_
 
-- [ ] 2.2 (P) Say what an answer is
+- [x] 2.2 (P) Say what an answer is
   - Entries, plus the moment through which they are complete; or a tenant that
     has never been carried out of the transactional database
   - A period with nothing in it is an answer, not a refusal
@@ -79,7 +79,7 @@ get back, and they are worth being able to test without an engine.
   - _Requirements: 3.1, 3.3, 4.2_
   - _Boundary: Analytics domain_
 
-- [ ] 2.3 (P) Turn what the engine sends into what a reader needs
+- [x] 2.3 (P) Turn what the engine sends into what a reader needs
   - Every value arrives as text, whichever engine sent it; the declaration
     decides what each one becomes
   - A declared column the answer does not carry is refused loudly rather than
@@ -354,3 +354,46 @@ The suite also creates the location the engine writes its answers to. That is
 the catalogue command's job from 4.2 onwards, and this suite arranges it itself
 because it asks a question before that command exists — noted so it is removed
 rather than duplicated when 4.2 lands.
+
+### 2.3 The engine sends UTC and Node reads it as local time
+
+`2026-08-27 02:00:00` handed to `new Date(...)` becomes `07:00:00Z` on this
+machine, because a date-time with no zone written on it is read as **local**
+time. Every moment in every answer would be silently shifted by the running
+machine's offset — five hours here, none at all on a CI box set to UTC. A defect
+that appears only where somebody actually works, and never where it is checked.
+
+The zone is supplied when the value carries none. The test asserts the exact
+instant rather than "parses to a Date", and the suite is green under
+`America/Bogota`, `UTC` and `Asia/Tokyo` — because a timezone test that only
+ever runs in one zone is a timezone test in name.
+
+### 2.3 A probe that did not bite, and was not believed
+
+The first attempt at the probe above reported all nineteen tests passing, which
+would have meant the assertion was worthless. It was the patch that was
+worthless: the replacement never matched, so nothing changed and the probe
+measured the unmodified code.
+
+Re-run with an edit that asserts it applied, it fails two tests. **The same trap
+this repository has now hit three times** — a patch that silently matches
+nothing — and the only reason it was caught is that a probe passing where it
+should fail was treated as suspicious rather than as good news.
+
+### 2.1 The period is inclusive; the export's window is half-open
+
+They look like the same idea and are not. The export's window meets its
+neighbour exactly and must not carry a movement twice, so it is half-open. A
+period is a person naming the days they want to see, and somebody asking for one
+day names it twice and means it.
+
+Also: the shape of a day is not the calendar. `2026-02-30` matches the pattern
+and is no date, and a period ending there would compare as a string and quietly
+cover nothing.
+
+### 2.2 Three states, because two of them are the same picture
+
+"Nothing moved in that period" and "this tenant has never been carried" both
+draw an empty chart, and only one of them means the data is missing. The union
+is what forces a reader to narrow before reaching for entries — the type is the
+guard, not a convention.
