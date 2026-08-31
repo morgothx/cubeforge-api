@@ -38,7 +38,12 @@ export function useAnalyticalStore(): void {
       logger: false,
     });
     try {
-      const { id } = await seedTenant({ name: 'Analytical store fixture' });
+      // Generated, not chosen. Tenant names are unique platform-wide and this
+      // seeds in `beforeAll`, which runs before the per-test cleanup — so a
+      // fixed name collides with the copy the previous suite left behind.
+      const { id } = await seedTenant({
+        name: `analytical-store-${randomUUID()}`,
+      });
       const tenant = tenantId(id);
 
       await seed(async (database) => {

@@ -57,14 +57,32 @@ export function body<T>(response: Response): T {
 }
 
 /**
+ * One port bound to something other than what the composition root binds it to.
+ *
+ * Used sparingly, and only where the real adapter cannot be *made* to behave the
+ * way a test needs — an analytical store that is not there, say. Everything
+ * else runs against the real thing, which is the point of these suites.
+ */
+export interface Substitution {
+  readonly token: symbol;
+  readonly value: unknown;
+}
+
+/**
  * The application assembled exactly as `main.ts` assembles it. Sharing this
  * rather than each suite building its own is the point: what the validation
  * suites exercise has to be what runs.
  */
-export async function createApplication(): Promise<INestApplication<App>> {
-  const moduleRef = await Test.createTestingModule({
-    imports: [AppModule],
-  }).compile();
+export async function createApplication(
+  substitutions: readonly Substitution[] = [],
+): Promise<INestApplication<App>> {
+  const moduleRef = await substitutions
+    .reduce(
+      (builder, { token, value }) =>
+        builder.overrideProvider(token).useValue(value),
+      Test.createTestingModule({ imports: [AppModule] }),
+    )
+    .compile();
 
   const app = moduleRef.createNestApplication();
   configure(app);

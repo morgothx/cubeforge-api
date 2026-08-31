@@ -249,7 +249,7 @@ parallel however unrelated their assertions are.
   - _Requirements: 3.1, 3.2, 4.1, 4.2, 4.3_
   - _Boundary: Integration suite_
 
-- [ ] 7.3 (P) Show what the route does when it cannot answer
+- [x] 7.3 (P) Show what the route does when it cannot answer
   - The three roles may ask; a caller with no active membership is answered
     exactly as for a tenant that does not exist
   - An unreachable store reports the answer unavailable **and the transactional
@@ -919,3 +919,62 @@ answers with no entries; a period with activity answers with them. The first
 two draw the same empty chart and only one of them means the data is missing.
 The probe the task named — a default moment in place of "never carried" — fails
 exactly the first.
+
+### 7.3 An instrument with no positive control is a claim about the instrument
+
+3.4 says the analytics must not consult the transactional database, and the task
+asked for that **asserted rather than reasoned about**. The first instrument
+read PostgreSQL's own `pg_stat_all_tables` scan counters before and after a
+request. It passed.
+
+Then the positive control — the transactional stock route, whose entire job is
+to sum `stock_movements` — reported **no scans either**. The statistics are
+accumulated per backend and flushed on a schedule a request-shaped window does
+not see, so both readings were measuring flush timing. Widening the settle
+interval past the flush interval did not fix it; the counters simply did not
+move for the application's own backends within any window worth waiting for.
+
+So the instrument was replaced rather than the control removed. A tenant
+transaction is the only way anything here reaches tenant-owned rows, so counting
+them counts consultations exactly: authorization opens one, and a route that
+answers from PostgreSQL opens a second. An analytical request opens **only the
+first**, whether it succeeds or the store is unreachable — and the stock route
+opens two, which is what makes the other two numbers a measurement.
+
+Recorded because the pattern generalises: **a measurement that only ever reports
+"nothing happened" agrees with every hypothesis**, and the only way to tell it
+from a working one is to make it report something.
+
+### 7.3 The probe the task named walked past a whole assertion
+
+"Done when the whole thing fails if a failure is allowed to repeat what the
+engine said." Appending the driver's wording to the 503 body failed the exact-body
+test and **passed the disclosure test** — because `connect ECONNREFUSED
+127.0.0.1:4599` happens to contain none of the strings that test forbade.
+
+A list of forbidden words is a guess about which words a library chose. The body's
+key set is now asserted instead: `statusCode`, `message`, `reason`, and nothing
+else. Any added field fails, whatever it says. The forbidden-string list is kept
+as well — it is cheap, and it says out loud what must never appear.
+
+### 7.3 Unreachable is a real adapter pointed at nothing
+
+Not a stub that throws. What is being exercised is the classification, which
+reads the status an actual refusal came back with — and a stub would only assert
+that this test can construct the error it expects. A port nothing listens on
+gives `store-unreachable` through the real path.
+
+The deadline (6.2) is proven at the adapter with a zero budget rather than
+through the route, because the route's budget is thirty seconds and a suite is
+not going to wait for it. Same runner either way.
+
+### 7.3 The shared fixture had the defect 7.1 had just named
+
+`useAnalyticalStore()` seeded a tenant called "Analytical store fixture" — a
+**fixed** name, in a `beforeAll`, which is exactly the collision 7.1 recorded one
+task earlier. It bit as soon as a second suite used the fixture: two suites, one
+name, and the first one's copy still there.
+
+The note was written and the instance one directory away was left standing.
+Worth keeping as a reminder that a lesson recorded is not a lesson applied —
+grep for the shape, not only for the file that taught it.
