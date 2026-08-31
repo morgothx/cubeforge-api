@@ -815,6 +815,16 @@ exception to that).
 `analytics-route.integration-spec.ts` is 6.1's own local-stack proof, kept
 separate from the `analytics-http` file the plan reserves for 7.3.
 
+**Three more, found by the feature gate rather than recorded here at the time:**
+`analytics-edge.spec.ts` (6.1 — the route without an engine behind it,
+where the period refusals are observable and an engine would only be measuring
+the engine), `analytics-clients.integration-spec.ts` (1.3) and
+`analytics-answers.integration-spec.ts` (7.2 — the plan reserved
+`analytics-queries` for the 4.x statements and named no file for the drawability
+suite). All three are tests; none changes the shape of anything. Listed late is
+still better than not listed, and the gate found them by diffing the plan
+against `ls` rather than against this note — which is the check worth keeping.
+
 ### 7.1 The expectations are read out of the bucket, not written into the file
 
 Every assertion in this suite is derived from the objects the export actually
@@ -978,3 +988,47 @@ name, and the first one's copy still there.
 The note was written and the instance one directory away was left standing.
 Worth keeping as a reminder that a lesson recorded is not a lesson applied —
 grep for the shape, not only for the file that taught it.
+
+### Feature validation: 5.5 was arranged everywhere and asked nowhere
+
+The gate found one requirement whose implementation was complete and whose
+evidence was not. The bucket is registered, the guard is mounted, the skip list
+is derived and asserted off the decorator's own metadata, and the limit is read
+from the environment. Every one of those is a statement about the *arrangement*.
+The requirement is that an eleventh question in a minute is refused, and nothing
+on the platform had ever asked twice.
+
+The design said so itself, under *Through the running application*: "The limit
+on how often one caller may ask (5.5)". It was planned and then not written —
+the failure mode a per-task reviewer cannot see, because no single task owned
+both the bucket and the proof.
+
+`analytics-throttling.integration-spec.ts` asks eleven times. It also carries the
+decision the bucket exists for and which had no probe at all: **counted per
+caller, not per tenant**, so two people on one dashboard are two callers and an
+eager one does not look, to their colleague, like an outage.
+
+**Three probes, three failures.** Removing `@UseGuards` fails the first two;
+counting by `params.tenantId` instead of by the caller fails the third; removing
+`@SkipThrottle` fails it too.
+
+### Feature validation: a fourth test that no probe could make fail
+
+The suite was written with a fourth test — that spending the analytical
+allowance leaves the other buckets alone — and every probe left it green.
+
+The arithmetic is why. Ten analytical questions cannot exhaust an inventory
+allowance of sixty, nor a sign-in origin allowance of sixty; and the sign-in
+address bucket keys on a hash of the email in the body, which a GET with no body
+never shares. So the assertion could not be made to fail by removing the very
+skip list it was written to defend. It was not weak evidence — it was none.
+
+Deleted rather than kept. The skip list's real witness is the metadata assertion
+in `throttling-buckets.spec.ts`, which a probe fails four times over, and the
+behaviour is caught in passing by the per-caller test above. **This is the same
+finding as 7.3's positive control arriving from the other side**: there, an
+instrument that reported nothing was replaced because it agreed with every
+hypothesis; here, an assertion that agreed with every hypothesis was removed
+because there was nothing to replace it with. Both are the same rule — a check
+that cannot fail is not a check — and it is worth writing down that the rule
+sometimes ends in a deletion rather than in a better test.
