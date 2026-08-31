@@ -1,38 +1,35 @@
 # Handoff — cubeforge-api
 
-Written 2026-08-18. Receiver: the next agent session (Claude or Codex). Read
-this, then `.kiro/specs/caller-identity/tasks.md`.
+Written 2026-08-31, replacing the 2026-08-18 version. Receiver: the next agent
+session (Claude or Codex). Read this, then the `## Implementation Notes` at the
+bottom of `.kiro/specs/athena-analytics-query/tasks.md`.
 
 ## Where things stand
 
-- **Feature 1 `tenant-and-user-management`: complete.** 32/32 tasks, spec phase
-  `implemented`.
-- **Feature 2 `authentication`: complete.** 33/33 tasks, spec phase
-  `implemented`.
-- **Feature 3 `rbac-authorization-guards`: complete.** 19/19 tasks, spec phase
-  `implemented`.
-- **Feature 4 `caller-identity`: complete.** 10/10 tasks, spec phase
-  `implemented`. Delivers `GET /me`, which the frontend could not start
-  without — a client that just signed in now learns its own tenants and role.
-- Tarea activa: **ninguna.** The four backend features on the roadmap through
-  `caller-identity` are done. Next is `frontend-shell`, which needs its own
-  `.kiro/` inside `cubeforge-web` — that repo still holds only an `.nvmrc`.
-- Último commit: tasks 4.2 and 4.3 of `caller-identity`. **Uncommitted in the
-  tree:** task 5.1. One earlier commit, tasks 4.1–4.4 of
-  feature 3, has a typo'd subject: `eat(...)`.
-- Ciclo TDD: 5.1 RED (one test, on a status the task did not pin) → GREEN →
-  VERIFIED by three probes. One of them showed the freshness tests were not
-  yet load-bearing and they were repaired before the task closed.
-- **Integration work needs the database up.** `docker compose up -d postgres`,
-  and `pnpm db:bootstrap` once on a fresh volume.
-- Tests corridos: `pnpm test` 344 passing, `pnpm test:integration` 149 passing,
-  `pnpm lint`, `pnpm typecheck` and `pnpm build` clean. Last run: all green.
-- **`pnpm typecheck` is new** (`tsc --noEmit`) and reports zero errors. It was
-  added after 1.2 because nothing in this repo type-checked a spec file; the 34
-  errors it first found are all repaired. Run it at every checkpoint — in 2.1 it
-  was half the RED, catching a declaration shape the union did not yet carry.
-- Próximo paso exacto: scaffold `cubeforge-web` (Vite + React + TS + its own
-  `.kiro/`), outside the Kiro cycle, then spec `frontend-shell`.
+Roadmap features **1 through 7 are complete**, every spec at phase
+`implemented`. `cubeforge-web` holds `frontend-shell` (step 4) and
+`dashboard-appearance`, both `implemented` too.
+
+| # | Feature | Tasks |
+|---|---|---|
+| 1 | `tenant-and-user-management` | 32/32 |
+| 2 | `authentication` | 33/33 |
+| 3 | `rbac-authorization-guards` | 19/19 |
+| — | `caller-identity` | 10/10 — `GET /me` |
+| 5 | `inventory-sync-api` | 21/21 |
+| 6 | `s3-data-export` | 20/20 |
+| 7 | `athena-analytics-query` | 18/18 |
+
+- Tarea activa: **ninguna.** Feature 7 closed on 2026-08-31;
+  `/kiro-validate-impl` returned GO.
+- Tests: `pnpm test` **617 passing / 73 suites**, `pnpm test:integration`
+  **320 passing / 43 suites**, `lint:check`, `typecheck` and `build` clean.
+  Three consecutive full integration runs, ~135 s each.
+- Próximo paso exacto: `/kiro-spec-init cube-semantic-layer` (step 8). The fork
+  it has to decide is written out below — settle it in the spec, not later.
+- **Integration work needs the whole stack now**, not just PostgreSQL:
+  `docker compose up -d` brings up `postgres`, `floci` and `cube`. Analytics
+  suites talk to Floci's Athena, Glue and S3.
 - When a task run resumes: `/kiro-impl <feature> <numbers>` — **with the task
   numbers**, which is what selects manual mode. Manual mode has no commit step
   at all; without numbers it commits per task and breaks the rule below.
@@ -48,23 +45,68 @@ summarize, propose a Conventional Commits message in English, and wait.
 `/kiro-impl` autonomous mode commits per task, so it is banned. Use **manual mode,
 block by block**. This was decided in an earlier session and reaffirmed.
 
-## Next: `frontend-shell`
+## Next: `cube-semantic-layer` (step 8)
 
-Features 1–4 are `implemented` and nothing in them is outstanding. Feature 4
-delivered one route, `GET /me`, and was larger than that sounds: it touches the
-actor union, the resolver, the access declaration and its guard, and the
-persistence layer, because none of those could express "a person acting in no
-tenant". Section 1 built the principal and the resolver and section 2 the
-declaration and its guard branch, so **a route can now be declared open to any
-authenticated person and the guard enforces it**. Task 3.1 added the database
-half: `current_person_id()`, a `SELECT` for `cubeforge_authenticator` on
-`memberships`, and a policy confining it to the published person, and 3.2 the
-repository over it — `runAsPerson`, `StandingRepository`, and one contract suite
-both implementations pass. Task 4.1 added `DescribeCallerUseCase`, which drops
-every membership `decideAccess` does not grant, 4.2/4.3 the route itself and
-the suites that enumerate routes, and 5.1 the end-to-end proof against the real
-database. **`GET /me` works end to end**, from a session obtained the way a
-person actually obtains one.
+Feature 7 left step 8 a fork, and it is the first thing the spec has to settle.
+`athena-analytics-query/design.md` records it under *Open questions*: **does Cube
+consume the `TenantScopedAnalytics` port, or define its own models over the same
+Glue tables?**
+
+The fact that decides it is in `docker-compose.yml`. **Cube runs in its own
+container** (`cubejs/cube`, ports 4000 and 15432) and today is pointed at
+PostgreSQL only — `CUBEJS_DB_TYPE: postgres`. It cannot inject a Nest provider,
+so "consume the port" means exposing that port over HTTP and writing a Cube
+driver against it: real work, and a second network hop on every question.
+
+Its own connection to Athena is far more natural for Cube — and it **duplicates
+the place a tenant filter can be lost**, which is precisely what feature 7 spent
+itself making inexpressible. Cube's `queryRewrite` and `securityContext` are the
+tools for that, but they are a *second* isolation layer that has to be proven
+from nothing rather than inherited. Whichever way it goes, the isolation story is
+the one this project exists to tell, so the probe comes with the decision.
+
+Everything feature 7 built that step 8 can lean on:
+
+- `TenantScopedAnalytics` / `TenantAnalytics` — the seam, in
+  `src/application/ports/tenant-scoped-analytics.ts`. No method takes a tenant.
+- `AthenaAnalytics` — the only file that holds a statement.
+- `catalogue-definition.ts` — the four Glue tables (`movements`, `products`,
+  `locations`, `watermarks`) with partition projection, built from the export's
+  published column contract in `src/domain/export/exported-row.ts` so a rename
+  breaks a build. Applied by `pnpm ops:analytics-catalogue`.
+- The watermark: one row per tenant, `complete_through`, written by the export
+  **after** the cursor is confirmed. A tenant with no watermark has never been
+  carried, which is a different answer from an empty one.
+
+The routes that now exist:
+
+```
+POST   /tenants                                        201
+GET    /tenants                                        200
+DELETE /tenants/:tenantId                              204
+POST   /auth/sign-in                                   200 {accessToken, refreshToken, sessionExpiresAt}
+POST   /auth/refresh                                   200 same shape
+POST   /auth/sign-out                                  204
+POST   /auth/credentials                               204  (redeem a setup token)
+GET    /me                                             200 {personId, email, isOperator, memberships[]}
+POST   /platform/people/:personId/setup-tokens         201 {setupToken}   operator only
+DELETE /platform/people/:personId                      204               operator only
+POST   /tenants/:tenantId/members                      201
+GET    /tenants/:tenantId/members                      200
+PATCH  /tenants/:tenantId/members/:membershipId        200
+DELETE /tenants/:tenantId/members/:membershipId        204
+POST   /tenants/:tenantId/api-keys                     201 {id, secret}   tenant admin
+GET    /tenants/:tenantId/api-keys                     200 summaries, never a secret
+DELETE /tenants/:tenantId/api-keys/:apiKeyId           204
+PUT    /tenants/:tenantId/inventory/products/:sku      200
+GET    /tenants/:tenantId/inventory/products           200
+PUT    /tenants/:tenantId/inventory/locations/:code    200
+GET    /tenants/:tenantId/inventory/locations          200
+POST   /tenants/:tenantId/inventory/movements          201
+POST   /tenants/:tenantId/inventory/movements/batch    200
+GET    /tenants/:tenantId/inventory/stock              200
+GET    /tenants/:tenantId/analytics/movements          200 {state, completeThrough?, entries?}
+```
 
 The platform's entrance is unchanged:
 
@@ -76,37 +118,73 @@ POST /auth/credentials {"token": "…", "password": "…"}
 POST /auth/sign-in
 ```
 
-`ops:grant-operator` is unchanged and still refuses an address it cannot find —
-that guard is task 2.3's, and widening it would have removed the only protection
-against a typo creating a stray operator. The two commands are deliberately
-separate: one creates, the other does not.
-
-After this feature the roadmap's next step is `frontend-shell`, which needs its
-own `.kiro/` inside `cubeforge-web` — that repo still holds only an `.nvmrc`.
-
-Composition itself is done: `AuthenticationModule` binds the crypto ports and
-the throttler, `PersistenceModule` the two units of work, `SystemModule` the
-clock, identifiers and correlation middleware. The unit suite boots the real
-`AppModule` through `createInMemoryApplication`, so a missing registration now
-fails a test.
-
-The routes that now exist:
-
-```
-POST   /tenants                                   201 {id, name, status, createdAt, administratorPersonId}
-POST   /auth/sign-in                              200 {accessToken, refreshToken, sessionExpiresAt}
-POST   /auth/refresh                              200 same shape
-POST   /auth/sign-out                             204
-POST   /auth/credentials                          204  (redeem a setup token)
-POST   /platform/people/:personId/setup-tokens    201 {setupToken}   operator only
-POST   /tenants/:tenantId/api-keys                201 {id, secret}   tenant admin
-GET    /me                                        200 {personId, email, isOperator, memberships[]}
-GET    /tenants/:tenantId/api-keys                200 summaries, never a secret
-DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
-```
-
 ## Things that will bite you
 
+The list grew with features 5, 6 and 7. The newest are first; each spec's
+`## Implementation Notes` carries the full account.
+
+- **Floci is not AWS, and five gaps are measured rather than suspected.**
+  (1) It needs no partitions registered — it derives `tenant_id` from the key
+  path, so a *correct* partition projection and a *missing* one look identical
+  locally. (2) Every column comes back as `varchar` whatever its real type, so
+  an adapter typing a result from the engine's metadata passes here and is wrong
+  in production — decode against the declared shape instead. (3)
+  `ExecutionParameters` are dropped, which is why the tenant is interpolated
+  into the statement after a UUID check rather than bound. (4) `glue:GetTable`
+  returns `LastAccessTime: null`, which the JS SDK refuses to deserialize.
+  (5) An empty prefix is `IO Error: No files found that match the pattern`, not
+  zero rows — the engine builds a view over every prefix on every question.
+  **The engine underneath is DuckDB, not Presto.** Do not teach an adapter to
+  match on a driver's wording to paper any of this over; arrange the fixture
+  around it, as `test/integration/support/analytics.ts` does.
+- **A check that cannot fail is not a check, and the repair goes both ways.**
+  An instrument reading `pg_stat_all_tables` scan counters reported that the
+  route whose whole job is to sum `stock_movements` had not touched it — the
+  statistics flush per backend on a schedule a request-shaped window never sees.
+  It was replaced (by a spy on `runInTenant`) because a **positive control**
+  caught it. Separately, a throttling test that no probe could falsify was
+  *deleted*, because there was nothing to replace it with. Give every
+  measurement a case that must make it report something.
+- **A double looser than the thing it stands for hides the bug it exists to
+  catch.** This cost four separate instances in feature 6 and recurred in 7 at
+  the scale of an entire engine. If the real thing refuses, the double refuses
+  the same way and at the same moment — synchronously if the real one throws
+  synchronously.
+- **Run every probe and read what it did.** A probe that fails nothing is a
+  claim about the probe. Read the test *count*, not only pass/fail: a patch that
+  dropped a bracket reported "4 passed of 20" while the suites never compiled.
+- **`ThrottlerModule` is global: a bucket a route does not skip counts that
+  route.** Four hand-written skip lists existed and adding a fifth bucket
+  required editing all of them, invisibly. They are derived from one registry
+  now (`throttling-buckets.ts`); `everyBucketExcept` refuses a name nothing
+  registers. `THROTTLER_SKIP` is declared in `@nestjs/throttler`'s types and
+  **not exported at runtime** — importing it type-checks and yields `undefined`,
+  turning every metadata lookup into a silent miss.
+- **A `beforeAll` fixture seeds before the per-test cleanup runs.** A fixed
+  tenant name collides with whatever the previous suite left behind, so the
+  suite fails as a whole roughly one run in three and never in isolation.
+  Generate the name. This bit twice, one directory apart — grep for the shape,
+  not only for the file that taught it.
+- **`pnpm lint --fix` reformats a block between a write and a patch.** Five
+  instances. Every replacement in a patch script needs its own assertion that it
+  matched; one shared `assert s != before` passes on a different replacement.
+- **`git checkout` cannot restore an untracked file.** Swallowed by `|| true`, it
+  leaves a broken file behind and the wrong test count is what catches it.
+- **The export bucket has to be emptied once per integration run.** The engine
+  rebuilds a view over the whole prefix on every question, so leftovers from
+  earlier runs made analytics suites fail ~2 runs in 3 and doubled the suite's
+  time. `test/integration/support/global-setup.ts` does it.
+- **The API must start without analytical configuration.** `AnalyticsModule` is
+  imported by `AppModule`, so a provider factory reading the environment would
+  take sign-in and inventory down over a setting one route uses.
+  `DeferredAnalytics` builds at the first question. The export is the deliberate
+  opposite — it is a command, and refusing early costs nobody anything. **The
+  same requirement produces opposite answers in the two modules.**
+- **The export cursor is a transaction-id horizon, never a timestamp.**
+  `recorded_at` is when a transaction *began*, so a movement whose transaction
+  started earlier and committed later would be skipped for ever.
+  `pg_snapshot_xmin(pg_current_snapshot())` is the line below which nothing is
+  still in flight.
 - **Neither `pnpm test` nor `pnpm build` type-checks a spec file.** The build
   excludes `**/*spec.ts` and `ts-jest` transpiles without checking, so an
   impossible object in a test compiles, runs and passes. **Run `pnpm typecheck`**
@@ -210,13 +288,19 @@ DELETE /tenants/:tenantId/api-keys/:apiKeyId      204
 ## Commands
 
 ```
-docker compose up -d postgres     # the local database
-pnpm db:bootstrap                 # once per fresh database
+docker compose up -d                 # postgres, floci (AWS emulator), cube
+pnpm db:bootstrap                    # once per fresh database
 pnpm db:migrate
-pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration && pnpm build
+pnpm lint:check && pnpm typecheck && pnpm test && pnpm test:integration && pnpm build
 pnpm ops:bootstrap-operator <email>  # the first way in: creates, records, issues a token
 pnpm ops:grant-operator <email>      # promotes an existing person; refuses an unknown one
+pnpm ops:export                      # PostgreSQL → Parquet on S3, per tenant
+pnpm ops:analytics-catalogue         # creates or refreshes the Glue tables
 ```
+
+`pnpm lint` is `eslint --fix` and rewrites files; `pnpm lint:check` is the gate.
+All of it targets Floci — `AWS_ENDPOINT_URL=http://localhost:4566`, throwaway
+credentials, never a real account.
 
 ## Conventions
 
