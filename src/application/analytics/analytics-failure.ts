@@ -22,6 +22,26 @@ export type AnalyticsFailureReason =
   | 'not-configured'
   | 'store-unreachable'
   | 'store-rejected'
+  /**
+   * The semantic layer is not answering: nothing is listening, the name does
+   * not resolve, or the connection was refused or reset.
+   *
+   * Not a kind of `store-unreachable`, deliberately. The two send an operator
+   * to different places — one to a container that is not running, the other to
+   * object storage that is answering perfectly well — and a reason that sends
+   * whoever is on call to the wrong place costs more than no reason at all.
+   */
+  | 'model-unreachable'
+  /**
+   * The semantic layer answered, and what it answered was an error.
+   *
+   * In practice this is a member the platform offers and the model no longer
+   * defines, or a question the model refused to compose. Its own class rather
+   * than a kind of failure, because a service that answers is a service that
+   * can be asked what it objected to — in a log, never in a response, since a
+   * query layer's error body regularly carries the statement it generated.
+   */
+  | 'model-rejected'
   | 'question-timed-out'
   | 'question-failed';
 

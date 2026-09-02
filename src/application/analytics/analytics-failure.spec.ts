@@ -2,6 +2,7 @@ import { AnalyticsUnavailable, askingAs, reasonOf } from './analytics-failure';
 
 describe('deciding what a question failed for', () => {
   const location = 's3://cubeforge-analytics-results/';
+  const address = 'http://cube:4000/cubejs-api/v1/load';
 
   it('gives an unclassified failure the reason of the step that raised it', async () => {
     const failed = askingAs('question-failed', () =>
@@ -44,9 +45,50 @@ describe('deciding what a question failed for', () => {
     await expect(failed).rejects.not.toThrow('SELECT');
   });
 
+  it('tells a service that does not answer from one that answers badly', async () => {
+    // Two different things for an operator to do. A container that is not
+    // running is started; a service answering with an error is read. Filing
+    // both under one word would send whoever is on call to the wrong place, and
+    // filing either under an unreachable object store would send them to a
+    // third place that is fine.
+    const unreachable = askingAs('model-unreachable', () =>
+      Promise.reject(new Error('connect ECONNREFUSED 172.18.0.4:4000')),
+    );
+    const rejected = askingAs('model-rejected', () =>
+      Promise.reject(new Error('Error: Query is invalid')),
+    );
+
+    await expect(unreachable).rejects.toMatchObject({
+      reason: 'model-unreachable',
+    });
+    await expect(rejected).rejects.toMatchObject({ reason: 'model-rejected' });
+  });
+
+  it('keeps what a query layer said out of what a rejection says', async () => {
+    // An error body from a semantic layer routinely carries the statement it
+    // generated and the address it generated it for. Both are exactly what the
+    // caller-facing refusal may not contain.
+    const rejected = askingAs('model-rejected', () =>
+      Promise.reject(
+        new Error(
+          `Error: SELECT sum(quantity) FROM movements failed against ${address}`,
+        ),
+      ),
+    );
+
+    await expect(rejected).rejects.toThrow(
+      'the question failed: model-rejected',
+    );
+    await expect(rejected).rejects.not.toThrow(address);
+    await expect(rejected).rejects.not.toThrow('SELECT');
+  });
+
   it('reads the reason back, and falls back only for what escaped a step', () => {
     expect(reasonOf(new AnalyticsUnavailable('store-rejected', null))).toBe(
       'store-rejected',
+    );
+    expect(reasonOf(new AnalyticsUnavailable('model-unreachable', null))).toBe(
+      'model-unreachable',
     );
     expect(reasonOf(new Error('something else entirely'))).toBe(
       'question-failed',

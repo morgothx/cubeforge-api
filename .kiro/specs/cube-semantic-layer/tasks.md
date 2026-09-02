@@ -19,7 +19,7 @@ two-tenant suite that asks the same prepared question as both.
 
 ## 1. Foundation
 
-- [ ] 1.1 Give the failure vocabulary the two words it is missing
+- [x] 1.1 Give the failure vocabulary the two words it is missing
   - A service that does not answer and a service that answers with an error are
     two different things to do about, and neither is an unreachable object store
     — an operator sent to look at storage when a container is down looks in the
@@ -410,3 +410,28 @@ must be shown failing before it is believed.
   - _Depends: 6.2_
   - _Requirements: 2.4, 3.2, 3.3, 3.6, 4.4, 4.5, 4.6, 7.1, 7.2, 7.3, 7.4_
   - _Boundary: Validation — the running application_
+
+## Implementation Notes
+
+*Findings worth inheriting are recorded here as the work proceeds.*
+
+### 1.1 The unit suite cannot fail on a wrong reason
+
+The reasons are a type union and nothing else, which is this repository's idiom
+and is right — but `tsconfig.json` sets `isolatedModules`, so `ts-jest`
+transpiles each spec without type-checking it. The first version of this task's
+test passed **before** either reason existed: `askingAs('model-unreachable', …)`
+ran happily with a string the union did not contain.
+
+So the RED here is `pnpm typecheck`, not `pnpm test`. It failed with exactly the
+four expected errors and nothing else, and passed once the reasons landed. Worth
+knowing for every later task in this feature: a test asserting that something is
+*not* in a union is asserting nothing under `pnpm test` alone.
+
+### 1.1 Both new reasons are still owed a producer
+
+`model-unreachable` and `model-rejected` exist and are classified, but the only
+thing raising them today is a test. That is the state this task can leave them
+in — the client that raises them for real is 5.1 — and it is the exact defect
+`athena-analytics-query` shipped once and its validation gate caught: a reason
+nothing could emit. **5.1 is not finished until both have a producer.**

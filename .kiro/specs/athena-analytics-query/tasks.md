@@ -1032,3 +1032,43 @@ hypothesis; here, an assertion that agreed with every hypothesis was removed
 because there was nothing to replace it with. Both are the same rule — a check
 that cannot fail is not a check — and it is worth writing down that the rule
 sometimes ends in a deletion rather than in a better test.
+
+### A revalidation trigger fired, on 2026-09-02
+
+`cube-semantic-layer` reaches a semantic layer over HTTP, and this feature's
+closed set of reasons has no word for a service that does not answer or one that
+answers with an error. It was written for an engine reached through an SDK, where
+"unreachable" means object storage.
+
+So the set gains two: `model-unreachable` and `model-rejected`. Both are additive,
+both are rendered by the existing filter as 503 with nothing disclosed, and the
+alternatives were worse — a second taxonomy meaning the same five things in
+different words, or filing a dead container under `store-unreachable`, which
+sends whoever is on call to storage that is answering perfectly well.
+
+**The rule this feature wrote for itself still applies:** every reason must have
+a producer by the time the adapter that raises them is finished. Today the only
+thing raising either is a test. The client that raises them for real is that
+feature's task 5.1, and it is recorded there as unfinished until both are
+emitted by real code — which is precisely the defect this feature's own
+validation gate caught once already.
+
+### The assumption about step 8 was wrong, and is corrected here
+
+`requirements.md:67` says Cube will consume `TenantScopedAnalytics`, and the
+architecture diagram in `design.md:128` draws that edge. It does not.
+
+Cube is a separate process, so "consuming the port" would mean publishing the
+port over HTTP and writing a driver against it — and that driver has no good
+shape. Limited to the port's two questions it cannot be a semantic layer at all;
+accepting composed queries it turns the port into the general query interface
+this feature declared it could not afford, in the same document that closed it.
+
+`cube-semantic-layer` reads the same Glue catalogue through its own connection
+instead. The port stays closed, its two routes keep answering, and this feature's
+`design.md:592` was right to leave the question open where its requirements had
+already closed it. Nothing in this feature changes; the correction is recorded
+here so a reader does not have to discover it from two documents that disagree.
+
+The suites were re-run after the taxonomy change: 619 unit tests green, and the
+eight analytical integration suites — 40 tests — green against the running stack.
