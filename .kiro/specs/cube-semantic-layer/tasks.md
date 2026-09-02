@@ -36,7 +36,7 @@ two-tenant suite that asks the same prepared question as both.
   - _Requirements: 7.1, 7.3_
   - _Boundary: Integration — the analytics failure taxonomy_
 
-- [ ] 1.2 (P) Read where the semantic layer is from the environment, and refuse
+- [x] 1.2 (P) Read where the semantic layer is from the environment, and refuse
       without it
   - The address, the signing secret and the deadline, read from the environment
     and never from a value written into the repository
@@ -435,3 +435,29 @@ thing raising them today is a test. That is the state this task can leave them
 in — the client that raises them for real is 5.1 — and it is the exact defect
 `athena-analytics-query` shipped once and its validation gate caught: a reason
 nothing could emit. **5.1 is not finished until both have a producer.**
+
+### 1.2 The secret is held to the same length as the one it must not equal
+
+`design.md` requires only that `CUBEJS_API_SECRET` differ from
+`AUTH_TOKEN_SECRET`. The loader also refuses one shorter than 32 characters,
+which is what the platform's own signing secret has always been held to. A
+second secret exists so a token minted for one verifier is refused by the other;
+a second secret easier to guess than the first does not give that property, it
+gives the appearance of it. The example environment's placeholder was replaced
+to match — `docker-compose.yml` still falls back to the old short value, and
+**1.3 owns bringing that default in line**.
+
+### 1.2 The design says the container publishes nothing, and the stack cannot
+
+`design.md` resolves requirement 4.2 by having the cube service publish no
+ports, with the API reaching it "by its compose name". The API is not in compose
+— it runs on the host under `pnpm start`, and so does the integration suite. A
+service publishing nothing is unreachable by both.
+
+`.env.example` therefore documents `CUBE_URL=http://localhost:4000`, and **1.3
+has a decision to make rather than a line to copy**: binding the publish to
+`127.0.0.1` keeps the semantic layer off the network while leaving it reachable
+from the host that actually calls it, and with the development playground off
+the credential remains the real defence — which is what 4.2 is a claim about.
+Publishing nothing at all would make the feature untestable, which is a worse
+answer to the same requirement.
