@@ -312,3 +312,69 @@ Nothing in this repository — the configuration was mounted from outside it and
 the container was restored to its compose definition afterwards. The `cube-store`
 named volume holds the pre-aggregation tables the probe built; they are dev cache
 and can be dropped with the volume.
+
+---
+
+# Synthesis — 2026-09-02
+
+What the design settled after the experiment, and why.
+
+## Generalization
+
+The eight requirement areas reduce to **one composed question with four things
+attached to it**: a vocabulary it is checked against, a bound it cannot exceed, a
+tenant it cannot name, and a provenance it reports. So there is one question
+type, one port method and one route, rather than a shape per requirement area.
+The interface generalizes — any composition the vocabulary admits is expressible
+— while the implementation stays at what the requirements demand: one prepared
+rollup, one route, one bound.
+
+The three-state answer union is **reproduced rather than reused**. Same states,
+different payload: this answer carries provenance, and adding a field only this
+feature sets to `athena-analytics-query`'s published type would push this spec's
+concern into a closed one's contract.
+
+## Build vs adopt
+
+| Problem | Decision |
+|---|---|
+| Composing a query over a semantic model | **Adopt** — Cube's REST load API, one round trip carrying the question and the watermark query. |
+| Confining prepared data per tenant | **Adopt**, in its simplest correct form: `tenant_id` as a rollup dimension plus `queryRewrite`. Rejected the application-identity route, which confines with a second mechanism and multiplies rollups per tenant. |
+| Rebuilding what was prepared | **Adopt** — a `refresh_key` over the export's own watermark. Nothing to schedule and nothing to remember. |
+| A signed security context | **Adopt** — `@nestjs/jwt`, already present for access tokens, with a secret the loader refuses to share with the platform's. |
+| The outbound call | **Build**, and it is small: Node 22's global `fetch`, a deadline, and a continue-wait loop. A client library would add a dependency for a POST. |
+| Numeric types from the emulator | **Build** — a driver subclass overriding the type mapping, installed only when the endpoint is the emulator. There is no configuration for this, and no SQL repairs it. |
+| Keeping the vocabulary and the model in step | **Build**, mechanically: a suite comparing the declared names against the model's own metadata, in both directions. The repository's `declaration-drift.spec.ts` is the precedent. |
+
+## Simplification
+
+Three things were considered and cut:
+
+- **A second throttling bucket.** A modelled question costs what an analytical
+  one costs, so it joins `analytics-caller`. Two buckets would give one caller
+  two budgets for the same expense.
+- **A generalized deferred-construction helper.** `DeferredModel` repeats twenty
+  lines of `DeferredAnalytics` in a different type. Extracting a generic seam
+  for two occurrences buys indirection; a third occurrence is when it earns it.
+- **A published vocabulary route.** Step 9 will want it. Building it before its
+  consumer is building a surface to be changed.
+
+Kept despite the cost: **two names for each member**, platform-facing and
+model-facing. The dashboard's contract must not be the model's internal naming —
+the same coupling `exported-row.ts` exists to prevent one layer down — and the
+drift suite makes the two names a mechanical obligation rather than a habit.
+
+## Boundary decisions
+
+- **The taxonomy is extended, not copied.** Two reasons — `model-unreachable`
+  and `model-rejected` — are added to `athena-analytics-query`'s closed set,
+  declared as an upstream change with that spec's revalidation trigger fired.
+  The alternatives were a second taxonomy saying the same five things in
+  different words, or classifying a dead container as `store-unreachable`, which
+  sends an operator to the wrong place.
+- **The compose stack stops publishing the semantic layer**, with an explicit
+  override file for a demonstration. The gap analysis noted the published ports
+  contradict 4.2; the resolution is a decision rather than a restatement.
+- **`cube/` imports nothing from `src/` and `src/` imports nothing from
+  `cube/`** except one runtime `require` in a spec. They are two processes, and
+  the design keeps the boundary literal.
