@@ -198,3 +198,117 @@ is believed.
    Whether a measure arrives as a number or as text locally.
 5. **What does a timeout look like** through the driver, given the emulator's
    asynchronous submit-and-poll, and how does it map onto requirement 7.2.
+
+---
+
+# Experiment — 2026-09-01
+
+Run against the compose stack with a throwaway configuration mounted from
+outside the repository. Cube 1.7.19, `@aws-sdk/client-athena` 3.1038.0, the
+emulator holding 177 exported objects from earlier integration runs.
+
+Ground truth taken from the engine directly, for two tenants:
+
+| Tenant | Movements |
+|---|---|
+| `02a374c0…` | `sale` 2, `receipt` 1 |
+| `2c82f8da…` | `receipt` 2 |
+
+**Two of the three findings above are wrong as written.** They are left standing
+rather than edited, because what they got wrong is the useful part.
+
+## Finding 3 — settled, and the answer is yes
+
+The driver reaches the emulator. Not through an ambient variable: through an
+`endpoint` key passed to the driver, which works because `AthenaDriver`
+destructures its known options and spreads **everything it does not recognise**
+into the object it hands to `new Athena(...)`. The undocumented path exists in
+the code even though it is absent from the documentation.
+
+A real question came back with real rows — measures, a grouping and a tenant
+filter, computed by the emulator over the exported Parquet.
+
+**This is the finding that could have stopped the feature, and it does not.**
+
+## Finding 2 — reframed: the writes are impossible and also unnecessary
+
+`CREATE TABLE AS SELECT` and `UNLOAD` both fail, and not because the emulator
+lacks them. It wraps every statement it is given in `COPY (…)` to write the
+result out, so anything that is not a `SELECT` is a **parse error** — the
+failure arrives at `LINE 1: COPY (CREATE TABLE …`. No write of any kind can
+reach it. That is structural, not a gap that a later version closes.
+
+It does not matter. With no export bucket configured the driver sets
+`readOnly = !isUnloadSupported()`, which is `true`, and a read-only driver does
+not build anything inside the source: Cube reads a plain `SELECT` and
+materializes the rollup in Cube Store instead. **A pre-aggregation was built and
+served on the emulator**, which the gap analysis guessed was unlikely.
+
+So requirement 6 is locally verifiable. The design should say plainly that it is
+verified through the read-only path, and that the batching and export-bucket
+strategies the documentation describes are unreachable here.
+
+## Finding 4 — confirmed, and it is a blocker rather than a nuisance
+
+The gap analysis filed the flattened column types under "Medium — numeric
+measures may arrive as strings". That understates it twice.
+
+**No SQL can repair it.** `SELECT CAST(quantity AS BIGINT) AS q` is reported
+back as `varchar`. The flattening is in the response metadata, so a cast in the
+model changes nothing.
+
+**It breaks pre-aggregations, not just presentation.** Every rollup read ends in
+`sum(…)` over a measure column — a `count` rollup included, because a count is
+stored partially and summed on read — and Cube Store refuses: *"Sum not
+supported for Utf8"*. Until the types are repaired, no pre-aggregation of any
+shape can be queried.
+
+The probe repaired it by subclassing the driver and overriding `mapTypes`, which
+is the method that turns the response metadata into column types. With that in
+place the rollup built and was used. **This makes a driver subclass a design
+obligation rather than an option**, and it needs a note the shape of the export's
+own: the repair exists because of the emulator, and it must not teach the
+adapter to distrust a real engine's types.
+
+## Finding 1 — overstated, and this version fails safe
+
+The claim was that the natural configuration serves one tenant's prepared rows
+to another. On 1.7.19 both wrong shapes that could be constructed refuse instead:
+
+- **A model parameterized by the security context, with no `contextToAppId`** is
+  rejected outright, with a message naming the missing option. It does not
+  compile, let alone answer.
+- **A rollup that does not carry the tenant as a dimension** is not used. Cube
+  declines to match it against a query filtered on a dimension the rollup lacks,
+  and falls back to the engine. Both tenants received their own correct rows.
+
+And the shape this design would actually build — one rollup carrying `tenant_id`,
+with the tenant injected by `queryRewrite` — was used and was correct: the first
+tenant asked twice and got its own rows both times, and the second tenant, asking
+the identical question immediately after, got its own.
+
+**What this does not establish.** It is evidence about the two wrong shapes that
+could be built here, not a proof that no wrong shape leaks. The two-tenant
+isolation suite requirement 3.5 asks for is still owed, and it still has to be
+shown failing before it is believed.
+
+## Revised risk
+
+| Risk | Was | Now |
+|---|---|---|
+| Driver cannot reach the emulator | Blocking | **Closed.** An `endpoint` key reaches the SDK. |
+| Prepared data leaks across tenants | Blocking | **Low.** Both wrong shapes refuse; the right shape is correct. Still owed a probe. |
+| Emulator cannot build a pre-aggregation | High | **Closed.** The read-only path builds in Cube Store; no write reaches the engine. |
+| Every column reported as text | Medium | **High.** No SQL repairs it, and it stops every rollup until the driver's type mapping is overridden. |
+| Outbound call has no convention | Medium | Unchanged. |
+| Published ports contradict 4.2 | Low | Unchanged. |
+
+**Effort and risk overall: L, Medium.** Nothing blocking remains, and the one
+risk that rose has a demonstrated repair.
+
+## What the probe leaves behind
+
+Nothing in this repository — the configuration was mounted from outside it and
+the container was restored to its compose definition afterwards. The `cube-store`
+named volume holds the pre-aggregation tables the probe built; they are dev cache
+and can be dropped with the volume.
