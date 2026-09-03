@@ -85,7 +85,7 @@ and what comes back, and they are worth being able to test without either.
   - _Requirements: 1.1, 1.7_
   - _Boundary: Semantic domain — vocabulary_
 
-- [ ] 2.2 (P) Say what a composed question is
+- [x] 2.2 (P) Say what a composed question is
   - Measures, groupings, a period, and which of the two moments to read by —
     combined freely, without a definition written for the combination
   - **No tenant.** The type has nowhere to put one, which is how a caller naming
@@ -518,3 +518,32 @@ what is on offer, and a union cannot be read at runtime. The list also makes the
 suite's first assertion possible — every offered name is driven from the list
 itself, so a name added to the vocabulary and not to the parser fails there
 rather than at whatever asks for it first.
+
+### 2.2 A probe that landed and still meant nothing
+
+The fifth probe replaced one combined refusal with two sequential ones — the
+edit applied, seven lines changed, and every test stayed green. Reading what it
+did explained why: the first branch still handed `refuse` the real failing
+groupings, so it batched exactly as before. The probe was a no-op in meaning
+while being a real edit on disk.
+
+2.1's lesson was that an edit may not land. This is the other half: an edit may
+land and not express the failure it was written to stand for. Both end in a
+green suite, and only reading the changed code tells them apart.
+
+### 2.2 The period rules are imported, and that is the whole of it
+
+`question.ts` computes nothing about days. `periodFrom` already refuses an
+unbounded span and one beyond `LONGEST_PERIOD_DAYS`, naming the limit; the
+question type simply requires a `Period` it cannot construct itself. Restating
+either rule here would give the platform two answers to the same question, and
+on the day they drift the looser one is the one that decides.
+
+### 2.2 Both wrong lists are refused together
+
+`measures` is validated before `groupings`, so a first draft reported only the
+measures when both were wrong — the same "one name per attempt" the vocabulary
+refusal was built to avoid, reintroduced one level up. Both results are now
+gathered before either throws, and `field` names whichever sides were wrong
+(`"measures and groupings"`), because the edge renders that field and a caller
+reading only `measures` would go looking in the wrong list.
