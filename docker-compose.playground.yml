@@ -1,0 +1,15 @@
+# The development playground, brought back deliberately and by name.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.playground.yml up -d cube
+#
+# It is a separate file rather than a commented-out line because what it does
+# is turn off the thing that keeps an unauthorized caller from being answered.
+# Reaching for it should be an act, not an accident — and the difference
+# between the two is whether anyone had to type its name.
+services:
+  cube:
+    environment:
+      CUBEJS_DEV_MODE: "true"
+    ports: !override
+      - "4000:4000" # playground and REST API, on every interface
+      - "15432:15432" # SQL API, for inspecting the model by hand

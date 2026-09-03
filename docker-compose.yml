@@ -39,29 +39,48 @@ services:
       retries: 20
 
   # Semantic layer. Long-lived by design (persistent pre-aggregation cache),
-  # which is why it is not deployed to Lambda. The Athena data source is added
-  # once the S3/Parquet export pipeline exists.
+  # which is why it is not deployed to Lambda.
+  #
+  # It reads the exported objects through the analytical engine and **not** the
+  # transactional store. The PostgreSQL source it used to carry predated the
+  # export pipeline and contradicted the rule that pipeline exists to honour:
+  # heavy analysis never touches the OLTP store.
   cube:
     image: cubejs/cube:latest
     ports:
-      - "4000:4000" # dev playground + REST API
-      - "15432:15432" # SQL API
+      # Bound to the loopback address, not published to the network. The API
+      # and the integration suite both run on the host, so a service publishing
+      # nothing would be unreachable by the only two things entitled to reach
+      # it. What keeps an unauthorized caller out is the signed context it
+      # cannot mint and the development playground being off — not the absence
+      # of a port. The SQL API is not published at all: nothing uses it.
+      - "127.0.0.1:4000:4000"
     environment:
-      CUBEJS_DEV_MODE: "true"
-      CUBEJS_DB_TYPE: postgres
-      CUBEJS_DB_HOST: postgres
-      CUBEJS_DB_PORT: "5432"
-      CUBEJS_DB_NAME: ${POSTGRES_DB:-cubeforge}
-      CUBEJS_DB_USER: ${POSTGRES_USER:-cubeforge}
-      CUBEJS_DB_PASS: ${POSTGRES_PASSWORD:-cubeforge}
-      CUBEJS_API_SECRET: ${CUBEJS_API_SECRET:-dev-only-not-a-real-secret}
+      # Off. The playground answers without a credential, which is exactly what
+      # a caller the platform has not authorized must not get. It comes back
+      # through docker-compose.playground.yml, deliberately and by name.
+      CUBEJS_DEV_MODE: "false"
+      CUBEJS_DB_TYPE: athena
+      CUBEJS_DB_NAME: ${ANALYTICS_DATABASE:-cubeforge}
+      CUBEJS_AWS_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      CUBEJS_AWS_KEY: ${AWS_ACCESS_KEY_ID:-test}
+      CUBEJS_AWS_SECRET: ${AWS_SECRET_ACCESS_KEY:-test}
+      CUBEJS_AWS_ATHENA_WORKGROUP: ${ANALYTICS_WORKGROUP:-primary}
+      CUBEJS_AWS_S3_OUTPUT_LOCATION: ${ANALYTICS_RESULTS_LOCATION:-s3://cubeforge-analytics-results/}
+      # Dialled from inside this network, where the emulator answers to its
+      # service name — not the host endpoint the API and the scripts use. The
+      # driver has no documented setting for this; cube/cube.js passes it.
+      CUBE_ATHENA_ENDPOINT: ${CUBE_ATHENA_ENDPOINT:-http://floci:4566}
+      # Read by both sides: the API signs a context with it, this verifies it.
+      # Never AUTH_TOKEN_SECRET — see .env.example for why.
+      CUBEJS_API_SECRET: ${CUBEJS_API_SECRET:-cube-dev-only-not-a-real-secret-change-me}
     volumes:
       - ./cube:/cube/conf
       # Cube Store runtime state is shadowed by a named volume so the
       # container (running as root) never writes into the source tree.
       - cube-store:/cube/conf/.cubestore
     depends_on:
-      postgres:
+      floci:
         condition: service_healthy
 
 volumes:

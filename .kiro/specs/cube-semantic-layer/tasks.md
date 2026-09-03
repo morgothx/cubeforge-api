@@ -52,7 +52,7 @@ two-tenant suite that asks the same prepared question as both.
   - _Requirements: 8.3, 8.4_
   - _Boundary: Semantic configuration_
 
-- [ ] 1.3 (P) Point the container at the exported data, and stop publishing it
+- [x] 1.3 (P) Point the container at the exported data, and stop publishing it
   - The container reads the analytical engine and no longer the transactional
     store — that configuration predates the export pipeline and contradicts the
     rule the pipeline exists to honour
@@ -461,3 +461,38 @@ from the host that actually calls it, and with the development playground off
 the credential remains the real defence — which is what 4.2 is a claim about.
 Publishing nothing at all would make the feature untestable, which is a worse
 answer to the same requirement.
+
+### 1.3 Loopback, not silence — and what actually keeps a caller out
+
+The design said the service publishes nothing. It cannot: the API and the
+integration suite both run on the host, so nothing entitled to reach the
+semantic layer would be able to. It binds to `127.0.0.1:4000` instead, and the
+SQL API is not published at all because nothing uses it.
+
+That is the right answer to 4.2 for a further reason, confirmed by probing the
+running container rather than by argument. With `CUBEJS_DEV_MODE` off:
+
+- `/cubejs-api/v1/load` with no credential answers **403, "Authorization header
+  isn't set"** — before any question is parsed.
+- `/playground/context` is **404**, and `/` says the server is in production
+  mode. The playground, which answers without a credential, is gone.
+- The same port from this machine's network address does not connect at all.
+
+So the defence is the credential, and the binding only decides who may present
+one. A port is not what 4.2 is a claim about — which is what the requirement
+said, and is now measured rather than asserted.
+
+The playground returns with
+`docker compose -f docker-compose.yml -f docker-compose.playground.yml up -d cube`,
+verified: ports back on every interface, `/playground/context` 200.
+
+### 1.3 The container boots on the engine with no model, and reports itself DOWN
+
+Expected, and worth knowing before 4.1 makes it alarming. Cube logs "There is no
+cube.js file" and `/readyz` answers `{"health":"DOWN"}`, because the Athena
+driver has no endpoint until `cube/cube.js` gives it one — the setting has no
+documented form and cannot be passed as an environment variable. The API server
+itself is up and refusing unauthorized callers throughout.
+
+`CUBEJS_DEV_MODE: "false"` also means the container no longer starts Cube Store
+on its own. That matters for 4.6 and nothing before it.
