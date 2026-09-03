@@ -3,7 +3,7 @@ import {
   neverExported,
   type ModelledAnswer,
   type ModelledRow,
-} from './answer';
+} from './modelled-answer';
 
 const exportedThrough = new Date('2026-03-07T00:00:00.000Z');
 

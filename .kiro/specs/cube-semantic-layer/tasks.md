@@ -116,7 +116,7 @@ and what comes back, and they are worth being able to test without either.
 
 ## 3. The seam
 
-- [ ] 3.1 Hand out a model already bound to one tenant
+- [x] 3.1 Hand out a model already bound to one tenant
   - The same shape the analytical seam has, and for the same reason stated
     there: the tenant is bound by the seam and no method below it accepts one,
     so "forgot to scope" is not expressible rather than merely refused
@@ -566,3 +566,33 @@ took down three tests rather than one. That is the distinction being
 load-bearing rather than the suite being redundant: `readerSees` is what several
 tests assert through, so collapsing the two states is visible from every angle
 that looks at them. A one-test failure here would have been the weaker result.
+
+### 3.1 The file the design named, and the one I wrote
+
+2.3 created `src/domain/semantic/answer.ts`; the design's File Structure Plan
+says `modelled-answer.ts`. The name was copied from `domain/analytics/answer.ts`
+out of habit — and the habit produced exactly the collision 2.3's own note
+flagged as a risk. Renamed here, as a change of its own. The plan was right and
+the note was writing down a problem the plan had already solved.
+
+### 3.1 A doc comment that described the opposite of the code
+
+`dayIn` returned `''` for a row carrying no day, and `''` falls in no period —
+so the rows the comment said were kept were dropped. Caught by reading the
+comment against the code rather than by a test, because no test covered a row
+without a day: the behaviour was invented in passing and documented as if it
+had been decided. Fixed, and the case now has a test.
+
+The general form: a comment asserting behaviour that nothing exercises is a
+claim, not documentation. If it is worth writing down it is worth a test, and
+if it is not worth a test it was probably not thought through.
+
+### 3.1 One method where the analytical port has two
+
+`TenantAnalytics` names its two questions and says a general query interface
+would be another surface to lose the tenant on. `ModelQuestions` takes a
+composition instead, and that is the difference between the two features rather
+than a weakening of this one: the point of a model is that nobody writes the
+combination in advance. What makes it safe is that the bound travels inside
+`ModelledQuestion` — which has no tenant field — rather than in the method
+signature.
