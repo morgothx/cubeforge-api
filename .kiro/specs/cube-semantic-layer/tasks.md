@@ -73,7 +73,7 @@ two-tenant suite that asks the same prepared question as both.
 Pure, no infrastructure and no container. These decide what a caller may compose
 and what comes back, and they are worth being able to test without either.
 
-- [ ] 2.1 (P) Name what may be asked for, and what is offered when a name is
+- [x] 2.1 (P) Name what may be asked for, and what is offered when a name is
       wrong
   - The measures and the groupings a caller may compose from, declared once, in
     the platform's own words rather than the model's
@@ -496,3 +496,25 @@ itself is up and refusing unauthorized callers throughout.
 
 `CUBEJS_DEV_MODE: "false"` also means the container no longer starts Cube Store
 on its own. That matters for 4.6 and nothing before it.
+
+### 2.1 A probe that changed nothing, and how it was caught
+
+The probe for "names are matched exactly" — fold and trim before comparing —
+left all six tests green. Not because the test was weak: because `prettier` had
+rewrapped the line the probe was editing, so the edit silently matched nothing
+and the file was never modified. Re-applied against the wrapped form, it failed
+exactly one test, which is what it was supposed to do.
+
+Two things worth carrying forward. **Read what a probe did, not just what the
+suite said afterwards** — a green suite under a probe means either a weak test
+or a probe that never landed, and only looking distinguishes them. And **run
+probes against the formatted file**, since every source edit here goes through
+`prettier` before it is asserted on.
+
+### 2.1 The vocabulary is a list first and a union second
+
+`role.ts` set the precedent and the reason is the same: the refusal has to say
+what is on offer, and a union cannot be read at runtime. The list also makes the
+suite's first assertion possible — every offered name is driven from the list
+itself, so a name added to the vocabulary and not to the parser fails there
+rather than at whatever asks for it first.
