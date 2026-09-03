@@ -100,7 +100,7 @@ and what comes back, and they are worth being able to test without either.
   - _Requirements: 1.6, 2.1, 2.2, 2.3, 3.2_
   - _Boundary: Semantic domain — the question_
 
-- [ ] 2.3 (P) Say what a modelled answer is
+- [x] 2.3 (P) Say what a modelled answer is
   - Rows, the moment they are complete through, and **where they came from** —
     what was prepared, or the exported objects read again
   - A tenant never carried out of the transactional store is a third state, not
@@ -547,3 +547,22 @@ refusal was built to avoid, reintroduced one level up. Both results are now
 gathered before either throws, and `field` names whichever sides were wrong
 (`"measures and groupings"`), because the edge renders that field and a caller
 reading only `measures` would go looking in the wrong list.
+
+### 2.3 Two functions named the same thing, one layer apart
+
+`neverExported` now exists in both `domain/analytics/answer.ts` and
+`domain/semantic/answer.ts`. That is deliberate — the states are the same
+because the data underneath is the same — but a file importing both will need
+an alias, and a reader seeing the bare name has to know which layer they are
+in. The alternative was a prefix on every constructor in both modules, which
+would rename settled code to prevent a collision that has not happened yet.
+Left as it is, recorded so the first file that hits it does not read the
+collision as a mistake.
+
+### 2.3 The empty answer and the absent tenant fail three tests together
+
+Probes P1 and P2 each broke one direction of the same distinction, and each
+took down three tests rather than one. That is the distinction being
+load-bearing rather than the suite being redundant: `readerSees` is what several
+tests assert through, so collapsing the two states is visible from every angle
+that looks at them. A one-test failure here would have been the weaker result.
