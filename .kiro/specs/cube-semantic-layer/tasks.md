@@ -129,7 +129,7 @@ and what comes back, and they are worth being able to test without either.
   - _Requirements: 3.1, 3.2, 3.3_
   - _Boundary: Semantic port_
 
-- [ ] 3.2 Ask the one question, for the callers allowed to ask it
+- [x] 3.2 Ask the one question, for the callers allowed to ask it
   - Every member of the tenant may ask; a machine credential may not, refused on
     the kind of caller rather than on the role — an analytical question is
     expensive and admitting keys would let an automated client decide how often
@@ -596,3 +596,20 @@ than a weakening of this one: the point of a model is that nobody writes the
 combination in advance. What makes it safe is that the bound travels inside
 `ModelledQuestion` — which has no tenant field — rather than in the method
 signature.
+
+### 3.2 The bound is checked above the seam, and that is why the double must not trim
+
+The over-bound refusal lives in the use case, and the only reason it is
+testable is that 3.1's double returns more rows than the bound rather than
+slicing to it. Had the double trimmed — the obvious, tidy-looking choice — this
+check would have been green from the first run and green forever, including on
+the day the real client started trimming too. The two decisions are one
+decision made in two files, and neither file says so on its own.
+
+### 3.2 A machine is refused on what it is, not on what role it holds
+
+An API key is issued into a tenant *with a role*, so a role check admits a key
+holding `viewer` — the check would pass and the property would not hold.
+`tenantOf` refuses anything that is not a tenant member, which is the property
+this actually needs. The probe that admitted a machine caller changed no role
+list and still broke the test, which is the shape of the distinction.
