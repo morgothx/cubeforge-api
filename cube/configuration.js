@@ -170,6 +170,78 @@ function driverFor(endpoint, AthenaDriver) {
   };
 }
 
+/**
+ * The one claim a security context carries.
+ *
+ * Named here and minted under the same name by `security-context.ts` on the
+ * TypeScript side. The two cannot share a constant across the process boundary,
+ * so the integration suite asking a real question through a real context is
+ * what holds them together — a rename on one side and not the other stops
+ * every question rather than quietly widening one.
+ */
+const TENANT_CLAIM = 'tenantId';
+
+/**
+ * Confines every modelled question to one tenant, and refuses one it cannot.
+ *
+ * The tenant is taken from the signed context the platform mints, never from
+ * the question — `ModelledQuestion` has nowhere to put one, and this is the
+ * other half of that: there is nothing in the query for a caller to have set.
+ *
+ * **A context carrying no tenant is refused, not answered.** Returning the
+ * query untouched would read every tenant's rows, which is the one failure this
+ * project exists to make impossible. The engine's own `injected` projection
+ * stands underneath this refusal and is not verifiable from here, so this one
+ * is not allowed to be the soft half of a pair.
+ *
+ * The value is checked for being a non-empty string and no further. It becomes
+ * a filter *value*, which Cube carries as a parameter rather than as text, and
+ * its shape was already refused twice before it was signed. A third copy of
+ * that rule would be a third thing to keep in step without a third gate.
+ */
+function queryRewrite(query, context) {
+  const securityContext = context && context.securityContext;
+  const tenant =
+    securityContext && typeof securityContext === 'object'
+      ? securityContext[TENANT_CLAIM]
+      : undefined;
+
+  if (typeof tenant !== 'string' || tenant.length === 0) {
+    throw new Error(
+      'a modelled question must arrive with a tenant in its security context',
+    );
+  }
+
+  query.filters = [
+    ...(query.filters || []),
+    ...cubesNamedIn(query).map((cube) => ({
+      member: `${cube}.tenant_id`,
+      operator: 'equals',
+      values: [tenant],
+    })),
+  ];
+
+  return query;
+}
+
+/**
+ * Every cube the question touches, each confined separately.
+ *
+ * Filtering only the first would leave a joined cube unfiltered, and a join is
+ * exactly where a second tenant's rows would arrive. All four exported datasets
+ * are partitioned by tenant, so every cube in the model carries the dimension.
+ */
+function cubesNamedIn(query) {
+  const members = [
+    ...(query.measures || []),
+    ...(query.dimensions || []),
+    ...(query.segments || []),
+    ...(query.timeDimensions || []).map((each) => each.dimension),
+  ];
+
+  return [...new Set(members.map((member) => String(member).split('.')[0]))];
+}
+
 module.exports = {
   LOCAL_HOSTS,
   requireLocalEmulator,
@@ -178,4 +250,6 @@ module.exports = {
   driverOptions,
   repairTypes,
   driverFor,
+  TENANT_CLAIM,
+  queryRewrite,
 };

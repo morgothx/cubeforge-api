@@ -28,6 +28,22 @@ interface CubeConfiguration {
   };
   repairTypes(types: readonly Column[], rows: readonly Row[]): Column[];
   driverFor<T>(endpoint: string, base: T): T;
+  TENANT_CLAIM: string;
+  queryRewrite(query: Query, context: { securityContext?: unknown }): Query;
+}
+
+interface Filter {
+  readonly member: string;
+  readonly operator: string;
+  readonly values: readonly string[];
+}
+
+interface Query {
+  measures?: readonly string[];
+  dimensions?: readonly string[];
+  timeDimensions?: readonly { dimension: string }[];
+  segments?: readonly string[];
+  filters?: readonly Filter[];
 }
 
 /**
@@ -228,6 +244,78 @@ describe('the configuration the container reads', () => {
         expect(Object.prototype.isPrototypeOf.call(StockDriver, chosen)).toBe(
           true,
         );
+      }
+    });
+  });
+
+  describe('the tenant filter no modelled question can omit', () => {
+    const ACME = '11111111-1111-4111-8111-111111111111';
+    const asAcme = { securityContext: { [configuration.TENANT_CLAIM]: ACME } };
+
+    const filtersOf = (query: Query, context = asAcme): readonly Filter[] =>
+      configuration.queryRewrite(query, context).filters ?? [];
+
+    it('confines a question to the tenant the signed context names', () => {
+      expect(
+        filtersOf({ measures: ['movements.net_quantity'] }),
+      ).toContainEqual({
+        member: 'movements.tenant_id',
+        operator: 'equals',
+        values: [ACME],
+      });
+    });
+
+    /**
+     * Every kind of member names a cube on its own here, deliberately.
+     *
+     * A first version put the time dimension on `movements`, which the measure
+     * already named — so deleting time dimensions from the gathering changed
+     * nothing and the probe that did exactly that stayed green. A cube reachable
+     * only through one kind of member is the only shape that can tell whether
+     * that kind is being read.
+     */
+    it('confines every cube the question touches, not only the first', () => {
+      const filters = filtersOf({
+        measures: ['movements.net_quantity'],
+        dimensions: ['products.name'],
+        timeDimensions: [{ dimension: 'watermarks.complete_through' }],
+        segments: ['locations.active'],
+      });
+
+      expect(filters.map((filter) => filter.member).sort()).toEqual([
+        'locations.tenant_id',
+        'movements.tenant_id',
+        'products.tenant_id',
+        'watermarks.tenant_id',
+      ]);
+    });
+
+    it('keeps the filters the caller asked for, and adds to them', () => {
+      const asked: Filter = {
+        member: 'movements.kind',
+        operator: 'equals',
+        values: ['sale'],
+      };
+
+      expect(
+        filtersOf({ measures: ['movements.net_quantity'], filters: [asked] }),
+      ).toContainEqual(asked);
+    });
+
+    it('refuses a context that names no tenant, rather than answering', () => {
+      for (const context of [
+        {},
+        { securityContext: {} },
+        { securityContext: null },
+        { securityContext: { [configuration.TENANT_CLAIM]: '' } },
+        { securityContext: { [configuration.TENANT_CLAIM]: 42 } },
+      ]) {
+        expect(() =>
+          configuration.queryRewrite(
+            { measures: ['movements.net_quantity'] },
+            context,
+          ),
+        ).toThrow('tenant');
       }
     });
   });

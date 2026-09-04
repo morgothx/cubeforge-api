@@ -10,13 +10,20 @@
  * That spec is what recovers the type-checking this file loses by being
  * JavaScript outside the TypeScript project.
  */
-const { driverOptions, engineAddress, driverFor } = require('./configuration');
+const {
+  driverOptions,
+  engineAddress,
+  driverFor,
+  queryRewrite,
+} = require('./configuration');
 
 // At load, which is startup: an address that is not the emulator throws here
 // rather than after a question has already been answered.
 const OPTIONS = driverOptions();
 
 module.exports = {
+  queryRewrite,
+
   driverFactory: () => {
     // Required inside the factory, not at the top of the file, so that loading
     // this configuration outside the container — where the driver is not

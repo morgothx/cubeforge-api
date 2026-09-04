@@ -182,7 +182,7 @@ anything from the application, and nothing in the application imports these.
   - _Requirements: 1.2, 6.2_
   - _Boundary: Cube configuration_
 
-- [ ] 4.3 Put the tenant into every modelled question, and refuse one that
+- [x] 4.3 Put the tenant into every modelled question, and refuse one that
       arrives without
   - The tenant is taken from the signed context the platform mints and turned
     into a filter no modelled question can omit
@@ -734,3 +734,46 @@ This is the second time in this feature that a probe landing without biting
 exposed a weak test rather than a strong implementation. Two of the five probes
 here needed rewriting before they meant anything: one missed the file because
 prettier had rewrapped the line, and one was a no-op ternary.
+
+### 4.3 Every cube the question touches, not the first one
+
+`queryRewrite` receives a query, not a cube, so the filter has to be built for
+each cube the query names — across measures, dimensions, segments and time
+dimensions alike. Filtering only the first would leave a joined cube unfiltered,
+and a join is exactly where a second tenant's rows would arrive. All four
+exported datasets are partitioned by tenant, so every cube in the model carries
+the dimension and every one of them can be confined the same way.
+
+### 4.3 The claim name is duplicated across the process boundary
+
+`TENANT_CLAIM` is `tenantId` here and must be minted under that name by 5.2.
+The two cannot share a constant — one is JavaScript the container loads, the
+other TypeScript the API compiles. What holds them together is the integration
+suite asking a real question through a real context: a rename on one side and
+not the other stops every question rather than quietly widening one, which is
+the failure mode worth having.
+
+### 4.3 Two weak tests in a row, found the same way
+
+P4 deleted time dimensions from the cube gathering, landed, and stayed green:
+the test put the time dimension on `movements`, which the measure already named,
+so the distinct set never changed. Rewritten with a cube reachable *only*
+through that member kind, the probe bites.
+
+That is the same failure as 4.2's P4 and the same cause — a test whose fixture
+happens to satisfy the assertion through a second path, so the assertion never
+depends on the thing it names. Worth stating as a rule for the rest of this
+feature: when a probe lands and nothing fails, suspect the fixture before
+suspecting the probe.
+
+### 4.3 Verified against the running engine, not only in the unit spec
+
+With a throwaway cube over `movements` and three real exported tenants, the same
+question returned 3, 1 and 1 rows under three different signed contexts, against
+33 unfiltered. The resolved query carried
+`{"member":"movements.tenant_id","operator":"equals","values":["…"]}`, and a
+context carrying no tenant came back
+`Error: a modelled question must arrive with a tenant in its security context`.
+
+The filter restricts rows rather than merely appearing in the query, which is
+the difference the counts show and the resolved query alone would not.
