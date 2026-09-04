@@ -15,6 +15,7 @@ const {
   engineAddress,
   driverFor,
   queryRewrite,
+  dialectFor,
 } = require('./configuration');
 
 // At load, which is startup: an address that is not the emulator throws here
@@ -23,6 +24,13 @@ const OPTIONS = driverOptions();
 
 module.exports = {
   queryRewrite,
+
+  dialectFactory: () => {
+    const {
+      AthenaQuery,
+    } = require('@cubejs-backend/schema-compiler/dist/src/adapter/AthenaQuery');
+    return dialectFor(engineAddress(), AthenaQuery);
+  },
 
   driverFactory: () => {
     // Required inside the factory, not at the top of the file, so that loading

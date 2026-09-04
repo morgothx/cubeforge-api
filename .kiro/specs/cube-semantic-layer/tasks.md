@@ -196,7 +196,7 @@ anything from the application, and nothing in the application imports these.
   - _Requirements: 3.1, 3.4, 3.5_
   - _Boundary: Cube configuration_
 
-- [ ] 4.4 (P) Define every measure and grouping once
+- [x] 4.4 (P) Define every measure and grouping once
   - Net quantity moved and the number of movements recorded; on hand as the sum
     of a product's movements, which ignores the period while the rest of the
     question keeps it — on hand is an all-time sum by definition and a question
@@ -777,3 +777,61 @@ context carrying no tenant came back
 
 The filter restricts rows rather than merely appearing in the query, which is
 the difference the counts show and the resolved query alone would not.
+
+### 4.4 The emulator repair grew from one item to four
+
+The design named one local repair — the column types — and said the model would
+otherwise be written against Athena as it is. Building the first composed
+question found three more, each measured against the running engine and each
+stopping the feature outright rather than degrading it:
+
+| What Presto writes | What the local engine has | Found by |
+|---|---|---|
+| `from_iso8601_timestamp(x)` | `CAST(x AS TIMESTAMP)` | Any question with a period |
+| `date_add('minute', …)` for timezone | nothing — and nothing needed | Any question with a period |
+| `SEQUENCE(...)` for a time series | `unnest(generate_series(...))` | `on_hand_quantity` |
+
+All three live in a `dialectFor` subclass installed for the emulator's address
+and no other, beside the type repair and for the same reason: a repair that
+exists because of the emulator must never become the thing a real engine depends
+on. Every substitution is also valid Athena, so none of them is a local dialect
+the model would have to be written twice for.
+
+`convertTz` refuses a non-UTC question rather than returning the field. Doing
+nothing is *correct* for UTC — everything here stores, exports and asks in UTC —
+but doing nothing silently for another timezone would answer with hours nobody
+applied, which is the kind of wrong that looks right.
+
+### 4.4 The tenant is in the join condition, not only in the filter
+
+Two tenants may hold the same product code — codes are theirs, not the
+platform's — so joining on the code alone would match one tenant's movement to
+another's product whenever both cubes were not filtered. `queryRewrite` does
+filter both, and the join carries its own confinement anyway: a join is where a
+second tenant's rows would arrive, and a gate that depends on another gate is
+one gate.
+
+The same reasoning made the primary key composite. Cube requires one on a cube
+that joins and uses it to deduplicate; an external identifier is unique within a
+tenant and nothing promises it is unique across them, so the key is the tenant
+and the identifier together rather than a source system's numbering trusted to
+be globally unique.
+
+### 4.4 Two YAML mistakes worth remembering
+
+`sql: {CUBE}.tenant_id` is a flow mapping in YAML, not a string — the container
+refused to load with `bad indentation of a mapping entry`. It needs quoting.
+
+And an unqualified `sql: tenant_id` compiles into the primary-key expression
+without a table, which DuckDB rejects as ambiguous the moment a join brings a
+second `tenant_id` into scope. Every column reference in the model is qualified
+with `{CUBE}` for that reason, not for tidiness.
+
+### 4.4 Verified against the export, not only against itself
+
+The composed question — two measures, two groupings (one reached through the
+join), a period — returned per-day rows for one tenant. Asked directly of the
+engine, the same tenant's totals are `receipt 16 (2 rows)` and `sale -4 (1 row)`;
+the model's rows sum to exactly that. `on_hand_quantity` for a single day came
+back `12` beside a `net_quantity` of `6` — the all-time sum next to the day's,
+in one row, which is what requirement 1.3 asks the rolling window to do.

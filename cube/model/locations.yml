@@ -1,0 +1,22 @@
+cubes:
+  # What a movement's `location_code` names, labelled the same way.
+  - name: locations
+    sql_table: locations
+
+    dimensions:
+      - name: tenant_id
+        sql: "{CUBE}.tenant_id"
+        type: string
+
+      - name: code
+        sql: "{CUBE}.code"
+        type: string
+        primary_key: true
+
+      - name: name
+        sql: "{CUBE}.name"
+        type: string
+
+      - name: category
+        sql: "{CUBE}.category"
+        type: string

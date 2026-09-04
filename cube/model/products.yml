@@ -1,0 +1,27 @@
+cubes:
+  # What a movement's `sku` names, labelled as the catalogue labels it today.
+  #
+  # The name is the exported catalogue's latest, so a renamed product relabels
+  # its history. That is the behaviour the export chose; it is inherited here
+  # rather than decided here.
+  - name: products
+    sql_table: products
+
+    dimensions:
+      - name: tenant_id
+        sql: "{CUBE}.tenant_id"
+        type: string
+
+      # The code the movement carries as `sku`.
+      - name: code
+        sql: "{CUBE}.code"
+        type: string
+        primary_key: true
+
+      - name: name
+        sql: "{CUBE}.name"
+        type: string
+
+      - name: category
+        sql: "{CUBE}.category"
+        type: string

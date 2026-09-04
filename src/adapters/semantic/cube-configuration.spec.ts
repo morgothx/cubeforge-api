@@ -28,6 +28,7 @@ interface CubeConfiguration {
   };
   repairTypes(types: readonly Column[], rows: readonly Row[]): Column[];
   driverFor<T>(endpoint: string, base: T): T;
+  dialectFor<T>(endpoint: string, base: T): T;
   TENANT_CLAIM: string;
   queryRewrite(query: Query, context: { securityContext?: unknown }): Query;
 }
@@ -317,6 +318,91 @@ describe('the configuration the container reads', () => {
           ),
         ).toThrow('tenant');
       }
+    });
+  });
+
+  describe('the SQL the emulator can actually run', () => {
+    class StockDialect {
+      timezone: string | undefined = 'UTC';
+      sqlTemplates() {
+        return { statements: {} as Record<string, string> };
+      }
+    }
+
+    const emulatorDialect = () =>
+      new (configuration.dialectFor('http://floci:4566', StockDialect))();
+
+    it('is left entirely alone for an address that is not the emulator', () => {
+      expect(
+        configuration.dialectFor(
+          'https://athena.us-east-1.amazonaws.com',
+          StockDialect,
+        ),
+      ).toBe(StockDialect);
+    });
+
+    it('writes a timestamp the local engine has a function for', () => {
+      const dialect = emulatorDialect() as StockDialect & {
+        timeStampCast(value: string): string;
+        dateTimeCast(value: string): string;
+        timeStampParam(): string;
+      };
+
+      expect(dialect.timeStampCast("'2026-03-05'")).toBe(
+        "CAST('2026-03-05' AS TIMESTAMP)",
+      );
+      expect(dialect.dateTimeCast("'2026-03-05'")).toBe(
+        "CAST('2026-03-05' AS TIMESTAMP)",
+      );
+      expect(dialect.timeStampParam()).toBe('CAST(? AS TIMESTAMP)');
+      expect(dialect.timeStampCast("'x'")).not.toContain('from_iso8601');
+    });
+
+    it('converts UTC to UTC by doing nothing', () => {
+      const dialect = emulatorDialect() as StockDialect & {
+        convertTz(field: string): string;
+      };
+
+      expect(dialect.convertTz('movements.recorded_at')).toBe(
+        'movements.recorded_at',
+      );
+    });
+
+    /**
+     * Refused, not shifted by hours nobody applied.
+     *
+     * Everything this platform stores, exports and asks about is UTC, so doing
+     * nothing is correct — for UTC. Quietly doing nothing for another timezone
+     * would answer with the wrong hours and look right, which is worse than
+     * refusing.
+     */
+    it('refuses a question in any other timezone rather than answering it wrongly', () => {
+      const dialect = emulatorDialect() as StockDialect & {
+        convertTz(field: string): string;
+      };
+      dialect.timezone = 'America/Bogota';
+
+      expect(() => dialect.convertTz('movements.recorded_at')).toThrow(
+        'America/Bogota',
+      );
+    });
+
+    it('builds a time series with what the local engine has, not with SEQUENCE', () => {
+      const dialect = emulatorDialect();
+      const statements = dialect.sqlTemplates().statements;
+
+      for (const name of [
+        'generated_time_series_select',
+        'generated_time_series_with_cte_range_source',
+        'time_series_select',
+      ]) {
+        expect(statements[name]).not.toContain('SEQUENCE');
+        expect(statements[name]).not.toContain('from_iso8601_timestamp');
+      }
+
+      expect(statements.generated_time_series_select).toContain(
+        'generate_series',
+      );
     });
   });
 });

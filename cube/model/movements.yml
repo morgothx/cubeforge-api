@@ -1,0 +1,88 @@
+cubes:
+  # What moved, and the only cube carrying measures.
+  #
+  # `sql_table` is unqualified on purpose. The catalogue is supplied per
+  # connection, exactly as the analytical adapter supplies it, and a qualified
+  # name fails locally against a schema that does not exist.
+  - name: movements
+    sql_table: movements
+
+    joins:
+      # The tenant is part of the join condition, not only of the filter.
+      #
+      # Two tenants may hold the same product code — codes are theirs, not the
+      # platform's — so joining on the code alone would match one tenant's
+      # movement to another's product whenever both cubes were not filtered.
+      # The rewrite does filter both, and this holds even if it ever did not:
+      # a join is where a second tenant's rows would arrive, so it carries its
+      # own confinement rather than relying on one applied elsewhere.
+      - name: products
+        relationship: many_to_one
+        sql: >-
+          {CUBE}.sku = {products}.code
+          AND {CUBE}.tenant_id = {products}.tenant_id
+
+      - name: locations
+        relationship: many_to_one
+        sql: >-
+          {CUBE}.location_code = {locations}.code
+          AND {CUBE}.tenant_id = {locations}.tenant_id
+
+    measures:
+      # Movements are signed — a sale is negative — so they sum.
+      - name: net_quantity
+        sql: "{CUBE}.quantity"
+        type: sum
+
+      - name: movement_count
+        type: count
+
+      # What is on hand: the sum of everything that ever moved.
+      #
+      # A rolling window with an unbounded trailing bound, so this measure
+      # ignores the period while the rest of the question keeps it. On hand is
+      # an all-time sum by definition, and a question may not be asked
+      # unbounded — a rolling window is how both stay true at once, and a
+      # question mixing this with a period-bounded measure gets both in one row.
+      - name: on_hand_quantity
+        sql: "{CUBE}.quantity"
+        type: sum
+        rolling_window:
+          trailing: unbounded
+
+    dimensions:
+      # Not a column in the exported rows: it is the partition, and the engine
+      # offers a partition as a column. That is what makes the filter and the
+      # partition pruning the same act rather than two.
+      # Part of the primary key, not only a filter.
+      #
+      # Cube requires a primary key on a cube that joins, and it uses it to
+      # deduplicate rows across the join. An identifier is unique within a
+      # tenant and nothing promises it is unique across them, so the tenant is
+      # part of the key — the alternative is trusting a source system's
+      # numbering to be globally unique, which nothing here can enforce.
+      - name: tenant_id
+        sql: "{CUBE}.tenant_id"
+        type: string
+        primary_key: true
+
+      # The identifier the source system gave this movement.
+      - name: external_id
+        sql: "{CUBE}.external_id"
+        type: string
+        primary_key: true
+
+      - name: kind
+        sql: "{CUBE}.kind"
+        type: string
+
+      # The day this platform stored the movement. Only moves forward.
+      - name: recorded_day
+        sql: "{CUBE}.recorded_at"
+        type: time
+
+      # The day it happened, as the source reports it. May be backdated, which
+      # is the whole reason both exist.
+      - name: occurred_day
+        sql: "{CUBE}.occurred_at"
+        type: time

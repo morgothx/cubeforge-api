@@ -242,6 +242,106 @@ function cubesNamedIn(query) {
   return [...new Set(members.map((member) => String(member).split('.')[0]))];
 }
 
+/**
+ * The SQL dialect to compile with, repaired only against the emulator.
+ *
+ * Cube compiles an Athena question through the Presto dialect, which writes a
+ * timestamp as `from_iso8601_timestamp(...)`. The emulator's engine is DuckDB
+ * and has no such function — measured: `CAST('2020-01-01T00:00:00.000Z' AS
+ * TIMESTAMP)` succeeds against it and `from_iso8601_timestamp(...)` fails. So
+ * **no question carrying a period compiles at all** locally, which is every
+ * question this feature answers.
+ *
+ * The cast is the portable spelling of the same thing: real Athena accepts it
+ * too. It is still installed for the emulator only, for the reason the type
+ * repair gives — a repair that exists because of the emulator must never be
+ * the thing a real engine depends on.
+ */
+function dialectFor(endpoint, AthenaQuery) {
+  if (!isLocalEmulator(endpoint)) {
+    return AthenaQuery;
+  }
+
+  return class EmulatorTimestampDialect extends AthenaQuery {
+    timeStampParam() {
+      return 'CAST(? AS TIMESTAMP)';
+    }
+
+    timeStampCast(value) {
+      return `CAST(${value} AS TIMESTAMP)`;
+    }
+
+    dateTimeCast(value) {
+      return `CAST(${value} AS TIMESTAMP)`;
+    }
+
+    /**
+     * No timezone arithmetic, because there is no timezone to convert.
+     *
+     * Presto shifts a column with `date_add('minute', ...)`, which DuckDB does
+     * not have in that form. It does not need it here: every moment this
+     * platform stores, exports and asks about is UTC — `Day` is UTC, a period's
+     * ends are UTC, and the export partitions by a UTC date. Converting UTC to
+     * UTC is the identity.
+     *
+     * A question in any other timezone is **refused rather than answered
+     * wrongly**. Silently returning the field would give an answer shifted by
+     * the hours nobody applied, which is the kind of wrong that looks right.
+     */
+    convertTz(field) {
+      if (this.timezone && this.timezone !== 'UTC') {
+        throw new Error(
+          `the local engine answers in UTC only, and this question asked for ${this.timezone}`,
+        );
+      }
+
+      return field;
+    }
+
+    /**
+     * The time series a rolling window needs, spelled for this engine.
+     *
+     * Presto builds one with `SEQUENCE(...)`; DuckDB has no such function and
+     * builds the same series with `unnest(generate_series(...))` — measured
+     * against the running engine, both the absence and the replacement.
+     *
+     * Without this, `on_hand_quantity` cannot be answered at all: a rolling
+     * window is evaluated against a series of dates, and requirement 1.3 is
+     * what asks for the rolling window in the first place.
+     */
+    sqlTemplates() {
+      const templates = super.sqlTemplates();
+
+      templates.statements.time_series_select =
+        'SELECT CAST(dates.f AS TIMESTAMP) date_from, CAST(dates.t AS TIMESTAMP) date_to \n' +
+        'FROM (\n' +
+        '{% for time_item in seria  %}' +
+        "    select '{{ time_item[0] }}' f, '{{ time_item[1] }}' t \n" +
+        '{% if not loop.last %} UNION ALL\n{% endif %}' +
+        '{% endfor %}' +
+        ') AS dates';
+
+      templates.statements.generated_time_series_select =
+        'SELECT d AS date_from,\n' +
+        'd + INTERVAL {{ granularity }} - INTERVAL 1 millisecond AS date_to\n' +
+        'FROM (SELECT unnest(generate_series(\n' +
+        'CAST({{ start }} AS TIMESTAMP), CAST({{ end }} AS TIMESTAMP), INTERVAL {{ granularity }}\n' +
+        ')) AS d) AS dates';
+
+      templates.statements.generated_time_series_with_cte_range_source =
+        'SELECT d AS date_from,\n' +
+        'd + INTERVAL {{ granularity }} - INTERVAL 1 millisecond AS date_to\n' +
+        'FROM {{ range_source }} CROSS JOIN (SELECT unnest(generate_series(\n' +
+        'CAST({{ range_source }}.{{ min_name }} AS TIMESTAMP),\n' +
+        'CAST({{ range_source }}.{{ max_name }} AS TIMESTAMP),\n' +
+        'INTERVAL {{ granularity }}\n' +
+        ')) AS d) AS dates';
+
+      return templates;
+    }
+  };
+}
+
 module.exports = {
   LOCAL_HOSTS,
   requireLocalEmulator,
@@ -252,4 +352,5 @@ module.exports = {
   driverFor,
   TENANT_CLAIM,
   queryRewrite,
+  dialectFor,
 };
