@@ -10,7 +10,7 @@
  * That spec is what recovers the type-checking this file loses by being
  * JavaScript outside the TypeScript project.
  */
-const { driverOptions } = require('./configuration');
+const { driverOptions, engineAddress, driverFor } = require('./configuration');
 
 // At load, which is startup: an address that is not the emulator throws here
 // rather than after a question has already been answered.
@@ -22,6 +22,6 @@ module.exports = {
     // this configuration outside the container — where the driver is not
     // installed — remains possible at all.
     const { AthenaDriver } = require('@cubejs-backend/athena-driver');
-    return new AthenaDriver(OPTIONS);
+    return new (driverFor(engineAddress(), AthenaDriver))(OPTIONS);
   },
 };

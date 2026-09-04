@@ -12,12 +12,22 @@ import { requireLocalEmulator } from '../aws/require-local-emulator';
  * else is never collected. A test that cannot run is worse than an absent one,
  * because it looks like coverage.
  */
+interface Column {
+  readonly name: string;
+  readonly type: string;
+}
+
+type Row = Record<string, string | number | null>;
+
 interface CubeConfiguration {
   requireLocalEmulator(endpoint: string, setting: string): void;
+  isLocalEmulator(endpoint: string): boolean;
   engineAddress(env?: Record<string, string | undefined>): string;
   driverOptions(env?: Record<string, string | undefined>): {
     endpoint: string;
   };
+  repairTypes(types: readonly Column[], rows: readonly Row[]): Column[];
+  driverFor<T>(endpoint: string, base: T): T;
 }
 
 /**
@@ -128,5 +138,97 @@ describe('the configuration the container reads', () => {
         requireLocalEmulator(address, 'CUBE_ATHENA_ENDPOINT'),
       ),
     );
+  });
+
+  describe('the type repair the emulator makes necessary', () => {
+    it('retypes a column whose every value is written as a number', () => {
+      expect(
+        configuration.repairTypes(
+          [
+            { name: 'net_quantity', type: 'text' },
+            { name: 'kind', type: 'text' },
+          ],
+          [
+            { net_quantity: '33', kind: 'receipt' },
+            { net_quantity: '-4', kind: 'sale' },
+          ],
+        ),
+      ).toEqual([
+        { name: 'net_quantity', type: 'bigint' },
+        { name: 'kind', type: 'text' },
+      ]);
+    });
+
+    it('leaves a code that only looks numeric alone', () => {
+      expect(
+        configuration.repairTypes(
+          [{ name: 'sku', type: 'text' }],
+          [{ sku: '0012' }, { sku: '0013' }],
+        ),
+      ).toEqual([{ name: 'sku', type: 'text' }]);
+    });
+
+    it('turns a whole column back to text for one value that is not a number', () => {
+      expect(
+        configuration.repairTypes(
+          [{ name: 'net_quantity', type: 'text' }],
+          [{ net_quantity: '33' }, { net_quantity: 'unknown' }],
+        ),
+      ).toEqual([{ name: 'net_quantity', type: 'text' }]);
+    });
+
+    it('leaves a column with nothing in it as text', () => {
+      expect(
+        configuration.repairTypes(
+          [{ name: 'net_quantity', type: 'text' }],
+          [{ net_quantity: null }, {}],
+        ),
+      ).toEqual([{ name: 'net_quantity', type: 'text' }]);
+    });
+
+    /**
+     * The values here are plain numbers on purpose.
+     *
+     * A first version used `'2026-03-05'`, which is not written as a number, so
+     * the test passed whether or not the repair checked the reported type at
+     * all — it was green for the wrong reason, and a probe that removed the
+     * check did not break it. Only a column the engine typed *and* whose values
+     * would otherwise qualify can tell the two apart.
+     */
+    it('leaves alone a type the engine already reported', () => {
+      expect(
+        configuration.repairTypes(
+          [{ name: 'occurred_at', type: 'timestamp' }],
+          [{ occurred_at: '1772841600' }, { occurred_at: '1772928000' }],
+        ),
+      ).toEqual([{ name: 'occurred_at', type: 'timestamp' }]);
+    });
+
+    it('is absent for an address that is not the emulator', () => {
+      class StockDriver {}
+
+      expect(
+        configuration.driverFor(
+          'https://athena.us-east-1.amazonaws.com',
+          StockDriver,
+        ),
+      ).toBe(StockDriver);
+    });
+
+    it('is installed for every address the emulator answers on', () => {
+      class StockDriver {}
+
+      for (const address of [
+        'http://floci:4566',
+        'http://localhost:4566',
+        'http://127.0.0.1:4566',
+      ]) {
+        const chosen = configuration.driverFor(address, StockDriver);
+        expect(chosen).not.toBe(StockDriver);
+        expect(Object.prototype.isPrototypeOf.call(StockDriver, chosen)).toBe(
+          true,
+        );
+      }
+    });
   });
 });

@@ -167,7 +167,7 @@ anything from the application, and nothing in the application imports these.
   - _Requirements: 5.2, 8.4_
   - _Boundary: Cube configuration_
 
-- [ ] 4.2 Repair the types the emulator flattens, and only where it flattens them
+- [x] 4.2 Repair the types the emulator flattens, and only where it flattens them
   - The engine reports every column as text, including one it was asked to cast,
     because the flattening is in what it says about the answer rather than in
     the answer — so nothing written in the model can repair it
@@ -689,3 +689,48 @@ The edit also missed on its first attempt: prettier had wrapped the assignment
 across two lines and the replacement targeted the single-line form. Caught by
 reading the file rather than by the test suite, which stayed green because the
 edit changed nothing. Third time this feature.
+
+### 4.2 The design's mechanism does not exist, because the metadata carries nothing
+
+The design said a driver subclass would override "the method that turns response
+metadata into column types". Measured: there is nothing to convert. The
+emulator's `ColumnInfo` reports `Type: "varchar"` for every column — including
+one the query cast to `BIGINT` — with `Precision: 0` and `Scale: 0` on all of
+them. `mapTypes` maps `field.Type`, and `field.Type` is the same string for a
+count, a sum and a product name.
+
+So the types are repaired from the **rows** instead, in an override of
+`downloadQueryResults`. The requirement is unchanged; the mechanism is not the
+one the design named, because the one it named has no input.
+
+The cancellable promise the driver returns is preserved explicitly. Wrapping it
+plainly would drop `.cancel`, leaving a query running on the engine after
+whatever wanted it had gone away.
+
+### 4.2 Only the type is repaired, and that is the whole fix
+
+The values stay strings. That is not a shortfall: the Athena SDK returns every
+value as `Datum.VarCharValue`, so a real engine returns strings too and Cube
+relies on the declared type rather than on the value's JavaScript type. Repairing
+the values as well would be a transformation with nothing asking for it.
+
+Measured on the running engine: the stock driver reports
+`kind/how_many/net` all `text`; the subclass reports `text/bigint/bigint` over
+the same query, with rows `{"kind":"receipt","how_many":"27","net":"911"}`. For
+`https://athena.us-east-1.amazonaws.com` the factory returns the stock class
+unchanged, so there is no path on which a real engine's types are second-guessed.
+
+### 4.2 A test that was green for the wrong reason
+
+"Leaves alone a type the engine already reported" used `'2026-03-05'` as the
+value. That is not written as a number, so the test passed whether or not the
+repair consulted the reported type — and the probe that deleted that check did
+not break it. The check could not fail.
+
+Replaced with a timestamp column whose values *are* plain numbers, which is the
+only shape that can tell the two apart. The probe now bites.
+
+This is the second time in this feature that a probe landing without biting
+exposed a weak test rather than a strong implementation. Two of the five probes
+here needed rewriting before they meant anything: one missed the file because
+prettier had rewrapped the line, and one was a no-op ternary.
