@@ -247,7 +247,7 @@ anything from the application, and nothing in the application imports these.
 
 ## 5. Reaching the model for real
 
-- [ ] 5.1 Make the first outbound call this platform has ever made
+- [x] 5.1 Make the first outbound call this platform has ever made
   - A deadline covering the whole exchange rather than one attempt, because the
     semantic layer answers a slow question by saying it is still working — a
     client that reads one response and stops would report an empty answer for
@@ -957,3 +957,43 @@ against the rows would have passed under either.
 anyway — the run is what the watermark records, not the rows. That is what made
 the rebuild testable without inventing data, and it is worth knowing before
 someone reads a moved watermark as evidence that something arrived.
+
+### 5.1 The two reasons 1.1 added now have producers
+
+1.1 extended the failure vocabulary with `model-unreachable` and
+`model-rejected` and recorded that both were still owed a producer — the
+previous feature shipped a reason nothing could emit, and its validation gate is
+what noticed. This is the task that pays that debt, and it was measured against
+the running container rather than asserted:
+
+    prepared question        -> 3 rows, servedFromStore = true
+    a question not prepared  -> 1 row,  servedFromStore = false
+    a context with no tenant -> model-rejected
+    a member that does not exist -> model-rejected
+    nothing listening on the port -> model-unreachable
+
+The two rejections are correct as rejections: the service answered, and what it
+answered was an error. Unreachable is the port with nothing behind it.
+
+### 5.1 A probe that found redundant code rather than a missing test
+
+The deadline was checked twice — once before each attempt in `askOnce`, once
+again in the waiting loop. Deleting the loop's copy broke nothing, because the
+next attempt refuses anyway. That is what redundant looks like from a probe, and
+the answer was to delete the second copy rather than to write a test that could
+only ever exercise the first. Two places holding the same rule is the shape that
+drifts.
+
+### 5.1 One query per load, following 4.5's measurement
+
+The design's `CubeLoad` carried a list of queries. 4.5 measured that an array is
+treated as data blending and refused without a shared granularity, so the load
+carries one question and 5.3 will issue two when it needs the watermark.
+
+### 5.1 `servedFromStore`, not `usedPreAggregations`
+
+Carried through from 4.6's measurement: `usedPreAggregations` is null on every
+answer, and `external` is what separates a prepared answer from one read again.
+The client exposes the latter under a name that says what it means. Reading the
+field the design named would have made provenance permanently report
+`exported-objects` — and never been wrong out loud.
