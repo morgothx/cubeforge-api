@@ -152,6 +152,39 @@ function driverFor(endpoint, AthenaDriver) {
   }
 
   return class EmulatorTypeRepairingDriver extends AthenaDriver {
+    /**
+     * Streaming is turned off, and that is what makes the repair reachable.
+     *
+     * Building a prepared answer does not go through `downloadQueryResults`: the
+     * loader calls `stream()` directly, and a stream hands its column types over
+     * before a single row has flowed — so there is nothing to infer them from at
+     * the moment they are asked for. With no stream the loader takes the rows
+     * path and then asks `queryColumnTypes`, which *can* look at data.
+     *
+     * The cost is every row of a build held in memory. That is acceptable here
+     * and only here: this is the emulator, with a developer's worth of data, and
+     * against a real engine the stock driver streams as it always did.
+     */
+    stream = null;
+
+    /**
+     * The types a build is written with, inferred from a sample of the answer.
+     *
+     * `super` asks the engine with `LIMIT 0` and gets `varchar` for everything,
+     * which is what makes Cube Store refuse to sum a count. Running the same
+     * question for a hundred rows gives the values the repair needs, at the cost
+     * of one extra cheap query per build.
+     */
+    async queryColumnTypes(sql, params) {
+      const types = await super.queryColumnTypes(sql, params);
+      const sample = await this.query(
+        `SELECT * FROM (${sql}) AS repair_sample LIMIT 100`,
+        params || [],
+      );
+
+      return repairTypes(types, sample);
+    }
+
     downloadQueryResults(query, values, options) {
       const pending = super.downloadQueryResults(query, values, options);
 
