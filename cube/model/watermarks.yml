@@ -1,0 +1,38 @@
+cubes:
+  # How far a tenant has been carried out of the transactional store.
+  #
+  # Modelled as a cube rather than read some other way, so completeness is
+  # asked of the same model, through the same signed context, and confined by
+  # the same rewrite as the answer it labels. A moment fetched down some other
+  # path could be newer than the rows beside it, and a number labelled complete
+  # through a moment it is not complete through is worse than an unlabelled one.
+  #
+  # It is asked as its own question. Cube treats an array of queries in one load
+  # as data blending and refuses one without a granularity, so the watermark and
+  # the answer cannot share a load the way the design assumed — measured, and
+  # left for the composing adapter to carry.
+  - name: watermarks
+    sql_table: watermarks
+
+    measures:
+      # The latest moment this tenant is complete through.
+      #
+      # `max` rather than the single value, because the export writes one row
+      # per tenant today and nothing in the objects enforces that. Taking the
+      # latest is right whether there is one row or several, and it never
+      # reports an answer as complete through a moment later than the export it
+      # was computed from.
+      - name: complete_through
+        sql: "{CUBE}.complete_through"
+        type: max
+
+    dimensions:
+      # Not a column in the exported rows: it is the partition, and it must
+      # exist as a dimension for the rewrite to have something to filter on.
+      # A tenant nothing was ever carried for has no partition here at all,
+      # which is how never-exported is recognised — an absence rather than a
+      # zero, a default, or an epoch.
+      - name: tenant_id
+        sql: "{CUBE}.tenant_id"
+        type: string
+        primary_key: true

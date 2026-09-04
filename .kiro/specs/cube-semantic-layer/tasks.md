@@ -213,7 +213,7 @@ anything from the application, and nothing in the application imports these.
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
   - _Boundary: Model — movements, products, locations_
 
-- [ ] 4.5 (P) Make how far a tenant has been carried a thing the model can be
+- [x] 4.5 (P) Make how far a tenant has been carried a thing the model can be
       asked
   - The export's own watermark, modelled as a cube, so an answer's completeness
     comes from the same read of the same objects as the answer
@@ -835,3 +835,45 @@ engine, the same tenant's totals are `receipt 16 (2 rows)` and `sale -4 (1 row)`
 the model's rows sum to exactly that. `on_hand_quantity` for a single day came
 back `12` beside a `net_quantity` of `6` — the all-time sum next to the day's,
 in one row, which is what requirement 1.3 asks the rolling window to do.
+
+### 4.5 Absence arrives as an empty string, not as null — 5.3 must not miss this
+
+A tenant nothing was ever carried for returns **one row with an empty value**,
+not zero rows and not a JSON `null`:
+
+    exported      -> [{"watermarks.complete_through": "2026-09-02 18:09:42.932"}]
+    never carried -> [{"watermarks.complete_through": ""}]
+
+An aggregate with no grouping always returns a row, and the engine's result
+format cannot tell an empty string from a null. So the recognition signal for
+never-exported is an empty value, and `new Date("")` is an Invalid Date — which
+`answeredFrom` already refuses, so the failure would be loud rather than an
+answer dated 1970. Still, 5.3 must test for the empty value explicitly rather
+than rely on that guard.
+
+### 4.5 The annotated type says `number` for a moment
+
+Cube annotates a `max` measure as `type: number` even when the value is a
+timestamp string. Nothing here reads annotations, and this is the reason not to
+start: an adapter trusting the annotation would parse `2026-09-02 18:09:42.932`
+as a number and get `NaN`. The same lesson `answer-shape.ts` states one layer
+down — the declaration is the contract, not the engine's metadata.
+
+### 4.5 The design's "same load" does not exist
+
+The design says the watermark is asked "in the same load as the question, as a
+second query. One round trip." Measured: posting `{"query":[q1, q2]}` is treated
+as data blending and refused with `Data blending query without granularity is
+not supported`, because blending merges results along a shared time dimension —
+which a watermark question has no reason to have.
+
+So the watermark is a second load, not a second query in one load. That is 5.3's
+to carry, and it costs a round trip the design did not budget. Recorded here
+because it was found here; the boundary is 5.3's.
+
+### 4.5 `max`, not the single value
+
+The export writes one watermark row per tenant today, and nothing in the objects
+enforces that. `max(complete_through)` is right whether there is one row or
+several, and it can never report an answer as complete through a moment later
+than the export it was computed from.
