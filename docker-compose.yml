@@ -76,6 +76,12 @@ services:
       CUBEJS_API_SECRET: ${CUBEJS_API_SECRET:-cube-dev-only-not-a-real-secret-change-me}
       CUBEJS_CUBESTORE_HOST: cubestore
       CUBEJS_CUBESTORE_PORT: "3030"
+      # What actually builds and rebuilds the prepared answers.
+      #
+      # Without it Cube still *chooses* the rollup for a question and then
+      # refuses, because nothing ever materialized a partition. Requirement 6.4
+      # asks for a rebuild with nobody asking, and this is the thing that asks.
+      CUBEJS_REFRESH_WORKER: "true"
     volumes:
       - ./cube:/cube/conf
     depends_on:

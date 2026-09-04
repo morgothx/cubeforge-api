@@ -86,3 +86,36 @@ cubes:
       - name: occurred_day
         sql: "{CUBE}.occurred_at"
         type: time
+
+    pre_aggregations:
+      # The one question a dashboard asks constantly: daily totals, by kind.
+      #
+      # Chosen for being asked constantly rather than for being cheap. Every
+      # other composition falls through to the engine, which is the correct
+      # behaviour and not a gap — the point of a model is that any composition
+      # is answerable, and preparing all of them is not a thing that exists.
+      - name: movements_by_day_and_kind
+        measures:
+          - net_quantity
+          - movement_count
+        dimensions:
+          - tenant_id
+          - kind
+        time_dimension: recorded_day
+        granularity: day
+
+        # Carrying `tenant_id` is what confines this, and it is confined by the
+        # *same* act as a directly read answer: the filter `queryRewrite` adds,
+        # applied to the prepared rows rather than to the source. One mechanism
+        # rather than two that could disagree — and two that disagree is a leak
+        # that only appears once there is a second tenant.
+
+        # The export's own watermark, so nobody schedules anything.
+        #
+        # When any tenant's export finishes, `max(complete_through)` moves and
+        # this rebuilds on its own. The cost is honest: one tenant's export
+        # rebuilds the whole rollup. A per-tenant rollup would avoid that and
+        # would replace one confinement mechanism with two, which is the trade
+        # this deliberately refuses.
+        refresh_key:
+          sql: SELECT max(complete_through) FROM watermarks

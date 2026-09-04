@@ -225,7 +225,7 @@ anything from the application, and nothing in the application imports these.
   - _Requirements: 5.1, 5.3, 5.5_
   - _Boundary: Model — watermarks_
 
-- [ ] 4.6 Prepare the question the dashboard asks constantly
+- [x] 4.6 Prepare the question the dashboard asks constantly
   - Daily totals split by kind, chosen for being asked constantly rather than
     for being cheap; every other composition falls through to the engine, which
     is correct behaviour and not a gap
@@ -877,3 +877,83 @@ The export writes one watermark row per tenant today, and nothing in the objects
 enforces that. `max(complete_through)` is right whether there is one row or
 several, and it can never report an answer as complete through a moment later
 than the export it was computed from.
+
+### 4.6 The type repair did not reach the path that needed it most
+
+4.2 repaired types in `downloadQueryResults`. Building a prepared answer does
+not go through it: `PreAggregationLoader` calls `client.stream(...)` directly
+and, if the result carries no types, `client.queryColumnTypes(sql, params)`.
+Both returned text, and Cube Store answered exactly as 4.2 predicted —
+
+    Sum not supported for Utf8 ... 'sum(Utf8)'
+
+The repair now lives where the build actually looks. Streaming is switched off
+for the emulator, because a stream hands its column types over before a row has
+flowed and there is nothing to infer them from at that moment; with no stream
+the loader takes the rows path and asks `queryColumnTypes`, which is overridden
+to sample a hundred rows of the same question. The cost is a build held in
+memory and one extra cheap query — acceptable for the emulator and only there.
+
+The lesson is 4.2's own, arriving late: a repair verified on one path is
+verified on that path. `downloadQueryResults` was the path the unit spec could
+reach, and it was not the path the feature needed.
+
+### 4.6 A stale Cube Store table survives the fix that would have prevented it
+
+After the repair landed, the failure persisted — because Cube Store still held
+the table built from the broken types, and a rebuild does not re-type an
+existing table. Recreating the volume was what made the fix observable.
+
+Worth remembering for 7.3: a prepared-answer test that has ever run against a
+wrong build will keep failing against a correct one until its store is cleared.
+
+### 4.6 Provenance is `external`, not `usedPreAggregations` — 5.3 must read the right field
+
+The design says provenance is "read from what the semantic layer reports about
+which rollups it used". Measured, `usedPreAggregations` is `null` on every
+answer, prepared or not. The field that actually separates them is `external`:
+
+| Question | external | rows |
+|---|---|---|
+| daily totals by kind (the prepared one) | `true` | 3 |
+| the same, other tenant | `true` | 1 |
+| totals by product (not prepared) | `false` | 2 |
+
+So `servedFrom: 'prepared'` is `external === true`, and 6.3 holds through that
+field. Reading `usedPreAggregations` would have made the provenance permanently
+report `exported-objects` — a check that cannot fail, dressed as one that can.
+
+The two tenants seeing different rows *through the rollup* is 6.5 measured: the
+prepared rows are confined by the same filter as a directly read answer.
+
+### 4.6 The refresh worker had to be turned on
+
+Without `CUBEJS_REFRESH_WORKER`, Cube still *chose* the rollup for a question
+and then refused — "No pre-aggregation partitions were built yet ... this API
+instance wasn't set up to build pre-aggregations". Choosing and building are
+separate, and only one of them was configured. Added to the compose service.
+
+### 4.6 The rebuild, measured — and how to observe it at all
+
+The prepared answer cannot show a rebuild when the data has not changed: the
+same rows come back either way. What distinguishes them is Cube Store's table
+name, whose first suffix is the content version derived from the refresh key.
+
+    watermark 2026-09-04 01:55:41.252   ->  3 tables
+    pnpm ops:export
+    watermark 2026-09-04 01:58:13.696   ->  4 tables, within 20 seconds
+    the new one: movements_movements_by_day_and_kind_ssnxyqfb_zj4tzhcc_1l9k9e6
+
+Nobody asked for it. Three earlier versions correspond to the three earlier
+watermark values, so the relation held every time and not only once.
+
+The observable was worth finding: "the answer is the same" is what a correct
+rebuild and a rollup that never rebuilt both look like, and a test written
+against the rows would have passed under either.
+
+### 4.6 An export with nothing to carry still moves the watermark
+
+`pnpm ops:export` reported `0 carried, 3 up to date` and the watermark moved
+anyway — the run is what the watermark records, not the rows. That is what made
+the rebuild testable without inventing data, and it is worth knowing before
+someone reads a moved watermark as evidence that something arrived.
