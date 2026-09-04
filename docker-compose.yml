@@ -74,14 +74,26 @@ services:
       # Read by both sides: the API signs a context with it, this verifies it.
       # Never AUTH_TOKEN_SECRET — see .env.example for why.
       CUBEJS_API_SECRET: ${CUBEJS_API_SECRET:-cube-dev-only-not-a-real-secret-change-me}
+      CUBEJS_CUBESTORE_HOST: cubestore
+      CUBEJS_CUBESTORE_PORT: "3030"
     volumes:
       - ./cube:/cube/conf
-      # Cube Store runtime state is shadowed by a named volume so the
-      # container (running as root) never writes into the source tree.
-      - cube-store:/cube/conf/.cubestore
     depends_on:
       floci:
         condition: service_healthy
+      cubestore:
+        condition: service_started
+
+  # Where prepared answers are built and kept.
+  #
+  # An explicit service because dev mode is off, and dev mode is the only thing
+  # that starts an embedded one. Without it the container starts and then
+  # refuses every question before reaching the engine — the queue and the cache
+  # both run on this, so its absence is not a slow path but no path at all.
+  cubestore:
+    image: cubejs/cubestore:latest
+    volumes:
+      - cube-store:/cube/data
 
 volumes:
   floci-data:

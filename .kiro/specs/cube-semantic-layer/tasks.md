@@ -150,7 +150,7 @@ and what comes back, and they are worth being able to test without either.
 A separate process reading files this repository writes. Nothing here imports
 anything from the application, and nothing in the application imports these.
 
-- [ ] 4.1 Reach the exported data from the container, and only ever the emulator
+- [x] 4.1 Reach the exported data from the container, and only ever the emulator
   - The engine is reached through a key the driver's documentation does not
     mention and its code honours, because it forwards every option it does not
     recognise — the feature rests on that, so it is asserted rather than assumed
@@ -613,3 +613,79 @@ holding `viewer` — the check would pass and the property would not hold.
 `tenantOf` refuses anything that is not a tenant member, which is the property
 this actually needs. The probe that admitted a machine caller changed no role
 list and still broke the test, which is the shape of the distinction.
+
+### 4.1 Cube refuses a configuration key it does not know
+
+The design said the configuration spec would require `cube.js` directly, and
+that a helper could be exported from it for the spec to reach. Measured against
+the running container, it cannot: Cube validates its options object strictly and
+the container refused to start —
+
+    Error: Invalid cube-server-core options: "driverOptions" is not allowed.
+    "requireLocalEmulator" is not allowed
+
+So the decisions moved to `cube/configuration.js`, a module Cube never reads,
+and `cube.js` carries Cube's contract and nothing else. The spec requires the
+sibling. This is the smallest change that keeps both the container and the test
+working, and it was found by starting the container rather than by reasoning
+about the file.
+
+### 4.1 The undocumented key, read off the driver rather than believed
+
+`AthenaDriver` destructures the options it knows and spreads `...restConfig`
+into the object handed to `new Athena(...)`. Read in
+`/cube/node_modules/@cubejs-backend/athena-driver/dist/src/AthenaDriver.js` in
+the running container, then exercised: the driver built from
+`driverOptions()` carries `endpoint: http://floci:4566` on its own config, and
+`SELECT count(*) FROM movements` came back with 33 rows counted by the emulator
+over the exported Parquet.
+
+It came back as the **string** `"33"`, which is 4.2's whole reason for existing,
+observed here as a side effect rather than taken on faith from the research.
+
+### 4.1 A near-miss that looks correct: `floci:4566` is a valid URL
+
+`new URL('floci:4566')` succeeds with protocol `floci:` and an empty hostname,
+so it never reaches the "not a URL" refusal — the emulator check catches it
+instead, because the empty string is not a permitted host. The first version of
+the test asserted the wrong refusal and failed. The same trap appeared in 1.2
+with `cube:4000`; it is now pinned in both places.
+
+### 4.1 No Cube Store, no answers at all — and the compose stack was missing one
+
+With `CUBEJS_DEV_MODE: false` the container started and then refused every
+question **before reaching the engine**:
+
+    Error: Cube Store was specified as queue/cache driver. Please set
+    CUBEJS_CUBESTORE_HOST and CUBEJS_CUBESTORE_PORT variables.
+
+Dev mode is the only thing that starts an embedded Cube Store. 1.3 turned it off
+deliberately and declared a `cube-store` volume that only the embedded one would
+ever have used, and the design's compose stack never named a Cube Store service
+— so "dev mode off" and "a rollup is built and used" (6.x) could not both hold
+as written. The queue and the cache both run on it, so its absence was not a
+slow path but no path at all.
+
+Closed by adding an explicit `cubestore` service and pointing the container at
+it, keeping dev mode off. That preserves the reason 1.3 turned it off — the
+playground answers without a credential — instead of trading a requirement for
+convenience. The volume moved with it: it now holds the service's own data
+rather than shadowing a directory the embedded store would have written.
+
+Measured after the change: `/readyz` reports `HEALTH`; a throwaway question
+submitted through the container over HTTP came back `{"throwaway_probe.how_many":
+"33"}` with `dbType: athena`; the same question without a credential came back
+`Authorization header isn't set`.
+
+### 4.1 The lint rule forbids `require`, and the mechanism is still the point
+
+`@typescript-eslint/no-require-imports` rejected the runtime require the design
+asks for. Suppressing the rule would have hidden a deliberate choice behind a
+disable comment; `createRequire(__filename)` does the same thing without one.
+The mechanism matters — an `import` would pull a file outside the TypeScript
+project into the build graph, which is the thing being avoided.
+
+The edit also missed on its first attempt: prettier had wrapped the assignment
+across two lines and the replacement targeted the single-line form. Caught by
+reading the file rather than by the test suite, which stayed green because the
+edit changed nothing. Third time this feature.
