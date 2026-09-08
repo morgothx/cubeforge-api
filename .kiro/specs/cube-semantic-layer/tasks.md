@@ -1095,3 +1095,36 @@ only observable once the module wires this in. The unit suite proves the class
 does not build until asked, refuses with `not-configured`, and does not remember
 a refusal; that the *application* stays up is 6.2's to show, and the HTTP
 integration suite is where it lands.
+
+### 6.1 A body that names a tenant is refused, not ignored
+
+The task says "ignores any tenant a body tries to name". The platform's global
+pipe runs with `forbidNonWhitelisted`, so a property nothing declares is a
+refusal. That is stronger and it is the behaviour already in place: ignoring
+teaches a caller their field worked, while refusing tells them the platform will
+not do that. The DTO has no tenant field and the pipe does the rest.
+
+### 6.1 The fake request had to place the actor the way the middleware does
+
+A first version set `request.principal`, and every composition test failed with
+`the requested record does not exist` — the actor lives under a symbol and
+`actorOf` found nothing. The fix was to call `attachActor`, which is what the
+middleware calls.
+
+Worth stating because the alternative was worse than a failing test: had the
+controller not read the actor at all, a fake setting an invented property would
+have passed. A double that constructs state by hand rather than through the code
+that owns it is a double that can agree with a mistake.
+
+### 6.1 Its done-when is HTTP-observable, and lands in 6.2
+
+"The route answers for a member, refuses an unknown measure, refuses an eleventh
+question in a minute, and ignores a tenant in the body" are all properties of a
+request. The in-memory harness boots the real `AppModule`, so none of them is
+reachable until 6.2 registers the module — which is why 6.2 depends on this and
+not the other way round.
+
+What is proven here: the DTO's shape rules including the tenant refusal, the
+composition handed to the use case, both refusals happening before the use case
+runs, the answer's states surviving the edge, and the roles matching the tenant
+roles exactly. The four request-level assertions are 6.2's to add.
