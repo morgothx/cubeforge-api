@@ -46,6 +46,16 @@ export interface CubeResult {
   readonly servedFromStore: boolean;
 }
 
+/**
+ * What composing a question needs from the outbound call, and no more.
+ *
+ * The model adapter depends on this rather than on the class, so a test can
+ * stand in for the exchange without standing in for `fetch`.
+ */
+export interface ModelTransport {
+  load(load: CubeLoad): Promise<CubeResult>;
+}
+
 /** What the client needs from the world, so a test can supply its own. */
 export interface CubeSurroundings {
   fetching(url: string, init: RequestInit): Promise<Response>;
@@ -70,7 +80,7 @@ const STILL_WORKING = 'Continue wait';
  * **No retry beyond the waiting.** A refused analytical question is refused for
  * a reason, and asking again doubles the cost of every incident.
  */
-export class CubeClient {
+export class CubeClient implements ModelTransport {
   constructor(
     private readonly config: SemanticConfig,
     private readonly world: CubeSurroundings = {

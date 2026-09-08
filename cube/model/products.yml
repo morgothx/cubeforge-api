@@ -13,10 +13,17 @@ cubes:
         type: string
 
       # The code the movement carries as `sku`.
+      # A primary key, and also a label the platform publishes.
+      #
+      # Cube hides primary-key dimensions unless told otherwise, so without
+      # this a question grouped by product is refused: "You requested hidden
+      # member". The key and the label are the same column here — the code is
+      # what identifies a product and what a reader recognises it by.
       - name: code
         sql: "{CUBE}.code"
         type: string
         primary_key: true
+        public: true
 
       - name: name
         sql: "{CUBE}.name"

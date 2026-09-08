@@ -279,7 +279,7 @@ anything from the application, and nothing in the application imports these.
   - _Requirements: 4.2, 4.3_
   - _Boundary: Security context_
 
-- [ ] 5.3 Compose the question, in one file
+- [x] 5.3 Compose the question, in one file
   - The only file that builds a modelled question, which is what makes the whole
     surface a tenant could go missing from reviewable at once — the same
     property the analytics keeps by holding every statement in one place
@@ -1026,3 +1026,53 @@ token fails to verify against the model's secret. That property comes from
 enforced rather than remembered, because sharing one would let a platform token
 be presented directly to the semantic layer and the failure would be silent:
 both would verify.
+
+### 5.3 The watermark is read first, and the order is a requirement
+
+Reading it after the answer would let an export landing between the two make
+the label later than the rows it labels — an answer claiming to be complete
+through a moment its data does not reach, which is what 5.5 forbids. Asked
+first, the label can only be older than the data: an answer understating its own
+currency, which is the safe direction to be wrong in.
+
+Skipping the expensive question for a tenant nothing was carried for falls out
+of the same ordering. That is a saving, not the reason.
+
+### 5.3 Absent and unreadable are different, and only one means no data
+
+A probe deleted the empty-value check and nothing failed: `""` fell through to
+`new Date("Z")`, which is invalid, which returned the same `null`. Both paths
+answered `never-exported`.
+
+That is worse than redundant. A watermark the engine returns garbled is not a
+tenant without data — answering `never-exported` there reports a tenant as
+having nothing because the *label* failed, hiding whatever rows exist behind it.
+Absence (empty, blank, null) is now `never-exported`; anything present that will
+not parse is refused as `model-rejected`. Two checks that fail for different
+reasons, and each probe bites its own.
+
+The general form: when a probe cannot bite because two inputs share an outcome,
+ask whether they should share it.
+
+### 5.3 Cube hides primary-key dimensions, and the vocabulary offers one
+
+`products.code` is the join key *and* the label the platform publishes, and Cube
+makes primary-key dimensions non-public by default — so a question grouped by
+product came back "You requested hidden member: 'products.code'". Found by the
+end-to-end smoke, not by the unit suite, which had no reason to know.
+
+`public: true` on both code dimensions. The key and the label being the same
+column is not an accident here: the code is what identifies a product and what a
+reader recognises it by.
+
+### 5.3 Measured end to end, all four shapes
+
+    prepared (kind + day)  -> 3 rows, servedFrom=prepared
+    by product             -> 1 row,  {product_code: "SHARED-001", product_name: "a widget…"}
+    by location            -> 1 row,  {location_code: "WH-1", location_name: "a warehouse…"}
+    on hand, no grouping   -> on_hand_quantity 12 beside net_quantity 12
+    a tenant never carried -> never-exported
+
+Rows come back under the platform's names, the prepared question reports itself
+as prepared and the others as read, and the completeness moment travels with all
+of them.
