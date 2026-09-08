@@ -360,7 +360,7 @@ must be shown failing before it is believed.
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 5.1, 5.3, 5.4, 5.5_
   - _Boundary: Validation — modelled questions_
 
-- [ ] 7.2 (P) Ask the same question as two tenants, both ways
+- [x] 7.2 (P) Ask the same question as two tenants, both ways
   - Two tenants, the same question, once falling through to the engine and once
     served from what was prepared — because a prepared answer is a second way to
     read and therefore a second way to leak
@@ -1222,3 +1222,49 @@ window a test can wait for. Measured across six minutes of a running suite, 197
 REST requests reached the container and the worker logged nothing at all. A
 `waitFor` was written, watched fail at ninety seconds, and replaced by choosing
 questions the rollup cannot answer.
+
+### 7.2 Both probes bit, and they bit differently
+
+**The tenant filter removed from the rewrite** — both tests failed. Neither the
+direct read nor the prepared one confines anything without it, which is the
+point of asking the same question both ways: one mechanism, two places.
+
+**The tenant dropped from what is prepared** — one test failed, and not by
+leaking. Cube **declined to use the rollup at all** and the question fell
+through to the engine, coming back correct and confined by the direct read's
+filter. Measured: `servedFrom: 'exported-objects'` with the right rows.
+
+That difference is worth stating. A rollup missing the dimension does not serve
+another tenant's rows; it stops serving. So there is a fourth gate here that
+nobody designed — Cube refusing a rollup it cannot confine — and it is exactly
+the kind of accident that should not be relied on. The test catches the change
+because it asserts the provenance, not because the numbers were wrong. Without
+that assertion the probe would have passed and the prepared path would have
+quietly ceased to exist.
+
+### 7.2 A third test was written and deleted
+
+One asserting "never sees the other tenant's number" added nothing: the two that
+remain assert the exact rows, which already excludes the other tenant's
+quantity, an answer carrying both, and an answer carrying none. A filter
+matching everything and a filter matching nothing both fail them. A test that
+can only pass when a stronger one already passed is a line count, not a check.
+
+### 7.2 The rollup does catch up, and two of my explanations for 7.1 were wrong
+
+The prepared reading works: both tenants were exported, the rollup rebuilt on
+its own, and each saw only its own rows through it. So the earlier failures were
+not "the worker never runs".
+
+Two explanations were built and both were false. The first blamed the suite for
+emptying the export bucket between tests — `useExportDestination` only *creates*
+it; the emptying happens once, in global setup. The second read "zero refresh
+lines in the log" as evidence the worker was idle — that grep never matched
+Cube's log format, including in a run where a rollup demonstrably rebuilt. The
+instrument was wrong and it agreed with the theory, which is how a wrong theory
+survives.
+
+What is actually true is narrower: a tenant exported moments ago is not in the
+rollup until a rebuild lands, and how long that takes is not something a test
+should assert. 7.1 asks questions the rollup cannot serve; this suite waits for
+the one place the prepared path is the subject.
