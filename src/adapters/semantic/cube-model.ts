@@ -93,10 +93,35 @@ export class CubeModel implements TenantScopedModel {
 
     return answeredFrom(
       answer.servedFromStore ? 'prepared' : 'exported-objects',
-      carried,
+      completeThrough(carried, answer.refreshedAt),
       answer.data.map((row) => rowFrom(row, asked)),
     );
   }
+}
+
+/**
+ * How current the answer actually is: the earlier of the two things that bound
+ * it.
+ *
+ * The watermark says how far the export carried this tenant. When the answer
+ * came from what was prepared, the rows are as old as the last rebuild — and a
+ * rollup rebuilds on its own schedule, so between an export finishing and that
+ * rebuild landing the prepared rows are behind the watermark. Labelling them
+ * with the watermark would report an answer as complete through a moment its
+ * data does not reach, which is the one claim an answer is not allowed to make.
+ *
+ * Taking the earlier of the two makes the answer understate its own currency
+ * instead, which is the safe direction to be wrong in. For an answer read from
+ * the objects the refresh moment is later than the watermark, so this changes
+ * nothing there — one rule rather than a branch on provenance, because a rule
+ * that only runs sometimes is a rule with a case nobody tested.
+ */
+function completeThrough(carried: Date, refreshedAt: Date | null): Date {
+  if (refreshedAt === null) {
+    return carried;
+  }
+
+  return refreshedAt.getTime() < carried.getTime() ? refreshedAt : carried;
 }
 
 /**
@@ -195,10 +220,26 @@ function rowFrom(
   };
 }
 
-/** Whatever the engine sent, narrowed to what a row may hold. */
+/**
+ * Whatever the engine sent, narrowed to what a row may hold — with absence
+ * spelled one way.
+ *
+ * The engine's result format cannot express null: a measure with nothing to
+ * sum and a dimension with no value both arrive as the empty string. Passing
+ * that on would hand a chart a value that is neither a number nor an absence,
+ * and `Number("")` is `0`, which is the wrong answer wearing the right shape.
+ *
+ * So an empty value is absence, the same reading the watermark gets one level
+ * up. A genuinely empty label loses nothing by being called absent.
+ */
 function valueOf(value: unknown): string | number | null {
-  if (typeof value === 'string' || typeof value === 'number') {
+  if (typeof value === 'number') {
     return value;
   }
+
+  if (typeof value === 'string') {
+    return value.length === 0 ? null : value;
+  }
+
   return null;
 }

@@ -345,7 +345,7 @@ anything from the application, and nothing in the application imports these.
 Against the running stack and through the assembled application. Each of these
 must be shown failing before it is believed.
 
-- [ ] 7.1 Ask real composed questions of real objects
+- [x] 7.1 Ask real composed questions of real objects
   - Combinations no definition was written for, checked against what the export
     wrote rather than against what the model says about itself
   - On hand stays the sum of a product's movements under a period that excludes
@@ -386,7 +386,7 @@ must be shown failing before it is believed.
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.6_
   - _Boundary: Validation — prepared answers_
 
-- [ ] 7.4 (P) Keep the two vocabularies in step mechanically
+- [x] 7.4 (P) Keep the two vocabularies in step mechanically
   - Every name the platform offers exists in the model, and every member the
     model defines is offered — the drift is a finding in both directions, since
     a measure nobody can name is as much a defect as a name nothing answers
@@ -1176,3 +1176,49 @@ Registering the route in both is the work, and it is not bookkeeping: the drift
 check pairs the route's declared roles with `ASK_MODELLED_QUESTION_ROLES` from
 the use case, so a route admitting more than its use case does now fails there
 rather than in production. That is a third gate on 4.4 arriving for free.
+
+### 7.1 / 7.4 An answer could claim a currency its rows did not have
+
+The prepared answer is only as current as the last rebuild, and a rollup
+rebuilds on its own schedule. Between an export finishing and that rebuild
+landing, the prepared rows are behind the watermark — and labelling them with
+the watermark reported an answer as complete through a moment its data did not
+reach, which is exactly what 5.5 forbids.
+
+The watermark-first ordering from 5.3 does not prevent this. It bounds the two
+loads of one exchange against each other; it says nothing about a rollup built
+an hour ago.
+
+Measured, before the fix: `servedFromStore=true`, zero rows, and a
+`completeThrough` taken from a watermark written seconds earlier. Silently
+empty, and wearing a fresh date.
+
+`completeThrough` is now the **earlier** of the watermark and the layer's
+`lastRefreshTime`. One rule rather than a branch on provenance: for an answer
+read from the objects the refresh moment is the later of the two, so the rule
+changes nothing there, and a rule that only runs sometimes is a rule with a case
+nobody tested.
+
+### 7.1 The engine cannot say null, and `Number("")` is `0`
+
+A rolling-window measure puts products in an answer that the period-bounded
+measures have nothing for, and those values arrive as the empty string — the
+same limitation the watermark hits one level up. Passing it on hands a chart a
+value that is neither a number nor an absence, and the coercion lands on zero:
+the wrong answer wearing the right shape.
+
+An empty value is now absence. A genuinely empty label loses nothing by being
+called absent, and no caller has to know which of the two the engine meant.
+
+### 7.1 The suite asserts its own provenance, so it cannot change subject
+
+Every question here names a product, which the rollup cannot serve because it
+carries no join — and each asserts `servedFrom` is `exported-objects`. Without
+that assertion, widening the rollup later would quietly turn this suite into a
+test of the prepared path under the same names. What is prepared belongs to 7.3.
+
+The reason it matters here: the refresh worker does not rebuild within any
+window a test can wait for. Measured across six minutes of a running suite, 197
+REST requests reached the container and the worker logged nothing at all. A
+`waitFor` was written, watched fail at ninety seconds, and replaced by choosing
+questions the rollup cannot answer.

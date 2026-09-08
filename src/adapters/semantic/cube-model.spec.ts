@@ -41,12 +41,14 @@ function answering(...results: CubeResult[]) {
 const watermarkOf = (moment: string): CubeResult => ({
   data: [{ 'watermarks.complete_through': moment }],
   servedFromStore: false,
+  refreshedAt: null,
 });
 
 const rowsOf = (
   data: readonly Record<string, unknown>[],
   servedFromStore = false,
-): CubeResult => ({ data, servedFromStore });
+  refreshedAt: Date | null = null,
+): CubeResult => ({ data, servedFromStore, refreshedAt });
 
 function modelOver(transport: {
   load: (load: CubeLoad) => Promise<CubeResult>;
@@ -158,6 +160,56 @@ describe('composing one modelled question', () => {
     );
   });
 
+  /**
+   * A prepared answer is only as current as the rebuild behind it.
+   *
+   * A rollup refreshes on its own schedule, so between an export finishing and
+   * that rebuild landing, the prepared rows are behind the watermark. Reporting
+   * the watermark would claim a currency those rows do not have.
+   */
+  it('reports the earlier of the watermark and the moment the rows were refreshed', async () => {
+    const rebuiltEarlier = new Date('2026-03-29T00:00:00.000Z');
+    const { transport } = answering(
+      watermarkOf(CARRIED_THROUGH),
+      rowsOf([{ 'movements.net_quantity': '12' }], true, rebuiltEarlier),
+    );
+
+    const answer = await ask(transport);
+
+    expect(answer.state === 'answered' && answer.completeThrough).toEqual(
+      rebuiltEarlier,
+    );
+  });
+
+  it('keeps the watermark when the rows are fresher than it', async () => {
+    const readJustNow = new Date('2026-04-02T00:00:00.000Z');
+    const { transport } = answering(
+      watermarkOf(CARRIED_THROUGH),
+      rowsOf([{ 'movements.net_quantity': '12' }], false, readJustNow),
+    );
+
+    const answer = await ask(transport);
+
+    // An answer read from the objects is as current as the objects, which the
+    // watermark already describes. Nothing here may make it look newer.
+    expect(answer.state === 'answered' && answer.completeThrough).toEqual(
+      new Date('2026-03-30T23:59:59.000Z'),
+    );
+  });
+
+  it('falls back to the watermark when the layer said nothing about freshness', async () => {
+    const { transport } = answering(
+      watermarkOf(CARRIED_THROUGH),
+      rowsOf([{ 'movements.net_quantity': '12' }], true, null),
+    );
+
+    const answer = await ask(transport);
+
+    expect(answer.state === 'answered' && answer.completeThrough).toEqual(
+      new Date('2026-03-30T23:59:59.000Z'),
+    );
+  });
+
   it('returns rows under the names the platform publishes, not the model’s', async () => {
     const { transport } = answering(
       watermarkOf(CARRIED_THROUGH),
@@ -183,6 +235,43 @@ describe('composing one modelled question', () => {
       recorded_day: '2026-03-05T00:00:00.000',
       product_code: 'SKU-1',
       product_name: 'a widget',
+    });
+  });
+
+  /**
+   * The engine cannot say null, so an empty value is how it says nothing.
+   *
+   * A rolling-window measure puts rows in an answer that the period-bounded
+   * measures have nothing for, and those arrive empty. Passing the empty string
+   * on would give a chart a value that is neither a number nor an absence —
+   * and `Number("")` is `0`, the wrong answer in the right shape.
+   */
+  it('reads an empty value as an absent one, because the engine cannot say null', async () => {
+    const { transport } = answering(
+      watermarkOf(CARRIED_THROUGH),
+      rowsOf([
+        {
+          'movements.net_quantity': '',
+          'movements.on_hand_quantity': '6',
+          'products.code': 'W-1',
+          'products.name': '',
+        },
+      ]),
+    );
+
+    const answer = await ask(
+      transport,
+      aQuestion({
+        measures: ['net_quantity', 'on_hand_quantity'],
+        groupings: ['product'],
+      }),
+    );
+
+    expect(answer.state === 'answered' && answer.rows[0].values).toEqual({
+      net_quantity: null,
+      on_hand_quantity: '6',
+      product_code: 'W-1',
+      product_name: null,
     });
   });
 
