@@ -28,6 +28,7 @@ const ANSWERED = () =>
   responded(200, {
     data: [{ 'movements.net_quantity': '12' }],
     external: true,
+    lastRefreshTime: '2026-03-29T10:00:00.000Z',
   });
 
 /** Answers with each response in turn, and records what it was asked. */
@@ -82,6 +83,30 @@ describe('reaching the semantic layer', () => {
     expect(JSON.parse(calls[0].init.body as string)).toEqual({
       query: A_QUESTION,
     });
+  });
+
+  it('carries the moment the layer says the data was refreshed', async () => {
+    const answer = await clientOver(replying(ANSWERED).fetching).load({
+      query: A_QUESTION,
+      context: CONTEXT,
+    });
+
+    expect(answer.refreshedAt).toEqual(new Date('2026-03-29T10:00:00.000Z'));
+  });
+
+  /**
+   * Absent is not "now". A layer that said nothing about freshness has told the
+   * caller nothing, and inventing a moment here would let an answer look as
+   * current as the instant it was asked for.
+   */
+  it('reports no refresh moment when the layer did not state one', async () => {
+    for (const body of [{ data: [] }, { data: [], lastRefreshTime: 'soon' }]) {
+      const answer = await clientOver(
+        replying(() => responded(200, body)).fetching,
+      ).load({ query: A_QUESTION, context: CONTEXT });
+
+      expect(answer.refreshedAt).toBeNull();
+    }
   });
 
   it('returns the rows, and whether the answer came from the store', async () => {

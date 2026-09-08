@@ -44,6 +44,18 @@ export interface CubeResult {
    * be wrong out loud, which is a check that cannot fail.
    */
   readonly servedFromStore: boolean;
+  /**
+   * When the data behind this answer was last refreshed, if the layer said.
+   *
+   * For a prepared answer this is when the rollup was built, which can be
+   * **older than the export's watermark**: a rollup rebuilds on its own
+   * schedule, and between an export finishing and that rebuild landing, what is
+   * prepared is behind what was carried. An answer labelled with the watermark
+   * alone would claim a currency its rows do not have.
+   *
+   * `null` when the layer did not say, which is not the same as "now".
+   */
+  readonly refreshedAt: Date | null;
 }
 
 /**
@@ -162,6 +174,7 @@ interface CubeBody {
   readonly error?: string;
   readonly data?: readonly Readonly<Record<string, unknown>>[];
   readonly external?: boolean;
+  readonly lastRefreshTime?: string;
 }
 
 /**
@@ -181,5 +194,16 @@ function answerFrom(body: CubeBody): CubeResult {
   return {
     data: Array.isArray(body.data) ? body.data : [],
     servedFromStore: body.external === true,
+    refreshedAt: momentOf(body.lastRefreshTime),
   };
+}
+
+/** A moment the layer stated, or nothing. An unreadable one is nothing too. */
+function momentOf(reported: string | undefined): Date | null {
+  if (typeof reported !== 'string' || reported.trim().length === 0) {
+    return null;
+  }
+
+  const moment = new Date(reported);
+  return Number.isNaN(moment.getTime()) ? null : moment;
 }
