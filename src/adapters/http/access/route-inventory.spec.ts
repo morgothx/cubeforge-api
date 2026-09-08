@@ -221,6 +221,7 @@ describe('the route inventory, against the real application', () => {
       'POST /auth/sign-out',
       'POST /platform/people/:personId/setup-tokens',
       'POST /tenants',
+      'POST /tenants/:tenantId/analytics/questions',
       'POST /tenants/:tenantId/api-keys',
       'POST /tenants/:tenantId/inventory/movements',
       'POST /tenants/:tenantId/inventory/movements/batch',
@@ -276,6 +277,12 @@ describe('the route inventory, against the real application', () => {
       // No `machines`. An analytical question is expensive, and admitting keys
       // would let an automated client decide how often that cost is paid.
       'GET /tenants/:tenantId/analytics/movements': {
+        roles: ['admin', 'editor', 'viewer'],
+      },
+      // The modelled question, on the same terms as the analytical one: it
+      // scans the same objects and costs the same, so it admits the same
+      // callers and no keys.
+      'POST /tenants/:tenantId/analytics/questions': {
         roles: ['admin', 'editor', 'viewer'],
       },
       'POST /tenants/:tenantId/inventory/movements': {

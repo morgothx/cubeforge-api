@@ -11,6 +11,7 @@ import { DECLARE_LOCATION_ROLES } from '../../../application/inventory/declare-l
 import { DECLARE_PRODUCT_ROLES } from '../../../application/inventory/declare-product.use-case';
 import { LIST_LOCATIONS_ROLES } from '../../../application/inventory/list-locations.use-case';
 import { READ_MOVEMENT_HISTORY_ROLES } from '../../../application/analytics/read-movement-history.use-case';
+import { ASK_MODELLED_QUESTION_ROLES } from '../../../application/semantic/ask-modelled-question.use-case';
 import { READ_STOCK_ROLES } from '../../../application/inventory/read-stock-on-hand.use-case';
 import { RECORD_MOVEMENTS_ROLES } from '../../../application/inventory/record-movements.use-case';
 import { LIST_PRODUCTS_ROLES } from '../../../application/inventory/list-products.use-case';
@@ -59,6 +60,7 @@ describe('the declared roles and the enforced roles', () => {
     'GET /tenants/:tenantId/inventory/products': LIST_PRODUCTS_ROLES,
     'GET /tenants/:tenantId/inventory/stock': READ_STOCK_ROLES,
     'GET /tenants/:tenantId/analytics/movements': READ_MOVEMENT_HISTORY_ROLES,
+    'POST /tenants/:tenantId/analytics/questions': ASK_MODELLED_QUESTION_ROLES,
     'PUT /tenants/:tenantId/inventory/locations/:code': DECLARE_LOCATION_ROLES,
     'GET /tenants/:tenantId/inventory/locations': LIST_LOCATIONS_ROLES,
     'POST /tenants/:tenantId/inventory/movements': RECORD_MOVEMENTS_ROLES,

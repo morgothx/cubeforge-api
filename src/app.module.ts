@@ -13,6 +13,7 @@ import { SystemModule } from './system.module';
 import { IdentityModule } from './identity.module';
 import { InventoryModule } from './inventory.module';
 import { AnalyticsModule } from './analytics.module';
+import { SemanticModule } from './semantic.module';
 
 /**
  * Composition root. Ports declared in `application/ports` are bound to their
@@ -38,6 +39,7 @@ import { AnalyticsModule } from './analytics.module';
     IdentityModule,
     InventoryModule,
     AnalyticsModule,
+    SemanticModule,
   ],
 })
 export class AppModule implements NestModule {

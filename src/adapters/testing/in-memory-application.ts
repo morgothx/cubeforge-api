@@ -19,8 +19,13 @@ import { PASSWORD_HASHER } from '../../application/ports/password-hasher';
 import { PLATFORM_UNIT_OF_WORK } from '../../application/ports/platform-unit-of-work';
 import { TENANT_SCOPED_UNIT_OF_WORK } from '../../application/ports/tenant-scoped-unit-of-work';
 import { TENANT_SCOPED_ANALYTICS } from '../../application/ports/tenant-scoped-analytics';
+import {
+  TENANT_SCOPED_MODEL,
+  type TenantScopedModel,
+} from '../../application/ports/tenant-scoped-model';
 import type { TenantScopedAnalytics } from '../../application/ports/tenant-scoped-analytics';
 import { InMemoryAnalytics } from '../analytics/in-memory-analytics';
+import { InMemoryModel } from '../semantic/in-memory-model';
 import { throttlerOptions } from '../http/credential-throttling';
 import type { ThrottlingConfig } from '../http/throttling.config';
 import { InMemoryAuthenticatorUnitOfWork } from '../persistence/in-memory/in-memory-authenticator-unit-of-work';
@@ -78,6 +83,13 @@ export interface InMemoryApplicationOptions {
    * because a route test that reached an engine would be measuring the engine.
    */
   readonly analytics?: TenantScopedAnalytics;
+  /**
+   * The semantic seam. Defaults to an empty double for the same two reasons the
+   * analytical one does: the real adapter reads settings this suite has none
+   * of, and a route test that reached a running model would be measuring the
+   * model.
+   */
+  readonly model?: TenantScopedModel;
 }
 
 /**
@@ -127,6 +139,8 @@ export async function createInMemoryApplication(
     .useValue(options.tokens)
     .overrideProvider(TENANT_SCOPED_ANALYTICS)
     .useValue(options.analytics ?? new InMemoryAnalytics())
+    .overrideProvider(TENANT_SCOPED_MODEL)
+    .useValue(options.model ?? new InMemoryModel())
     // The throttling limits are read from the environment at module definition
     // time, which a test cannot influence — so the resolved options are
     // replaced instead.

@@ -311,7 +311,7 @@ anything from the application, and nothing in the application imports these.
 
 ## 6. Wiring
 
-- [ ] 6.1 Serve one route, and refuse at its edge
+- [x] 6.1 Serve one route, and refuse at its edge
   - A composed question arrives as a body rather than a query string, because a
     query string encoding lists is one nobody can read in a log; nothing about
     the request changes anything
@@ -329,7 +329,7 @@ anything from the application, and nothing in the application imports these.
   - _Requirements: 1.7, 2.1, 2.2, 2.4, 4.1, 4.4, 4.5, 4.6_
   - _Boundary: HTTP edge_
 
-- [ ] 6.2 Bind the feature and let a request reach it
+- [x] 6.2 Bind the feature and let a request reach it
   - This feature's port bound to its adapters in one file, so a reviewer sees
     the whole wiring of one capability at once, and imported by the application
     because a request can reach it
@@ -1128,3 +1128,51 @@ What is proven here: the DTO's shape rules including the tenant refusal, the
 composition handed to the use case, both refusals happening before the use case
 runs, the answer's states surviving the edge, and the roles matching the tenant
 roles exactly. The four request-level assertions are 6.2's to add.
+
+### 6.2 The harness overrides the seam, so nothing exercised the module's own factory
+
+A probe moved `loadSemanticConfig` outside the deferred factory — the exact
+mistake that would make an API refuse to start over a Cube setting — and every
+route test stayed green. They override `TENANT_SCOPED_MODEL`, so `semanticSeam`
+never ran in any of them.
+
+`semantic.module.spec.ts` builds the seam the way the module builds it, which is
+why the factory is exported at all. It is the only thing that exercises the
+deferred build in the composition, and the probe bites it. The analytical module
+exports its seam for the same reason and says so; this one now has the test to
+match the claim.
+
+### 6.2 The rate bucket is proven where the codebase already proves it
+
+The in-memory application registers the credential buckets only, so the
+analytical bucket this route shares counts nothing there. That is why the
+analytical route's own limit lives in `analytics-throttling.integration-spec.ts`
+rather than in its edge spec, and the modelled route follows it: sharing the
+bucket is a declaration, and that it counts is 7.5's to show against an
+application that registered it.
+
+Writing the assertion in the edge spec first and watching it return 200 is what
+found this. A test that had been written to pass would have used a limit of one.
+
+### 6.1 Closed by 6.2
+
+The four request-level criteria are now measured, against the assembled
+application and through the same `configure` the entry point uses: a member of
+the tenant answered with `servedFrom` intact; all three roles answered; a body
+naming another tenant refused outright rather than ignored; an unknown measure
+refused naming every offered name; an over-long period refused naming the limit;
+a caller of another tenant answered as for a tenant that does not exist; and
+never-exported surviving the edge as its own state.
+
+### 6.2 Two of the platform's own guards caught the new route
+
+`route-inventory.spec.ts` and `declaration-drift.spec.ts` both failed the moment
+the module was imported — one because the application now serves a route the
+inventory does not list, the other because a route declares roles that no use
+case was paired with. Neither knew anything about this feature; both exist to
+notice exactly this.
+
+Registering the route in both is the work, and it is not bookkeeping: the drift
+check pairs the route's declared roles with `ASK_MODELLED_QUESTION_ROLES` from
+the use case, so a route admitting more than its use case does now fails there
+rather than in production. That is a third gate on 4.4 arriving for free.
