@@ -264,7 +264,7 @@ anything from the application, and nothing in the application imports these.
   - _Requirements: 7.1, 7.2, 7.4_
   - _Boundary: Cube client_
 
-- [ ] 5.2 (P) Mint the tenant, signed, for one question
+- [x] 5.2 (P) Mint the tenant, signed, for one question
   - A short-lived context carrying the tenant the platform already authorized
     and nothing else, signed with the secret that is not the platform's
   - Minted per question rather than kept: the saving would be a signature, and a
@@ -997,3 +997,32 @@ answer, and `external` is what separates a prepared answer from one read again.
 The client exposes the latter under a name that says what it means. Reading the
 field the design named would have made provenance permanently report
 `exported-objects` — and never been wrong out loud.
+
+### 5.2 A drift that no test could see, made visible without a container
+
+The claim name exists twice — `security-context.ts` mints under it,
+`cube/configuration.js` reads it — and the two cannot share a constant across
+the process boundary. A probe that renamed it here broke nothing, because every
+test read the same copy. That is the shape of a drift invisible from either side
+alone, and 4.3's note had settled for "the integration suite will catch it".
+
+It does not have to wait that long. The spec now requires the other file through
+`createRequire` and asserts the two strings are equal, the same guard shape the
+emulator refusal uses. The probe bites, and the check runs in the unit suite.
+
+### 5.2 The clock is injected, against the design's signature
+
+The design writes `for(tenantId): Promise<string>`. This takes `now` as well,
+following `JwtAccessTokenIssuer`, which sets its own `iat` and `exp` rather than
+leaving them to the library so that the clock the application injects stays the
+only source of time. A context whose expiry a test cannot place is a context
+whose expiry a test cannot assert.
+
+### 5.2 The two credentials refuse each other, and it is measured both ways
+
+A minted context is refused by the platform's verifier and a platform access
+token fails to verify against the model's secret. That property comes from
+`loadSemanticConfig` refusing a configuration where the two secrets are equal —
+enforced rather than remembered, because sharing one would let a platform token
+be presented directly to the semantic layer and the failure would be silent:
+both would verify.
