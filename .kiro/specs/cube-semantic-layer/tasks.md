@@ -296,7 +296,7 @@ anything from the application, and nothing in the application imports these.
   - _Requirements: 1.6, 3.1, 5.1, 6.3, 6.6_
   - _Boundary: Cube model adapter_
 
-- [ ] 5.4 (P) Build at the first question, not when the application starts
+- [x] 5.4 (P) Build at the first question, not when the application starts
   - A missing setting refuses a modelled question; it does not refuse a boot and
     take sign-in and inventory down with it over a capability those routes never
     touch
@@ -1076,3 +1076,22 @@ reader recognises it by.
 Rows come back under the platform's names, the prepared question reports itself
 as prepared and the others as read, and the completeness moment travels with all
 of them.
+
+### 5.4 Two deferred classes rather than one generic
+
+`DeferredModel` is `DeferredAnalytics` with a different port. Parameterising a
+shared base over both was considered and refused: they defer different
+interfaces with different methods, and the abstraction would exist to save a
+dozen lines while making each one harder to read on its own. The duplication is
+a doc comment and a `try`.
+
+What is genuinely shared — the failure vocabulary and `AnalyticsUnavailable` —
+already is.
+
+### 5.4 The last part of the done-when belongs to 6.2
+
+"The application starts with nothing configured, every other route answers" is
+only observable once the module wires this in. The unit suite proves the class
+does not build until asked, refuses with `not-configured`, and does not remember
+a refusal; that the *application* stays up is 6.2's to show, and the HTTP
+integration suite is where it lands.
