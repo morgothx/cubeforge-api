@@ -86,7 +86,7 @@ Every piece of code in this repo, agent-written or human-written, should read as
 1. API (Lambda) writes transactional events to PostgreSQL.
 2. A scheduled job exports historical data from PostgreSQL to S3 as Parquet.
 3. Athena queries those S3 exports for heavy analytical workloads, never run analytical queries directly against the transactional PostgreSQL database.
-4. Cube.dev sits on top of both PostgreSQL (real-time) and Athena (historical), defining business metrics once and exposing them to the frontend.
+4. Cube.dev sits on top of the exported objects **only**, reached through Athena, defining business metrics once and exposing them to the frontend. It never reads the transactional database — that is the point of rule 3, and a semantic layer that could reach PostgreSQL would be a second way to put analytical load on it. `SemanticModule` does not import `PersistenceModule`, so a provider that is not imported cannot be injected.
 
 ## Testing
 

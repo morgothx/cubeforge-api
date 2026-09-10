@@ -92,11 +92,20 @@ verified bearer token or API key rather than read from a header and believed.
 Recorded rather than deleted, because "the principal used to be trusted input"
 explains why the resolver is shaped the way it is.
 
+**The gap recorded on 2026-08-29 is closed too.** The exported data now has two
+readers: an analytical adapter that asks the engine two named questions, and a
+semantic layer that answers compositions nobody wrote a definition for. Kept
+here for the same reason as the others — "the objects used to have no reader"
+explains why the export chose the partition layout it did, months before
+anything read it.
+
 What is genuinely open is one thing:
 
-- **The exported data has no reader yet.** Movements and catalogue land in
-  object storage as Parquet, partitioned for a query engine, and nothing queries
-  them. That is the next feature's to close, and the layout was chosen for it.
+- **Nothing renders any of it.** Every answer the platform can give is reachable
+  only through HTTP, and the dashboard that would show them is empty. The
+  semantic layer was built to be a chart's contract; nothing has held it to that
+  yet, and a vocabulary no interface has ever asked for is a vocabulary whose
+  gaps are still theoretical.
 
 ## Explicit non-goals
 
