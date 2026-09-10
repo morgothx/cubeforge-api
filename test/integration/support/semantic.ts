@@ -8,7 +8,7 @@ import type { ModelledAnswer } from '../../../src/domain/semantic/modelled-answe
  * question asked immediately after an export can be served from the rebuild
  * before it. Waiting is how a suite tests the rebuild rather than the race.
  */
-const LONGEST_REBUILD_MS = 90_000;
+const LONGEST_REBUILD_MS = 180_000;
 const BETWEEN_LOOKS_MS = 3_000;
 
 /**

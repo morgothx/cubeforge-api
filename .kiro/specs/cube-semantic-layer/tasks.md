@@ -374,7 +374,7 @@ must be shown failing before it is believed.
   - _Requirements: 3.1, 3.4, 6.5_
   - _Boundary: Validation — isolation_
 
-- [ ] 7.3 (P) Show that what was prepared is what answered
+- [x] 7.3 (P) Show that what was prepared is what answered
   - A prepared question is answered from what was prepared and says so; a
     composition nobody prepared is answered from the objects and says that
     instead
@@ -1268,3 +1268,46 @@ What is actually true is narrower: a tenant exported moments ago is not in the
 rollup until a rebuild lands, and how long that takes is not something a test
 should assert. 7.1 asks questions the rollup cannot serve; this suite waits for
 the one place the prepared path is the subject.
+
+### 7.3 Both probes bit, and the second one shows why provenance is asserted
+
+**The refresh key stopped following the export** (`SELECT 1` in place of
+`max(complete_through)`) — all three tests failed. The rollup never reflects a
+new export, so even the warm-up times out. That is what makes the rebuild test a
+test of requirement 6.4 rather than of time passing.
+
+**The rollup removed entirely** — all three failed too, and the message is the
+one worth reading:
+
+    servedFrom: "exported-objects", rows: [{ net_quantity: "11", ... }]
+
+The numbers are **right**. Only the provenance changed. A suite asserting the
+rows alone would have passed with nothing prepared at all, and requirement 6.2
+would have been a claim nobody could falsify. This is the same lesson 7.2's
+second probe taught from the other side, and it is why every test in both suites
+asserts where the answer came from.
+
+### 7.3 One tenant for the suite, and the warm-up named as a precondition
+
+Three tenants each waiting for their own rebuild took 220 seconds and failed
+twice; the first build after an empty export bucket is far slower than any
+later one. So the suite seeds one tenant, waits once for the rollup to exist,
+and then asks — with the wait named for what it is. That a cold store is slow
+is a fact about the store, not something this feature asserts.
+
+The database is reset once in `beforeAll` rather than between tests, which is
+also deliberate: these tests are about a rollup that carries state across
+questions, and wiping the rows it was built from between them would be arranging
+for the thing under test to be absent. The last test adds a movement to that
+same tenant, and the export it triggers is what the rebuild has to notice.
+
+### 7.3 A probe left the model modified when the session ended
+
+The previous session died mid-probe, between editing `cube/model/movements.yml`
+and restoring it, leaving `refresh_key: SELECT 1` committed to nobody but
+sitting in the working tree. Caught by checking the tree first thing rather than
+by a failing test — the container was down, so nothing would have failed until
+someone ran the suite and believed the result.
+
+Probes that edit a file now restore it from a `trap ... EXIT`, so an interrupted
+run cannot leave the model saying something nobody meant.
