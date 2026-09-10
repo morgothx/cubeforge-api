@@ -46,7 +46,7 @@ other in a way that reads as authorization failures.
   - _Requirements: 1.2, 1.3, 1.4, 1.5, 1.6, 1.8_
   - _Boundary: Vocabulary declarations, calendar_
 
-- [ ] 1.2 (P) Give the vocabulary an allowance of its own
+- [x] 1.2 (P) Give the vocabulary an allowance of its own
   - A bucket counted per caller with the tracker the question bucket uses, so a
     person is one allowance across every tenant.
   - Its window and allowance are read from the environment and refused when not
@@ -209,3 +209,10 @@ suite at a time. Kill any leftover integration run before starting one.
   equality becomes structural in 2.2, when the mapping reads them. Adding a
   name without a trait or shape now fails in `vocabulary.ts` itself, not only in
   the adapter's `Record`, which was the only guard before.
+- **1.2** — `toEqual` ignores `undefined` array items, so "names every bucket"
+  passed while `VOCABULARY_BY_CALLER` did not yet exist. It bites only once the
+  constant has a value, which the left-out-of-registry probe confirmed. The
+  inversion check compares cross-multiplied rates, so equal rates over
+  different windows are refused. `positiveInteger` is now copied in four
+  throttling loaders, following the existing one-per-loader pattern. Unifying it
+  was out of this task's boundary, and it is small debt worth one refactor.

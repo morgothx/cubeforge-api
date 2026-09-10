@@ -99,13 +99,18 @@ here for the same reason as the others — "the objects used to have no reader"
 explains why the export chose the partition layout it did, months before
 anything read it.
 
-What is genuinely open is one thing:
+What is genuinely open is two things:
 
 - **Nothing renders any of it.** Every answer the platform can give is reachable
   only through HTTP, and the dashboard that would show them is empty. The
   semantic layer was built to be a chart's contract; nothing has held it to that
   yet, and a vocabulary no interface has ever asked for is a vocabulary whose
   gaps are still theoretical.
+- **Some reads belong to no throttling bucket.** `tech.md` makes rate limiting a
+  baseline for every endpoint, and `GET /me` and the members routes are counted
+  by none. Found on 2026-09-10 while specifying `analytics-vocabulary`, which
+  gave its own route a bucket rather than join them. Closing it changes what
+  existing routes answer under load, so it belongs to a feature of its own.
 
 ## Explicit non-goals
 

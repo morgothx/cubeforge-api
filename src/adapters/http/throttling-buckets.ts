@@ -27,6 +27,7 @@ export const SIGN_IN_BY_ADDRESS = 'sign-in-address';
 export const REDEMPTION_BY_ORIGIN = 'redemption-origin';
 export const INVENTORY_BY_CREDENTIAL = 'inventory-credential';
 export const ANALYTICS_BY_CALLER = 'analytics-caller';
+export const VOCABULARY_BY_CALLER = 'vocabulary-caller';
 
 export const EVERY_BUCKET = [
   SIGN_IN_BY_ORIGIN,
@@ -34,6 +35,7 @@ export const EVERY_BUCKET = [
   REDEMPTION_BY_ORIGIN,
   INVENTORY_BY_CREDENTIAL,
   ANALYTICS_BY_CALLER,
+  VOCABULARY_BY_CALLER,
 ] as const;
 
 /**

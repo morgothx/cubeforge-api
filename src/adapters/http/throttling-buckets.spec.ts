@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AnalyticsController } from './analytics.controller';
+import { AnalyticsQuestionsController } from './analytics-questions.controller';
 import { AuthenticationController } from './authentication.controller';
 import { InventoryLocationsController } from './inventory-locations.controller';
 import { InventoryMovementsController } from './inventory-movements.controller';
@@ -12,6 +13,7 @@ import {
   EVERY_BUCKET,
   everyBucketExcept,
   INVENTORY_BY_CREDENTIAL,
+  VOCABULARY_BY_CALLER,
 } from './throttling-buckets';
 import {
   REDEMPTION_BY_ORIGIN,
@@ -65,6 +67,7 @@ describe('the platform throttling buckets', () => {
         REDEMPTION_BY_ORIGIN,
         INVENTORY_BY_CREDENTIAL,
         ANALYTICS_BY_CALLER,
+        VOCABULARY_BY_CALLER,
       ].sort(),
     );
   });
@@ -84,6 +87,7 @@ describe('the platform throttling buckets', () => {
       [SIGN_IN_BY_ADDRESS]: true,
       [REDEMPTION_BY_ORIGIN]: true,
       [INVENTORY_BY_CREDENTIAL]: true,
+      [VOCABULARY_BY_CALLER]: true,
     });
   });
 
@@ -140,12 +144,24 @@ describe('the platform throttling buckets', () => {
     ],
     ['inventory stock', InventoryStockController, INVENTORY_BY_CREDENTIAL],
     ['analytics', AnalyticsController, ANALYTICS_BY_CALLER],
+    ['modelled question', AnalyticsQuestionsController, ANALYTICS_BY_CALLER],
   ])(
     'has the %s routes skip every bucket but their own',
     (_name, controller, owned) => {
       expect(skippedBy(controller)).toEqual(everyBucketExcept(owned));
     },
   );
+
+  /**
+   * The derivation, seen from the route that matters most here: a question is
+   * never counted against the allowance for describing questions. No edit to
+   * the question controller made this true, which is the point of deriving.
+   */
+  it('keeps the modelled question out of the vocabulary allowance', () => {
+    expect(skippedBy(AnalyticsQuestionsController)[VOCABULARY_BY_CALLER]).toBe(
+      true,
+    );
+  });
 
   /** Sign-in owns two buckets; redemption owns one. Both live on handlers. */
   it('has each authentication handler skip every bucket but its own', () => {
