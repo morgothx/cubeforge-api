@@ -25,7 +25,7 @@ other in a way that reads as authorization failures.
 
 ## 1. Foundation
 
-- [ ] 1.1 Declare in the domain the five facts that today live elsewhere or
+- [x] 1.1 Declare in the domain the five facts that today live elsewhere or
       nowhere
   - The moments a question may be read by, as a list the rest of the platform
     can enumerate. Today they are written twice, as a literal union and as a
@@ -203,3 +203,9 @@ suite at a time. Kill any leftover integration run before starting one.
 ## Implementation Notes
 
 *Findings worth inheriting are recorded here as tasks complete.*
+
+- **1.1** — The declared columns, day shapes and moments were checked equal to
+  `member-mapping.ts`'s current values by a one-off comparison, not kept: that
+  equality becomes structural in 2.2, when the mapping reads them. Adding a
+  name without a trait or shape now fails in `vocabulary.ts` itself, not only in
+  the adapter's `Record`, which was the only guard before.

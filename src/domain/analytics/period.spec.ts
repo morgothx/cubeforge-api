@@ -1,4 +1,4 @@
-import { LONGEST_PERIOD_DAYS, day, periodFrom } from './period';
+import { CALENDAR, LONGEST_PERIOD_DAYS, day, periodFrom } from './period';
 
 /**
  * What a caller may ask for, and how much of it.
@@ -67,5 +67,13 @@ describe('the period a question covers', () => {
     expect(() =>
       periodFrom(from, day(last.toISOString().slice(0, 10))),
     ).not.toThrow();
+  });
+});
+
+describe('the calendar days are counted in', () => {
+  it('is UTC, which is what every day on this platform has always been', () => {
+    // Named rather than implied: the engine is asked in this zone and the
+    // vocabulary publishes it, so both have to read one value.
+    expect(CALENDAR).toBe('UTC');
   });
 });

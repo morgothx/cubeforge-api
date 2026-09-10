@@ -22,6 +22,15 @@ const SHAPE = /^\d{4}-\d{2}-\d{2}$/;
  */
 export const LONGEST_PERIOD_DAYS = 366;
 
+/**
+ * The zone every day on this platform is counted in.
+ *
+ * What `Day` has always meant, now written where something can read it: the
+ * engine is asked in this zone, and a caller is told it, so a day is not read
+ * as a local day it is not.
+ */
+export const CALENDAR = 'UTC';
+
 export function day(value: string): Day {
   if (!SHAPE.test(value)) {
     throw new Error(`a day is written YYYY-MM-DD, got "${value}"`);

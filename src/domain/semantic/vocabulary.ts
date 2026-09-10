@@ -44,6 +44,104 @@ export type MeasureName = (typeof MEASURES)[number];
 export type GroupingName = (typeof GROUPINGS)[number];
 
 /**
+ * Which of a movement's two days decides whether it falls in a question's
+ * period: the day this platform stored it, or the day it happened.
+ *
+ * A list for the reason the names are one: the request body validates against
+ * it and the vocabulary publishes it, and a union cannot be read at runtime.
+ * Before this existed the same two words were written out twice, once as a
+ * type and once as a validator's list, and nothing held the two together.
+ */
+export const READ_BY = ['recorded', 'occurred'] as const;
+
+export type ReadBy = (typeof READ_BY)[number];
+
+export interface MeasureTraits {
+  /**
+   * Counts movements recorded before a question's period as well as within
+   * it.
+   *
+   * The model decides how a measure behaves; this states what it decided, so
+   * a caller can say so beside the figure. A figure that silently includes
+   * last year reads as this month's.
+   */
+  readonly cumulative: boolean;
+}
+
+/**
+ * Every measure's traits, keyed by the measure.
+ *
+ * A mapped type over the names rather than a loose object: a measure added to
+ * `MEASURES` without a trait here fails the build, which is the only moment
+ * anybody is still thinking about what the new measure means.
+ */
+export const MEASURE_TRAITS: { readonly [M in MeasureName]: MeasureTraits } = {
+  net_quantity: { cumulative: false },
+  movement_count: { cumulative: false },
+  // The one sum over all time. How the model arranges that is the model's
+  // business (a trailing, unbounded window); that it does is this line's.
+  on_hand_quantity: { cumulative: true },
+};
+
+/**
+ * What kind of thing a grouping is, and the columns it fills in an answer's
+ * rows.
+ *
+ * Three shapes, because a consumer draws them three ways: a day belongs on a
+ * calendar axis, a category is a plain label, and an entity is labelled by a
+ * code somebody can look up *and* a name somebody can read. For the last, the
+ * two columns are named by role, because which one is the code is exactly
+ * what a consumer cannot guess.
+ */
+export type GroupingShape =
+  | { readonly shape: 'day'; readonly column: string }
+  | { readonly shape: 'category'; readonly column: string }
+  | {
+      readonly shape: 'labelled';
+      readonly codeColumn: string;
+      readonly nameColumn: string;
+    };
+
+/**
+ * Every grouping's shape, keyed by the grouping.
+ *
+ * The column names are platform names, not the model's, which is why they
+ * live here rather than beside the model's members: the answer's contract is
+ * written in them.
+ *
+ * `as const satisfies` rather than a type annotation, on purpose. The
+ * annotation would widen every entry to the union and lose which shape each
+ * grouping has; kept literal, a consumer can be typed per shape, and a
+ * labelled grouping handed one column fails to compile there.
+ */
+export const GROUPING_SHAPES = {
+  recorded_day: { shape: 'day', column: 'recorded_day' },
+  occurred_day: { shape: 'day', column: 'occurred_day' },
+  kind: { shape: 'category', column: 'kind' },
+  product: {
+    shape: 'labelled',
+    codeColumn: 'product_code',
+    nameColumn: 'product_name',
+  },
+  location: {
+    shape: 'labelled',
+    codeColumn: 'location_code',
+    nameColumn: 'location_name',
+  },
+} as const satisfies { readonly [G in GroupingName]: GroupingShape };
+
+/** The row keys a grouping fills, code before name. */
+export function rowColumnsOf(shape: GroupingShape): readonly string[] {
+  switch (shape.shape) {
+    case 'day':
+    case 'category':
+      return [shape.column];
+    case 'labelled':
+      return [shape.codeColumn, shape.nameColumn];
+  }
+}
+
+/**
  * Why a name was not accepted, and what would have been.
  *
  * Carries **every** unrecognised name, for the reason the configuration
