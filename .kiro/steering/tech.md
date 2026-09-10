@@ -167,9 +167,30 @@ is pointed at the schema owner.
 
 ## Local environment
 
-`docker compose up -d` provides Floci (4566), PostgreSQL (5432) and Cube.dev
-(4000 REST/playground, 15432 SQL API). CI runs Floci and PostgreSQL as service
-containers for the same reason, so the integration suite exercises the same
-things there as here. Container runtime state must never be
-written into the source tree; bind mounts that a root container writes to are
-shadowed by named volumes.
+`docker compose up -d` provides Floci (4566), PostgreSQL (5432), Cube.dev and
+Cube Store. Cube's REST API is bound to `127.0.0.1:4000` and its development
+playground is **off**: the playground answers without a credential, which is
+exactly what a caller the platform has not authorized must not get. It comes
+back — republishing 4000 and 15432 with dev mode on — only through
+`docker-compose.playground.yml`, as a deliberate and named act. Cube Store is
+its own service because dev mode is the only thing that starts an embedded one,
+and without it the container refuses every question before reaching the
+engine. CI runs Floci and PostgreSQL as service containers for the same reason,
+so the integration suite exercises the same things there as here. Container
+runtime state must never be written into the source tree; bind mounts that a
+root container writes to are shadowed by named volumes.
+
+## Known technical debt
+
+- **`pnpm db:generate` does not produce a usable migration.** drizzle-kit's
+  last snapshot is `0012`, because migrations `0013` through `0016` were written
+  by hand — `0013` is roles and row-level security, which the generator cannot
+  express. So it diffs against a schema four migrations old and re-emits every
+  table and column since, producing a migration that fails on apply. Applying
+  migrations is unaffected: `db:migrate` and the integration suite's global
+  setup read the hand-written files in journal order.
+
+  Until the snapshot is regenerated against the real schema, **write schema
+  migrations by hand** and append their journal entry — `0016` is the pattern.
+  Deferred deliberately: nothing currently needs a schema change, and fixing it
+  properly means teaching the generator a baseline it cannot fully describe.
