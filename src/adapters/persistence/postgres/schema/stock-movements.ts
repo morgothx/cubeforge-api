@@ -106,16 +106,13 @@ export const stockMovements = pgTable(
       table.sku,
       table.locationCode,
     ),
-    // Written when this table was, to serve "a later incremental export". That
-    // export exists now and does **not** walk this: it walks transaction
-    // identifiers, because a moment cannot express the point below which
-    // nothing is still in flight. Left in place rather than dropped here —
-    // removing an index belongs to a task that says so.
-    index('stock_movements_tenant_recorded_idx').on(
-      table.tenantId,
-      table.recordedAt,
-    ),
-    // What the export actually walks: one tenant's stream, in identifier order.
+    // What the export walks: one tenant's stream, in identifier order.
+    //
+    // An index on `(tenant_id, recorded_at)` stood beside this one, written to
+    // serve "a later incremental export" before that export existed. When it
+    // came it walked transaction identifiers instead, because a moment cannot
+    // express the point below which nothing is still in flight — and the other
+    // index went unread. Dropped in 0016; the planner never chose it.
     index('stock_movements_export_idx').on(table.tenantId, table.recordedXid),
   ],
 );

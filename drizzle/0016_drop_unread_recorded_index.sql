@@ -1,0 +1,17 @@
+-- An index nothing reads, removed.
+--
+-- `stock_movements_tenant_recorded_idx` on `(tenant_id, recorded_at)` was
+-- written with the table, to serve "a later incremental export" that did not
+-- exist yet. When that export came it walked transaction identifiers instead,
+-- because a moment cannot express the point below which nothing is still in
+-- flight — so it reads `stock_movements_export_idx` on `(tenant_id,
+-- recorded_xid)`, and this one went unread.
+--
+-- Checked two ways before dropping: no query filters or orders by
+-- `recorded_at` (it appears only in a select list), and the planner, asked to
+-- plan the export's query with sequential scans disabled, chooses the export
+-- index. An index is not free: every movement written paid to maintain it.
+--
+-- Written by hand rather than generated, like 0013 through 0015, because the
+-- generator's last snapshot is 0012 and it would re-emit everything since.
+DROP INDEX IF EXISTS "stock_movements_tenant_recorded_idx";
