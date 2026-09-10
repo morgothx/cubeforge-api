@@ -7,6 +7,7 @@ import {
   measuresFrom,
   type GroupingName,
   type MeasureName,
+  type ReadBy,
   type VocabularyResult,
 } from './vocabulary';
 
@@ -41,7 +42,7 @@ export interface ModelledQuestion {
   readonly measures: readonly MeasureName[];
   readonly groupings: readonly GroupingName[];
   readonly period: Period;
-  readonly by: 'recorded' | 'occurred';
+  readonly by: ReadBy;
   readonly limit: RowLimit;
 }
 
@@ -63,7 +64,7 @@ export function questionFrom(input: {
   measures: readonly string[];
   groupings: readonly string[];
   period: Period;
-  by: 'recorded' | 'occurred';
+  by: ReadBy;
 }): ModelledQuestion {
   if (input.measures.length === 0) {
     throw new DomainViolation({

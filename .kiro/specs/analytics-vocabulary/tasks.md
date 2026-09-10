@@ -70,7 +70,7 @@ other in a way that reads as authorization failures.
 Every value stays what it is today. An assertion edited in an existing suite is a
 finding to record, not a repair to make.
 
-- [ ] 2.1 Accept exactly the declared moments, and nothing else
+- [x] 2.1 Accept exactly the declared moments, and nothing else
   - The composed question and the request body both take the moment from the
     declared list, in place of their own copies.
   - Done when the edge spec shows every declared moment accepted and a value
@@ -216,3 +216,10 @@ suite at a time. Kill any leftover integration run before starting one.
   different windows are refused. `positiveInteger` is now copied in four
   throttling loaders, following the existing one-per-loader pattern. Unifying it
   was out of this task's boundary, and it is small debt worth one refactor.
+- **2.1** — A refactor has no honest RED from a new test: the edge test passes
+  before the change because the values already agree. The RED was a probe on
+  the unchanged code instead. With a third moment declared, the DTO's literal
+  list refused it. After the change the same probe passes, and restoring a
+  literal list in the DTO fails the test. The refusal message is now built from
+  `READ_BY` and reads exactly as before. `READ_BY_MEMBER` still has its own
+  union, left to 2.2, which owns the mapping.

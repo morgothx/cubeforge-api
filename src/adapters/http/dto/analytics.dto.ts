@@ -6,6 +6,7 @@ import {
   IsString,
   Matches,
 } from 'class-validator';
+import { READ_BY, type ReadBy } from '../../../domain/semantic/vocabulary';
 
 /** `YYYY-MM-DD`, the same shape the export partitions by. */
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -77,10 +78,13 @@ export class ModelledQuestionRequest {
    * Which of the two dates decides, defaulting to the day this platform stored
    * the movement. Recorded only moves forward; occurred can be backdated, so a
    * caller wanting that has to say so.
+   *
+   * Validated against the declared moments rather than a list of its own, so
+   * the body accepts exactly what the vocabulary publishes.
    */
   @IsOptional()
-  @IsIn(['recorded', 'occurred'], {
-    message: 'by must be either recorded or occurred',
+  @IsIn(READ_BY, {
+    message: `by must be either ${READ_BY.join(' or ')}`,
   })
-  by?: 'recorded' | 'occurred';
+  by?: ReadBy;
 }

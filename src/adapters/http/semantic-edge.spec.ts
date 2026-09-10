@@ -11,7 +11,7 @@ import {
   type TenantId,
 } from '../../domain/identifiers';
 import type { Role } from '../../domain/membership/role';
-import { GROUPINGS, MEASURES } from '../../domain/semantic/vocabulary';
+import { GROUPINGS, MEASURES, READ_BY } from '../../domain/semantic/vocabulary';
 import {
   createIdentityTestContext,
   type IdentityTestContext,
@@ -174,6 +174,29 @@ describe('asking a composed question over HTTP', () => {
 
     expect(JSON.stringify(response.body)).toContain(
       String(LONGEST_PERIOD_DAYS),
+    );
+  });
+
+  /**
+   * Driven over the declared list rather than the two words, so the request
+   * body cannot keep a copy of its own: a moment declared and not accepted
+   * here, or accepted here and never declared, fails this test.
+   */
+  it('accepts every declared moment to read by, and refuses any other', async () => {
+    const admin = await member(acme, 'admin');
+
+    for (const by of READ_BY) {
+      await askFor(acme, aQuestion({ by }))
+        .set(await bearer(admin))
+        .expect(200);
+    }
+
+    const refused = await askFor(acme, aQuestion({ by: 'written' }))
+      .set(await bearer(admin))
+      .expect(400);
+
+    expect(JSON.stringify(refused.body)).toContain(
+      'by must be either recorded or occurred',
     );
   });
 
