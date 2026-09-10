@@ -5,6 +5,7 @@ import {
   exitStatusOf,
   parseExportArguments,
 } from '../src/adapters/cli/export-command';
+import { loadObjectStorageConfig } from '../src/adapters/storage/object-storage-config';
 import { RunExportUseCase } from '../src/application/export/run-export.use-case';
 import { ExportModule } from '../src/export.module';
 
@@ -24,6 +25,17 @@ async function main(): Promise<number> {
   // One identifier for everything this run says, generated where the run
   // begins — the same place an inbound request's is.
   const correlationId = randomUUID();
+
+  // Before the context, not inside it. Nest instantiates providers in parallel,
+  // so a missing setting discovered in a factory can be discovered *after* the
+  // database pool has opened — and it surfaces as twenty lines of injector
+  // stack rather than reaching the `catch` below. Reading it here is what
+  // makes "refuses before opening a database connection" true, and what gives
+  // the operator one legible line instead of a trace.
+  //
+  // A pure function over the same environment the module reads, so the two
+  // readings cannot disagree.
+  loadObjectStorageConfig(process.env);
 
   const context = await NestFactory.createApplicationContext(ExportModule, {
     // The report is the output. Nest's startup chatter would bury it.

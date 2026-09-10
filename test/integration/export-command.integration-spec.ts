@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
   DeleteObjectCommand,
@@ -105,6 +106,36 @@ describe('the export command, wired', () => {
     );
     return tenant;
   }
+
+  /**
+   * What an operator actually sees, from the process they actually run.
+   *
+   * Every other test here boots the module in-process, which is exactly why the
+   * refusal went unobserved for a whole feature: a missing setting thrown from
+   * a provider factory surfaced as twenty lines of injector stack and never
+   * reached the script's own `catch`. Only running the script as a process sees
+   * the difference between one legible line and a trace.
+   *
+   * Nothing here needs the database or the destination — the refusal happens
+   * before either is touched, which is the property under test.
+   */
+  it('refuses a missing setting in one line, before touching anything', () => {
+    const env = { ...process.env };
+    delete env.EXPORT_BUCKET;
+
+    const run = spawnSync(
+      process.execPath,
+      ['-r', 'ts-node/register', 'scripts/export.ts'],
+      { env, encoding: 'utf8', timeout: 60_000 },
+    );
+
+    const said = `${run.stdout}${run.stderr}`.trim().split('\n');
+
+    expect(run.status).toBe(1);
+    expect(said).toEqual([
+      'export refused: missing object storage configuration: EXPORT_BUCKET',
+    ]);
+  });
 
   it('binds the ports to the adapters that reach the real destination', async () => {
     const sink = context.get<ExportSink>(EXPORT_SINK);
