@@ -1390,3 +1390,16 @@ admitted. Three guards, none of which knows anything about this feature.
 Registering it means the modelled route now has its admissions checked against
 every principal the platform has — including the ones it must refuse — rather
 than only against the three it admits.
+
+### 6.1 The request DTO lives beside the analytical one, not in its own file
+
+The design's File Structure Plan names `src/adapters/http/dto/modelled-question.dto.ts`.
+`ModelledQuestionRequest` was written into the existing `dto/analytics.dto.ts`
+instead, so the `DAY` pattern both requests validate against stays in one place.
+Two files would have meant two copies of that regular expression, or an import
+between DTO files to avoid it — and a shape rule that exists twice is a shape
+rule that can disagree with itself.
+
+Recorded here because every other deviation from the plan is, and the point of
+these notes is that a reader can reconstruct why the code differs from the
+document without guessing.
