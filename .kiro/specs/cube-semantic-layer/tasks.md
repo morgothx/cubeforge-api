@@ -396,7 +396,7 @@ must be shown failing before it is believed.
   - _Requirements: 1.1, 1.7_
   - _Boundary: Validation — vocabulary_
 
-- [ ] 7.5 Drive the whole thing through the assembled application
+- [x] 7.5 Drive the whole thing through the assembled application
   - The three roles reach the route and a machine credential does not; a caller
     with no active membership is answered as for a tenant that does not exist
   - A tenant named in the body is not honoured — the path and the caller's
@@ -1311,3 +1311,82 @@ someone ran the suite and believed the result.
 
 Probes that edit a file now restore it from a `trap ... EXIT`, so an interrupted
 run cannot leave the model saying something nobody meant.
+
+### 7.5 The machine is refused twice, and it took three probes to see it
+
+Removing `viewer` from the permitted roles fails the suite. Letting the **use
+case** accept a machine does not — and that was the finding, not a hole. The
+route declares no `machines`, so the access guard refuses an API key before any
+use case runs; the use case's own refusal never gets the chance.
+
+Measured properly:
+
+| probe | outcome |
+|---|---|
+| the route admits machines | 8 passed — the use case held |
+| the route **and** the use case admit machines | 1 failed |
+
+Two gates that fail independently, and opening either one alone changes nothing.
+That is the property the design asks for, shown rather than asserted. It also
+means this suite cannot tell which gate is doing the work — the use case's own
+refusal is observable in its unit spec, and that is where it belongs.
+
+A probe that does not bite is not automatically a weak test. Sometimes it is a
+second gate nobody remembered was there.
+
+### 7.5 An empty prefix refuses a question that does not touch it
+
+The suite's warm-up first exported a tenant with **no movements** — which writes
+a watermark and nothing else. Every request then came back refused:
+
+    IO Error: No files found that match the pattern "s3://cubeforge-exports/movements/**"
+    LINE 1: CREATE OR REPLACE VIEW "movements" AS SELECT * FROM read_parquet(...)
+
+The engine builds a view over **every** cube when it compiles the model, so an
+empty `movements/` prefix refuses a question that only reads `watermarks`. The
+earlier suites never hit this because they always seeded movements.
+
+Worth knowing beyond the test: a tenant carried before it has any movements is
+exactly this shape, and the first question asked of a store in that state fails
+for a reason that has nothing to do with the question.
+
+### 7.5 A hook order that hid three assertions behind one
+
+The tenant for the unreachable-model block was seeded in its `beforeAll`, and
+the suite resets the database in a `beforeEach` that Jest runs afterwards. The
+tenant was gone before the first test, so every request answered 404 — a
+perfectly good status, for entirely the wrong reason, and it would have reported
+"the semantic layer is down" while proving only that a tenant did not exist.
+
+Seeded per test now. The lesson is narrower than "watch your hooks": a 404 is
+the platform's answer to *several* different absences, so a test that expects
+one absence and gets another passes or fails for reasons it never distinguishes.
+
+### 7.5 Two integration runs at once corrupt each other, and it looks like a bug
+
+Registering the route in `role-matrix` turned 1 failure into 5 — on routes this
+feature never touched, all of them `admin` receiving 404. The baseline said the
+suite was otherwise green, so the change looked guilty.
+
+It was not. The run had been launched while the **full** integration suite was
+still going in the background. Both share one Postgres, and `maxWorkers: 1`
+serialises tests within a run, not across two runs: one suite reset the database
+while the other was mid-request, so a freshly seeded administrator's tenant
+vanished underneath it. Run alone, the matrix passes 29 of 29, twice.
+
+Worth writing down because of how the symptom reads. A wiped tenant and a caller
+with no standing are the same 404 by design — the platform refuses to tell them
+apart — so state corruption arrives disguised as an authorization failure, which
+is the most misleading possible costume. The same load also produced a single
+transient unit failure earlier in the session.
+
+### 7.5 A third guard, and the reason to register rather than exempt
+
+`route-inventory` and `declaration-drift` caught the route when the module was
+imported; `role-matrix` caught it only in a full integration run, because it
+asserts that every route the application serves appears in its matrix of who is
+admitted. Three guards, none of which knows anything about this feature.
+
+Registering it means the modelled route now has its admissions checked against
+every principal the platform has — including the ones it must refuse — rather
+than only against the three it admits.

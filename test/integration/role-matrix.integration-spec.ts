@@ -277,6 +277,21 @@ describe('the role matrix', () => {
           .set(headers),
     },
     {
+      // The same three roles as the analytical route, and no machines, because
+      // it costs what that one costs.
+      key: 'POST /tenants/:tenantId/analytics/questions',
+      admits: ['admin', 'editor', 'viewer'],
+      call: (world, headers) =>
+        request(server())
+          .post(`/tenants/${world.acme.id}/analytics/questions`)
+          .set(headers)
+          .send({
+            measures: ['net_quantity'],
+            from: '2026-08-01',
+            to: '2026-08-31',
+          }),
+    },
+    {
       key: 'GET /tenants/:tenantId/inventory/stock',
       admits: ['admin', 'editor', 'viewer'],
       call: (world, headers) =>
