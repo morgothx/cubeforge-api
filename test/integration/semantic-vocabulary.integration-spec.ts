@@ -7,6 +7,7 @@ import {
 import { SignedSecurityContext } from '../../src/adapters/semantic/security-context';
 import { loadSemanticConfig } from '../../src/adapters/semantic/semantic-config';
 import { tenantId } from '../../src/domain/identifiers';
+import { describeVocabulary } from '../../src/domain/semantic/published-vocabulary';
 import { GROUPINGS, MEASURES } from '../../src/domain/semantic/vocabulary';
 
 const config = loadSemanticConfig(process.env);
@@ -17,7 +18,11 @@ jest.setTimeout(30_000);
 interface CubeMeta {
   readonly cubes: readonly {
     readonly name: string;
-    readonly measures: readonly { readonly name: string }[];
+    readonly measures: readonly {
+      readonly name: string;
+      /** Set by the model for a rolling-window measure. */
+      readonly cumulative?: unknown;
+    }[];
     readonly dimensions: readonly { readonly name: string }[];
   }[];
 }
@@ -122,6 +127,35 @@ describe('the platform vocabulary and the model members', () => {
 
     for (const member of Object.values(READ_BY_MEMBER)) {
       expect(definedDimensions()).toContain(member);
+    }
+  });
+
+  /**
+   * What the platform tells a caller about a measure is what the model does.
+   *
+   * The vocabulary says whether a measure counts movements from before the
+   * period, and that is a claim about the model's behaviour which the platform
+   * does not implement — a rolling window in a YAML file does. This is the one
+   * published fact that has two declarations rather than one, so it is the one
+   * that is compared against the thing it describes, measure by measure.
+   *
+   * Compared on `cumulative`, which the model sets for any rolling window: a
+   * window of any length reaches back before the period, which is exactly the
+   * published claim. `cumulativeTotal` — only the unbounded case — would be a
+   * narrower property than the one the vocabulary states.
+   */
+  it('publishes each measure as cumulative exactly when the model makes it one', () => {
+    for (const { name, cumulative } of describeVocabulary().measures) {
+      const described = meta.cubes
+        .flatMap((cube) => cube.measures)
+        .find((measure) => measure.name === MEASURE_MEMBERS[name]);
+
+      // Absent from the metadata is not "not cumulative": the model must say.
+      expect(typeof described?.cumulative).toBe('boolean');
+      expect({ name, cumulative: described?.cumulative }).toEqual({
+        name,
+        cumulative,
+      });
     }
   });
 

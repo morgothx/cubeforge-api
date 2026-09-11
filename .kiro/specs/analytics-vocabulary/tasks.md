@@ -181,7 +181,7 @@ suite at a time. Kill any leftover integration run before starting one.
     bucket turns it red.
   - _Requirements: 4.2, 4.3, 4.4_
 
-- [ ] 4.3 Prove the published cumulativeness is the model's
+- [x] 4.3 Prove the published cumulativeness is the model's
   - The vocabulary suite already reads the model's metadata, in both
     directions. For every measure, it now compares the published flag with the
     flag the metadata reports for that measure's member.
@@ -284,3 +284,12 @@ suite at a time. Kill any leftover integration run before starting one.
     test that guards that direction.
 
   The suite passes 4/4 alone.
+- **4.3** — **Measured: Cube 1.7.19's `/meta` reports `cumulative` for every
+  measure.** It is true for `on_hand_quantity` and false for the other two, so
+  the weaker fallback from the research was not needed. It also reports
+  `cumulativeTotal`, which is set only for an unbounded trailing window. The
+  comparison uses `cumulative` on purpose: a rolling window of any length
+  reaches back before the period, and that is exactly what the vocabulary
+  claims. `cumulativeTotal` would check a narrower property. A missing flag
+  fails rather than reading as `false`. Flipping either measure's declared flag
+  fails the test and names the measure. The suite passes 6/6 alone.
