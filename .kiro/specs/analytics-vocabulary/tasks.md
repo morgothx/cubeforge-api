@@ -194,7 +194,7 @@ suite at a time. Kill any leftover integration run before starting one.
     one measure's declared flag turns it red.
   - _Requirements: 2.5_
 
-- [ ] 4.4 Prove nothing about questions moved
+- [x] 4.4 Prove nothing about questions moved
   - Run the existing semantic suites unedited, each alone: questions,
     isolation, preparation, HTTP and vocabulary.
   - Watch preparation in particular. A prepared answer must still report that it
@@ -293,3 +293,19 @@ suite at a time. Kill any leftover integration run before starting one.
   claims. `cumulativeTotal` would check a narrower property. A missing flag
   fails rather than reading as `false`. Flipping either measure's declared flag
   fails the test and names the measure. The suite passes 6/6 alone.
+- **4.4** — Every existing semantic suite passed unedited, each alone. They
+  had no diff since `1a8cb1e`, the planning commit:
+  - questions 7/7 (27 s);
+  - isolation 2/2 (158 s);
+  - preparation 3/3 (222 s);
+  - HTTP 8/8 (8 s);
+  - vocabulary 6/6.
+
+  **Preparation is the one that mattered.** It asserts `servedFrom ===
+  'prepared'` in five places, so stating the zone explicitly did not change
+  which answers come from the rollup. Then the whole gate:
+  - lint and typecheck: clean;
+  - unit: 800/800 across 91 suites;
+  - integration in one run: 356/356 across 50 suites (446 s).
+
+  Across the feature, unit went 765 → 800 and integration gained two suites.
