@@ -129,7 +129,7 @@ finding to record, not a repair to make.
   - _Requirements: 3.1, 3.2, 4.1_
   - _Boundary: DescribeVocabularyUseCase_
 
-- [ ] 3.3 Serve the route and put it on the platform's inventories
+- [x] 3.3 Serve the route and put it on the platform's inventories
   - The route is `GET /tenants/:tenantId/analytics/vocabulary`. It is admitted
     with the use case's roles and no machines, counted by the vocabulary bucket
     and skipped by every other. It is wired into the semantic module beside the
@@ -254,3 +254,11 @@ suite at a time. Kill any leftover integration run before starting one.
   not inert. The use case returns the vocabulary synchronously and runs
   `tenantOf` only for its refusal. Membership stays the access guard's, as for
   questions.
+- **3.3** — **Serving the route turns one integration test red until 4.1.**
+  `role-matrix.integration-spec` holds "covers every route the application
+  serves", so a route without a matrix entry fails it. The plan put that entry
+  in 4.1 and did not foresee the gap, so run 4.1 before trusting an integration
+  run. The model-down probe was confirmed to fail for the right reason: an
+  injected model that throws gives `500`, not just a type mismatch. Admitting
+  machines, and counting the route in the question bucket, each fail their own
+  inventory test.

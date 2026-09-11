@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AnalyticsQuestionsController } from './adapters/http/analytics-questions.controller';
+import { AnalyticsVocabularyController } from './adapters/http/analytics-vocabulary.controller';
 import { CubeClient } from './adapters/semantic/cube-client';
 import { CubeModel } from './adapters/semantic/cube-model';
 import { DeferredModel } from './adapters/semantic/deferred-model';
@@ -10,6 +11,7 @@ import {
   type TenantScopedModel,
 } from './application/ports/tenant-scoped-model';
 import { AskModelledQuestionUseCase } from './application/semantic/ask-modelled-question.use-case';
+import { DescribeVocabularyUseCase } from './application/semantic/describe-vocabulary.use-case';
 
 type Env = Record<string, string | undefined>;
 
@@ -52,13 +54,14 @@ export function semanticSeam(env: Env): TenantScopedModel {
  * capability those routes never touch.
  */
 @Module({
-  controllers: [AnalyticsQuestionsController],
+  controllers: [AnalyticsQuestionsController, AnalyticsVocabularyController],
   providers: [
     {
       provide: TENANT_SCOPED_MODEL,
       useFactory: () => semanticSeam(process.env),
     },
     AskModelledQuestionUseCase,
+    DescribeVocabularyUseCase,
   ],
   exports: [AskModelledQuestionUseCase],
 })

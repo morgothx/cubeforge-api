@@ -209,6 +209,7 @@ describe('the route inventory, against the real application', () => {
       'GET /me',
       'GET /tenants',
       'GET /tenants/:tenantId/analytics/movements',
+      'GET /tenants/:tenantId/analytics/vocabulary',
       'GET /tenants/:tenantId/api-keys',
       'GET /tenants/:tenantId/inventory/locations',
       'GET /tenants/:tenantId/inventory/products',
@@ -283,6 +284,11 @@ describe('the route inventory, against the real application', () => {
       // scans the same objects and costs the same, so it admits the same
       // callers and no keys.
       'POST /tenants/:tenantId/analytics/questions': {
+        roles: ['admin', 'editor', 'viewer'],
+      },
+      // What may be asked, to exactly those who may ask it — and so no keys,
+      // for the question route's reason.
+      'GET /tenants/:tenantId/analytics/vocabulary': {
         roles: ['admin', 'editor', 'viewer'],
       },
       'POST /tenants/:tenantId/inventory/movements': {
