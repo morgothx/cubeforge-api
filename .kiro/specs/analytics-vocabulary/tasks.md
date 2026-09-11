@@ -96,7 +96,7 @@ finding to record, not a repair to make.
 
 ## 3. The published vocabulary and its route
 
-- [ ] 3.1 Project the declarations into the published vocabulary
+- [x] 3.1 Project the declarations into the published vocabulary
   - A pure value, the same for every caller and taking no tenant. It holds the
     measures with their cumulativeness, the groupings with their shapes and
     columns, the moments, the longest period and the calendar, in the order the
@@ -239,3 +239,12 @@ suite at a time. Kill any leftover integration run before starting one.
   Two of the four probes did not apply at first: prettier had rewrapped the
   table under `lint --fix`. Read the formatted file before writing a probe
   against it.
+- **3.1** — The task's probe showed which test guards what. The names were
+  restated in the projection and a measure was added to the tuple, so the new
+  name went unpublished. Neither the literal contract test nor "publishes only
+  names a question accepts" failed, because everything still published was
+  still valid. Only "lists exactly the declared names" caught it. That missed
+  addition is the drift the dashboard asked this route to close, so that test is
+  the one not to weaken. The literal body test guards the contract with
+  `cubeforge-web`, and a restated period or a leaked row bound fail both it and
+  their own test.
