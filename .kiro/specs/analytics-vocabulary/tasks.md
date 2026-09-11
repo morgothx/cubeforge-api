@@ -151,16 +151,23 @@ Every task here needs the compose stack up
 (`docker compose -f cubeforge-api/docker-compose.yml up -d`), and they run one
 suite at a time. Kill any leftover integration run before starting one.
 
-- [ ] 4.1 Prove admission and sameness over HTTP
+- [x] 4.1 Prove admission and sameness over HTTP
   - The route suite:
     - a member of each role receives the published body;
     - two tenants receive byte-identical bodies;
     - a stranger, a tenant that does not exist and a machine key issued into the
       tenant all receive a response byte-identical to the absent tenant's.
   - The role matrix gains the route, admitting the three roles and no machines,
-    and drives each role, a key and a stranger against it.
+    and drives each role, a stranger, an operator and an anonymous caller
+    against it.
   - Done when both suites pass alone. A probe admitting machines on the route
-    turns both red.
+    turns the route suite red.
+  - *Corrected during implementation:* the plan said the matrix drives a key
+    and that the probe turns both suites red. It does neither. The matrix has
+    no machine principal by design, and its comment sends that half elsewhere.
+    Refusing machines on this route is held by the route suite, by the route
+    inventory's "admits machine callers only where a feature decided to", and
+    by the use-case spec.
   - _Requirements: 1.1, 3.1, 3.2, 3.3, 3.4_
 
 - [ ] 4.2 Prove the allowance is its own, and says how long to wait
@@ -262,3 +269,9 @@ suite at a time. Kill any leftover integration run before starting one.
   injected model that throws gives `500`, not just a type mismatch. Admitting
   machines, and counting the route in the question bucket, each fail their own
   inventory test.
+- **4.1** — RED was the matrix's coverage test, failing alone after 3.3 as
+  predicted, and nothing else. The route suite compares refusals as
+  `status + text + headers minus date/correlation/etag`, and the per-bucket
+  rate-limit headers matched without flakiness. Run alone: route 3/3, matrix
+  30/30. The probe admitting machines turned the route suite red and left the
+  matrix green, which exposed the plan's overclaim (corrected in the task).

@@ -292,6 +292,16 @@ describe('the role matrix', () => {
           }),
     },
     {
+      // What may be asked, to exactly those who may ask it: the question
+      // route's three roles, and — as there — no keys.
+      key: 'GET /tenants/:tenantId/analytics/vocabulary',
+      admits: ['admin', 'editor', 'viewer'],
+      call: (world, headers) =>
+        request(server())
+          .get(`/tenants/${world.acme.id}/analytics/vocabulary`)
+          .set(headers),
+    },
+    {
       key: 'GET /tenants/:tenantId/inventory/stock',
       admits: ['admin', 'editor', 'viewer'],
       call: (world, headers) =>
