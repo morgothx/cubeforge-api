@@ -113,7 +113,7 @@ finding to record, not a repair to make.
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.1, 2.2, 2.4, 3.4, 5.3, 5.4_
   - _Boundary: Published vocabulary_
 
-- [ ] 3.2 Admit exactly the callers a question admits, and depend on nothing
+- [x] 3.2 Admit exactly the callers a question admits, and depend on nothing
   - Its declared roles are the question route's roles, by reference rather than
     by a second list.
   - Anything that is not a tenant member is refused through the platform's
@@ -248,3 +248,9 @@ suite at a time. Kill any leftover integration run before starting one.
   the one not to weaken. The literal body test guards the contract with
   `cubeforge-web`, and a restated period or a leaked row bound fail both it and
   their own test.
+- **3.2** — The "built from nothing" test holds two assertions, and each was
+  shown to bite alone against an injected model port. One is the constructor's
+  arity. The other is `design:paramtypes`, which jest does emit here, so it is
+  not inert. The use case returns the vocabulary synchronously and runs
+  `tenantOf` only for its refusal. Membership stays the access guard's, as for
+  questions.
