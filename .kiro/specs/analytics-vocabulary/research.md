@@ -50,8 +50,9 @@ vocabulary integration suite already reads Cube's `/meta` to compare the
 platform's names with the model's members, in both directions. Cube's metadata
 reports a measure's `cumulative` flag, set for a `rolling_window` measure. The
 suite can compare it with the domain's declaration for every measure. The flag's
-presence in `/meta` on 1.7.19 is **to be confirmed** in the first task that
-touches the suite. If it is absent, the fallback is the question suite's
+presence in `/meta` on 1.7.19 was **to be confirmed** in the first task that
+touches the suite — *and was: task 4.3 measured it present, so the fallback
+below was not needed.* If it is absent, the fallback is the question suite's
 existing measurement: on hand counts the day before a one-day period, and net
 quantity is `null` there. That is weaker, and only a fallback.
 
@@ -65,12 +66,15 @@ labelled grouping mapped to one member does not compile.
 
 ## 2. How an analytics route is admitted, throttled and inventoried
 
-- **Admission.** `@Access({ roles })` declares the roles. The use case calls
-  `tenantOf(actor)`, which refuses anything that is not an active tenant member.
-  That covers machines even when issued into the tenant, non-members and absent
-  tenants. The global `DomainErrorFilter` renders all of them as the one `404`.
-  Reusing `tenantOf` makes 3.2 and 3.3 the platform's existing rule, not a new
-  one.
+- **Admission.** `@Access({ roles })` declares the roles, and the access guard
+  resolves the caller's membership in the tenant before any handler runs. That
+  guard is what refuses a non-member and an absent tenant (3.3). The use case
+  then calls `tenantOf(actor)`, which refuses anything that is not a tenant
+  member by kind: a machine, even one issued into the tenant, or a person acting
+  in no tenant (3.2). The global `DomainErrorFilter` renders every refusal as the
+  one `404`. Both are the platform's existing rules, not new ones.
+  *Corrected during design review:* this finding first credited `tenantOf` with
+  refusing non-members, which it does not.
 - **Throttling.** A bucket is a name in `EVERY_BUCKET`, options registered in
   `platformThrottlerOptions`, a guard extending `BucketThrottlerGuard` (which
   sets the plain `Retry-After`), and `@SkipThrottle(everyBucketExcept(own))`.
@@ -81,7 +85,9 @@ labelled grouping mapped to one member does not compile.
 - **Inventory.** Three suites name every route with its admission:
   `route-inventory.spec.ts`, `declaration-drift.spec.ts` and
   `role-matrix.integration-spec.ts`. The first two fail on an unlisted route by
-  design. The third drives each role and a machine key against it.
+  design. The third drives each role, a stranger, an operator and an anonymous
+  caller against it. It has no machine principal, so machine refusal is held
+  elsewhere (see the design's testing strategy).
 - **Module.** `SemanticModule` owns the semantic surface. The deferred seam
   reads Cube's configuration only at the first question, so wiring a route here
   does not make the API depend on Cube being configured.

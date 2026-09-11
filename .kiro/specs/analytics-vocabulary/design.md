@@ -206,17 +206,19 @@ plain `Retry-After`, set by `BucketThrottlerGuard`.
 | `src/domain/analytics/period.ts` | `CALENDAR` beside `LONGEST_PERIOD_DAYS` |
 | `src/domain/semantic/question.ts` | `by: ReadBy` in place of the literal union |
 | `src/adapters/http/dto/analytics.dto.ts` | `@IsIn(READ_BY)` in place of the literal list |
-| `src/adapters/semantic/member-mapping.ts` | Keyed by shape, holding only member names; `READ_BY_MEMBER` over `ReadBy`; `columnsOf(grouping)` |
+| `src/adapters/semantic/member-mapping.ts` | `GROUPING_MEMBERS` built by per-shape builders from the domain's shapes, holding only member names; `READ_BY_MEMBER` over `ReadBy` |
 | `src/adapters/semantic/cube-client.ts` | `CubeQuery.timezone` |
-| `src/adapters/semantic/cube-model.ts` | Rows from `columnsOf`; the query carries `timezone: CALENDAR` |
+| `src/adapters/semantic/cube-model.ts` | Rows from `GROUPING_MEMBERS[g].columns`, whose platform names are the domain's; the query carries `timezone: CALENDAR` |
 | `src/adapters/semantic/cube-model.spec.ts` | Row keys equal the published columns for every grouping (2.3); the zone sent equals the published calendar (2.6) |
 | `src/adapters/http/throttling-buckets.ts` | `VOCABULARY_BY_CALLER` in `EVERY_BUCKET` |
+| `src/adapters/http/throttling-buckets.spec.ts` | The bucket registered; the question and vocabulary routes each skip every bucket but their own |
+| `src/domain/analytics/period.spec.ts` | `CALENDAR` pinned |
 | `src/adapters/http/platform-throttling.ts` | Registers the bucket; refuses a vocabulary allowance not above the question allowance (4.3) |
 | `src/adapters/http/semantic-edge.spec.ts` | Every published moment accepted by the DTO, and nothing else (2.4) |
 | `src/semantic.module.ts` | The controller and the use case |
 | `src/adapters/http/access/route-inventory.spec.ts` | The route and its admission |
 | `src/adapters/http/access/declaration-drift.spec.ts` | The route's roles are the question route's roles |
-| `test/integration/role-matrix.integration-spec.ts` | Every role, a machine key and a stranger against the route |
+| `test/integration/role-matrix.integration-spec.ts` | Every role, a stranger, an operator and an anonymous caller against the route |
 | `test/integration/semantic-vocabulary.integration-spec.ts` | Published `cumulative` equals the model's, per measure (2.5) |
 | `.kiro/steering/product.md` | "Known gaps": reads that belong to no throttling bucket |
 
@@ -396,23 +398,33 @@ export class VocabularyThrottlerGuard extends BucketThrottlerGuard {}
 ### The question path, re-pointed — `member-mapping.ts`, `cube-model.ts`, `cube-client.ts`, the DTO
 
 ```typescript
-type MembersFor<S extends GroupingShape> =
-  S extends { shape: 'day' } ? { readonly timeDimension: string; readonly day: string }
-  : S extends { shape: 'labelled' } ? { readonly code: string; readonly name: string }
-  : { readonly member: string };
+type ShapeOf<S extends GroupingShape['shape']> = Extract<GroupingShape, { readonly shape: S }>;
 
-export const GROUPING_MEMBERS: {
-  readonly [G in GroupingName]: MembersFor<(typeof GROUPING_SHAPES)[G]>;
-};
+/** One builder per shape; each accepts only its own shape's declaration. */
+function day(declared: ShapeOf<'day'>, members: { timeDimension: string; day: string }): MappedGrouping;
+function category(declared: ShapeOf<'category'>, member: string): MappedGrouping;
+function labelled(declared: ShapeOf<'labelled'>, members: { code: string; name: string }): MappedGrouping;
+
+/** The public shape is unchanged; only how it is built is. */
+export const GROUPING_MEMBERS: { readonly [G in GroupingName]: MappedGrouping };
 
 export const READ_BY_MEMBER: { readonly [R in ReadBy]: string };
-
-/** Row key from the domain, member from here — paired in one place. */
-export function columnsOf(grouping: GroupingName): readonly MappedColumn[];
 ```
 
-- `CubeModel.rowFrom` and `loadFor` use `columnsOf`, so a row's keys **are**
-  `rowColumnsOf(GROUPING_SHAPES[g])` (2.3).
+- `GROUPING_MEMBERS` keeps the `MappedGrouping` shape it had before —
+  `timeDimension?` and `columns` of `{ platform, member }` — so
+  `semantic-vocabulary.integration-spec`, which reads it, needed no edit. What
+  changed is that each entry is **built** by the builder for its declared
+  shape: the platform names come from `GROUPING_SHAPES`, and the table supplies
+  only the model's members. A labelled grouping handed to the one-column
+  builder, or a grouping missing from the table, does not compile.
+- `CubeModel.rowFrom` and `loadFor` read `GROUPING_MEMBERS[g].columns`, so a
+  row's keys **are** `rowColumnsOf(GROUPING_SHAPES[g])` (2.3).
+- *Revised during implementation (task 2.2):* this section first sketched a
+  mapping record typed per shape with a `columnsOf()` accessor. That would have
+  changed `GROUPING_MEMBERS`' public shape and forced an edit to an existing
+  suite, which this design forbids. The builders give the same guarantees
+  without it.
 - `loadFor` sends `timezone: CALENDAR`. It is the value Cube defaulted to, now
   stated, so the zone an answer counts in is the zone the vocabulary publishes
   (2.6). Anything else would reach the dialect, which refuses non-UTC.
@@ -536,7 +548,13 @@ assertion is shown to fail by breaking what it guards.
 
 **Integration — `role-matrix.integration-spec.ts`**
 - The route added with `admits: ['admin', 'editor', 'viewer']` and no machines.
-  The matrix drives every role, a machine key and a stranger (3.1–3.3).
+  The matrix drives every role, a stranger, an operator and an anonymous caller
+  (3.1, 3.3).
+- *Revised during implementation (task 4.1):* this line first claimed the
+  matrix drives a machine key. It does not: the matrix has no machine principal
+  by design. Refusing machines on this route is held by the route suite, by the
+  route inventory's "admits machine callers only where a feature decided to",
+  and by the use-case spec (3.2).
 
 **Integration — `semantic-vocabulary.integration-spec.ts`**
 - For every measure, the published `cumulative` equals the flag Cube's `/meta`
@@ -567,7 +585,7 @@ assertion is shown to fail by breaking what it guards.
 | 1.9 | One stable order | Tuple order | published-vocabulary spec |
 | 2.1 | Listed iff a question accepts it | `questionFrom` over the same tuples | published-vocabulary spec |
 | 2.2 | Longest period equal to what a question accepts | `periodFrom` over `LONGEST_PERIOD_DAYS` | published-vocabulary spec |
-| 2.3 | Row names equal an answer's | `columnsOf` from `GROUPING_SHAPES` | cube-model spec, semantic-questions |
+| 2.3 | Row names equal an answer's | `GROUPING_MEMBERS` built from `GROUPING_SHAPES` | cube-model spec, semantic-questions |
 | 2.4 | Moments iff a question accepts them | `@IsIn(READ_BY)`, `ReadBy` | semantic-edge spec |
 | 2.5 | Cumulative iff an answer counts before | `MEASURE_TRAITS` against `/meta` | semantic-vocabulary suite |
 | 2.6 | Calendar equal to an answer's | `timezone: CALENDAR` in `loadFor` | cube-model spec, semantic suites |
@@ -588,9 +606,12 @@ assertion is shown to fail by breaking what it guards.
 
 ## Open questions
 
-- **Whether Cube 1.7.19's `/meta` reports `cumulative`.** It is settled in the
-  first task that touches `semantic-vocabulary`. Both answers have a path
-  (`research.md`, section 1).
-- **Whether stating the zone changes rollup matching.** It should not, because
-  the value is Cube's default. `semantic-preparation` is the judge. If it
-  changes, that is a finding, recorded before anything is adjusted.
+Both questions this design left open were settled during implementation.
+
+- **Cube 1.7.19's `/meta` does report `cumulative`** for every measure: true for
+  `on_hand_quantity`, false for the other two. The comparison uses `cumulative`
+  rather than `cumulativeTotal`, which is set only for an unbounded window and
+  is narrower than the published claim (task 4.3).
+- **Stating the zone did not change rollup matching.** `semantic-preparation`
+  passed unedited, asserting `servedFrom: 'prepared'` in five places (task
+  4.4).
