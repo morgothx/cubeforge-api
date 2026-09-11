@@ -170,7 +170,7 @@ suite at a time. Kill any leftover integration run before starting one.
     by the use-case spec.
   - _Requirements: 1.1, 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 4.2 Prove the allowance is its own, and says how long to wait
+- [x] 4.2 Prove the allowance is its own, and says how long to wait
   - Spend the configured vocabulary allowance, then ask once more: `429`, with a
     positive, plain `Retry-After`.
   - With the vocabulary allowance exhausted, a question is not refused as
@@ -275,3 +275,12 @@ suite at a time. Kill any leftover integration run before starting one.
   rate-limit headers matched without flakiness. Run alone: route 3/3, matrix
   30/30. The probe admitting machines turned the route suite red and left the
   matrix green, which exposed the plan's overclaim (corrected in the task).
+- **4.2** — The question allowance is spent with questions that name an unknown
+  measure. The throttling guard counts them before the body is read, so the
+  suite needs no Cube, export or catalogue and stays deterministic. Each
+  direction of independence was probed separately:
+  - the route counted in the question bucket fails three tests;
+  - the question routes also counted by the vocabulary bucket fail exactly the
+    test that guards that direction.
+
+  The suite passes 4/4 alone.
