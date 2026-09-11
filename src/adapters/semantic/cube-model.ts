@@ -1,4 +1,5 @@
 import { AnalyticsUnavailable } from '../../application/analytics/analytics-failure';
+import { CALENDAR } from '../../domain/analytics/period';
 import type {
   ModelQuestions,
   TenantScopedModel,
@@ -192,6 +193,9 @@ function loadFor(asked: ModelledQuestion): CubeQuery {
           granularity: 'day',
         })),
     ],
+    // Stated rather than left to the engine's default, so the zone an
+    // answer's days are counted in is the one the vocabulary publishes.
+    timezone: CALENDAR,
     // One more than the answer may carry, so the caller above can tell a full
     // answer from a truncated one. Asking for exactly the bound would make an
     // over-bound answer indistinguishable from one that happened to fit.

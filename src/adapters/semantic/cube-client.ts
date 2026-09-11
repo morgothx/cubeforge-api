@@ -13,6 +13,8 @@ export interface CubeQuery {
     readonly granularity?: string;
     readonly dateRange?: readonly [string, string];
   }[];
+  /** The zone the engine counts days in. Absent, it uses its own default. */
+  readonly timezone?: string;
   readonly limit?: number;
   readonly order?: Readonly<Record<string, 'asc' | 'desc'>>;
 }

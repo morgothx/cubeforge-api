@@ -79,7 +79,7 @@ finding to record, not a repair to make.
   - _Requirements: 2.4, 5.1_
   - _Boundary: Integration — ModelledQuestion (domain), ModelledQuestionRequest (http)_
 
-- [ ] 2.2 (P) Build rows and queries from the declared shapes and calendar
+- [x] 2.2 (P) Build rows and queries from the declared shapes and calendar
   - The member mapping keeps the model's member names and no platform name of
     its own. It is keyed by each grouping's declared shape, so a labelled
     grouping mapped to a single member does not compile.
@@ -223,3 +223,19 @@ suite at a time. Kill any leftover integration run before starting one.
   literal list in the DTO fails the test. The refusal message is now built from
   `READ_BY` and reads exactly as before. `READ_BY_MEMBER` still has its own
   union, left to 2.2, which owns the mapping.
+- **2.2** — **Deviation from the design's names, not its intent.** The design
+  sketched a mapping record typed `MembersFor<shape>` and a `columnsOf()`
+  accessor. That would have changed `GROUPING_MEMBERS`' shape, and
+  `semantic-vocabulary.integration-spec` reads `.timeDimension` and `.columns`
+  directly. So the public shape stays `MappedGrouping`, and it is *built* by
+  three per-shape builders (`day`, `category`, `labelled`). Each takes the
+  domain's declared shape for its platform names and only the model's members
+  from the table. The guarantees hold, and probes show each one:
+  - a labelled grouping handed to the one-column builder does not compile;
+  - a grouping missing from the table does not compile;
+  - a column renamed in the domain is followed by the rows;
+  - the zone removed from the query fails the model spec.
+
+  Two of the four probes did not apply at first: prettier had rewrapped the
+  table under `lint --fix`. Read the formatted file before writing a probe
+  against it.

@@ -1,9 +1,15 @@
-import { day, periodFrom } from '../../domain/analytics/period';
+import { CALENDAR, day, periodFrom } from '../../domain/analytics/period';
 import { tenantId, type TenantId } from '../../domain/identifiers';
 import { MAX_ANSWER_ROWS, questionFrom } from '../../domain/semantic/question';
+import {
+  GROUPINGS,
+  GROUPING_SHAPES,
+  rowColumnsOf,
+} from '../../domain/semantic/vocabulary';
 import type { ModelQuestions } from '../../application/ports/tenant-scoped-model';
 import type { CubeLoad, CubeResult } from './cube-client';
 import { CubeModel } from './cube-model';
+import { GROUPING_MEMBERS } from './member-mapping';
 
 const ACME = tenantId('11111111-1111-4111-8111-111111111111');
 const NOW = new Date('2026-03-31T12:00:00.000Z');
@@ -246,6 +252,56 @@ describe('composing one modelled question', () => {
    * on would give a chart a value that is neither a number nor an absence —
    * and `Number("")` is `0`, the wrong answer in the right shape.
    */
+  /**
+   * Every grouping's row keys are the ones the vocabulary declares for it.
+   *
+   * Driven over the vocabulary, so a grouping added later is covered without
+   * a test of its own. The fixture is keyed by the model's members, which is
+   * the mapping's half; what is asserted is the platform's half, which is the
+   * domain's — and the vocabulary publishes exactly that.
+   */
+  it.each(GROUPINGS)(
+    'fills the %s grouping under the columns the vocabulary declares',
+    async (grouping) => {
+      const members = GROUPING_MEMBERS[grouping].columns.map(
+        (column) => column.member,
+      );
+      const { transport } = answering(
+        watermarkOf(CARRIED_THROUGH),
+        rowsOf([
+          Object.fromEntries([
+            ['movements.net_quantity', '1'],
+            ...members.map((member) => [member, `value of ${member}`]),
+          ]),
+        ]),
+      );
+
+      const answer = await ask(transport, aQuestion({ groupings: [grouping] }));
+
+      expect(
+        answer.state === 'answered' && Object.keys(answer.rows[0].values),
+      ).toEqual(['net_quantity', ...rowColumnsOf(GROUPING_SHAPES[grouping])]);
+    },
+  );
+
+  /**
+   * The zone an answer counts its days in is the zone the vocabulary says.
+   *
+   * It was the engine's default and therefore nobody's statement. Sent, it is
+   * one value read twice, and a different value would reach the dialect —
+   * which refuses anything but UTC — rather than being answered in silence.
+   */
+  it('asks in the calendar the platform declares', async () => {
+    const { transport, loads } = answering(
+      watermarkOf(CARRIED_THROUGH),
+      rowsOf([]),
+    );
+
+    await ask(transport);
+
+    expect(loads[1].query.timezone).toBe(CALENDAR);
+  });
+
   it('reads an empty value as an absent one, because the engine cannot say null', async () => {
     const { transport } = answering(
       watermarkOf(CARRIED_THROUGH),
