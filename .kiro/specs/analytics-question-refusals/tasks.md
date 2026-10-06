@@ -98,7 +98,7 @@ only the deployment is ordered, and task 4.1 states what to check before it.
 
 ## 4. Prove it against the running engine
 
-- [ ] 4.1 Show the three answers, and that the engine still refuses
+- [x] 4.1 Show the three answers, and that the engine still refuses
   - The platform's rule is only true while the engine still has the limitation
     it describes. Asking the engine directly is what turns that from an
     assumption into a test.
@@ -252,3 +252,33 @@ only the deployment is ordered, and task 4.1 states what to check before it.
 
   Suite after 3.2: 820 tests across 93 suites; `lint`, `typecheck` and `build`
   clean.
+- **4.1** — Measured against the running engine on 2026-10-06.
+
+  **The engine still refuses what the platform refuses**, and the test now says
+  so precisely: it asserts the cause contains *"Rolling window requires one time
+  dimension"*. Matching an engine's wording is forbidden in production code and
+  is the whole subject here — "it errored" would pass just as well on a query
+  malformed some other way, and this test exists to notice the day *this*
+  limitation goes away, not merely the day something breaks.
+
+  **"Refused without the engine being asked" is a count.** The model is built
+  over a transport that counts loads and delegates to the real client; the
+  refusal arrives and the count is zero. An empty answer and an unasked question
+  are indistinguishable from outside, which is why the count is the evidence.
+
+  **Requirement 5.4 needed a scan, and the first one was too broad.**
+  `analytics-controls.spec.ts` reads the controllers and holds the route surface
+  to a hand-written list. Its first pass forbade `refresh` and flagged the
+  authentication controller, which refreshes a *session* — a false positive, and
+  the kind that gets a scan deleted rather than repaired. It now names export,
+  rebuild and the engine's own `refreshPreAggregations`. **A new file the
+  design's plan did not have**, the same deviation 2.1 recorded for the filter's
+  spec, and for the same reason: a rule checked nowhere is a rule nobody keeps.
+
+  Four probes bit: a rebuild control added to a controller, the route surface
+  grown without being committed to, the scan pointed at no controllers, and the
+  rule switched off — which turns the integration count red, proving the engine
+  really is spared.
+
+  Suite after 4.1: 823 tests across 94 suites, plus 11 integration tests against
+  the running stack; `lint`, `typecheck` and `build` clean.

@@ -15,7 +15,14 @@ import {
 } from '../../src/domain/analytics/period';
 import { tenantId, type TenantId } from '../../src/domain/identifiers';
 import type { ModelledAnswer } from '../../src/domain/semantic/modelled-answer';
+import { DomainViolation } from '../../src/domain/errors';
+import { whyUnaskable } from '../../src/domain/semantic/askable';
 import { questionFrom } from '../../src/domain/semantic/question';
+import {
+  GROUPING_MEMBERS,
+  MEASURE_MEMBERS,
+} from '../../src/adapters/semantic/member-mapping';
+import { describeVocabulary } from '../../src/domain/semantic/published-vocabulary';
 import type {
   GroupingName,
   MeasureName,
@@ -245,6 +252,121 @@ describe('asking the model a composed question', () => {
     // 10 - 4 for W-1, 6 for W-2: every movement ever, under a period holding one.
     expect(Number(byProduct.get('W-1')?.on_hand_quantity)).toBe(6);
     expect(Number(byProduct.get('W-2')?.on_hand_quantity)).toBe(6);
+  });
+
+  /**
+   * The combination this platform refuses, and the reason the refusal is worth
+   * having: the engine will not run it either.
+   */
+  describe('a combination the platform refuses', () => {
+    const FORBIDDEN_MEASURES: readonly MeasureName[] = ['on_hand_quantity'];
+    const FORBIDDEN_GROUPINGS: readonly GroupingName[] = [
+      'recorded_day',
+      'occurred_day',
+    ];
+
+    it('is refused without the engine being asked at all', async () => {
+      const acme = await tenantWith(ACME);
+      let loads = 0;
+      const counting = new CubeModel(
+        {
+          load: (load) => {
+            loads += 1;
+            return new CubeClient(semantic).load(load);
+          },
+        },
+        new SignedSecurityContext(semantic),
+        () => new Date(),
+      );
+
+      const refused: unknown = await counting
+        .askAs(acme, (questions) =>
+          questions.ask(
+            questionFrom({
+              measures: FORBIDDEN_MEASURES,
+              groupings: FORBIDDEN_GROUPINGS,
+              period: AUGUST,
+              by: 'recorded',
+            }),
+          ),
+        )
+        .catch((error: unknown) => error);
+
+      expect(refused).toBeInstanceOf(DomainViolation);
+      // The claim this test exists for. An empty answer and an unasked
+      // question look identical from outside, so the count is the evidence.
+      expect(loads).toBe(0);
+    });
+
+    it('still answers that measure beside a single day', async () => {
+      const acme = await tenantWith(ACME);
+
+      const answer = await ask(acme, FORBIDDEN_MEASURES, ['recorded_day']);
+
+      expect(answeredRows(answer).rows.length).toBeGreaterThan(0);
+    });
+
+    /**
+     * **The test that fails the day the platform's rule becomes a lie.**
+     *
+     * The rule is only true while the engine still has the limitation it
+     * describes. Composed by hand, past `questionFrom`, and put to the engine
+     * directly: if this ever comes back answered, the platform is refusing a
+     * question it could have answered, and `askable.ts` must go.
+     */
+    it('is still refused by the engine itself', async () => {
+      await tenantWith(ACME);
+      const context = await new SignedSecurityContext(semantic).for(
+        tenantId((await seedTenant()).id),
+        new Date(),
+      );
+
+      const refused: unknown = await new CubeClient(semantic)
+        .load({
+          context,
+          query: {
+            measures: FORBIDDEN_MEASURES.map((name) => MEASURE_MEMBERS[name]),
+            timeDimensions: FORBIDDEN_GROUPINGS.map((name) => ({
+              // A day grouping carries the model's time dimension; the mapping
+              // is the one place that knows the model's own naming.
+              dimension: GROUPING_MEMBERS[name].timeDimension ?? '',
+              granularity: 'day',
+              dateRange: ['2026-08-01', '2026-08-31'] as const,
+            })),
+          },
+        })
+        .catch((error: unknown) => error);
+
+      expect(refused).toBeInstanceOf(Error);
+      // Matching the engine's wording, which production code may never do —
+      // here it is the subject. "It errored" would pass just as well on a query
+      // malformed some other way, and this test exists to notice the day *this*
+      // limitation goes away, not merely the day something breaks.
+      expect(String((refused as Error).cause)).toContain(
+        'Rolling window requires one time dimension',
+      );
+      // And the platform knows it, in its own words.
+      expect(
+        whyUnaskable(FORBIDDEN_MEASURES, FORBIDDEN_GROUPINGS),
+      ).not.toBeNull();
+    });
+
+    /**
+     * The refusal is about a combination, and nothing was removed from what the
+     * platform offers to make it true (5.2).
+     */
+    it('leaves the vocabulary offering every measure and every grouping', () => {
+      const published = describeVocabulary();
+      const measures = published.measures.map(({ name }) => name);
+      const groupings = published.groupings.map(({ name }) => name);
+
+      for (const name of FORBIDDEN_MEASURES) {
+        expect(measures).toContain(name);
+      }
+      for (const name of FORBIDDEN_GROUPINGS) {
+        expect(groupings).toContain(name);
+      }
+    });
   });
 
   it('labels a product and a location by code and by current name', async () => {
