@@ -20,7 +20,20 @@ export type DomainError =
   | { readonly kind: 'invalid-role'; readonly permitted: readonly Role[] }
   | { readonly kind: 'last-administrator' }
   | { readonly kind: 'not-found' }
-  | { readonly kind: 'forbidden' };
+  | { readonly kind: 'forbidden' }
+  /**
+   * The platform could not answer the question, and nobody did anything wrong.
+   *
+   * Not a `validation`: the request was well formed, authorised and about a
+   * tenant that exists, and every name in it is one the platform offers. It
+   * carries no field for the same reason — there is no part of the question to
+   * point at, and pointing at one would blame the caller for a limit that is
+   * the platform's.
+   *
+   * Distinct from the analytics being unavailable, which is a service that is
+   * not answering rather than a question that cannot be answered.
+   */
+  | { readonly kind: 'unanswerable' };
 
 export class DomainViolation extends Error {
   /**
@@ -69,6 +82,11 @@ export function describeDomainError(error: DomainError): string {
       return 'the requested record does not exist';
     case 'forbidden':
       return 'the actor is not permitted to perform this action';
+    case 'unanswerable':
+      // Says that it happened and nothing else. There is nothing a caller can
+      // do about it, and naming a measure, a grouping or anything an engine
+      // wrote would only invite them to try.
+      return 'the question could not be answered';
     default:
       return unreachable(error);
   }

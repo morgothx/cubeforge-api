@@ -97,6 +97,19 @@ function map(error: DomainError): MappedResponse {
     case 'not-found':
     case 'forbidden':
       return NOT_FOUND;
+    /**
+     * Unprocessable, and deliberately not `400`: the request is well formed,
+     * authorised and about a tenant that exists. `400` would tell a caller
+     * they sent something malformed, which is untrue, and `409` would describe
+     * a conflicting state that does not exist.
+     *
+     * No field travels with it. The absence is the message.
+     */
+    case 'unanswerable':
+      return {
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        body: { message: describeDomainError(error) },
+      };
     default:
       return unreachable(error);
   }

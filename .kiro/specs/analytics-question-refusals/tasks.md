@@ -49,7 +49,7 @@ only the deployment is ordered, and task 4.1 states what to check before it.
 
 ## 2. An answer for a question nobody can answer
 
-- [ ] 2.1 (P) Add a refusal that blames nobody
+- [x] 2.1 (P) Add a refusal that blames nobody
   - A new member of the platform's closed set of domain failures, carrying no
     field — there is no part of the question to point at, and pointing at one
     would blame the caller for the platform's own limit.
@@ -169,3 +169,23 @@ only the deployment is ordered, and task 4.1 states what to check before it.
   Suite after 1.2: 813 tests across 92 suites; `lint`, `typecheck` and `build`
   clean. No other caller of `questionFrom` composed the refused combination, so
   nothing else moved.
+- **2.1** — **The filter had no spec; the design called it a modification.**
+  `domain-error.filter.spec.ts` did not exist — the only coverage was through
+  the access guard's own suite. It is a created file, not a modified one, and
+  the design's file plan is wrong on that row. Written in the house style: a
+  real Nest app and a request, not a faked `ArgumentsHost`, because the filter's
+  whole job is the response and a mocked context only asserts the mock.
+
+  **The build is the test for exhaustiveness.** Removing the mapping's case
+  fails `typecheck` rather than any spec, which is the guarantee the union was
+  built for. Probed that way deliberately — a runtime test could not see it.
+
+  **A probe did not apply because its anchor was not unique:** the body shape
+  `{ message: describeDomainError(error) }` appears twice, the other being
+  `last-administrator`. Re-run against the case label, it bit. Anchor a probe
+  on the thing it means to change, not on a line that happens to look like it.
+
+  Four probes bit: the refusal answered `400`, a field travelling with it, the
+  message naming a measure, and the mapping removed (build).
+
+  Suite after 2.1: 817 tests across 93 suites; `lint` and `typecheck` clean.
