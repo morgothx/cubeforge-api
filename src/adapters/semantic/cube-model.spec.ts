@@ -1,3 +1,5 @@
+import { AnalyticsUnavailable } from '../../application/analytics/analytics-failure';
+import { DomainViolation } from '../../domain/errors';
 import { CALENDAR, day, periodFrom } from '../../domain/analytics/period';
 import { tenantId, type TenantId } from '../../domain/identifiers';
 import { MAX_ANSWER_ROWS, questionFrom } from '../../domain/semantic/question';
@@ -136,9 +138,34 @@ describe('composing one modelled question', () => {
       );
 
       await expect(ask(transport)).rejects.toMatchObject({
-        reason: 'model-rejected',
+        reason: 'model-unreadable',
       });
     }
+  });
+
+  /**
+   * The watermark question is the platform's own: composed here from a single
+   * member, and never seen by whoever asked. If the engine will not run it,
+   * that is a defect on this side — reporting it as a question nobody can
+   * answer would hand the caller the blame for a query they did not write.
+   */
+  it('reports the engine refusing its own watermark question as unavailable', async () => {
+    const transport = {
+      load: () =>
+        Promise.reject(
+          new DomainViolation(
+            { kind: 'unanswerable' },
+            'the semantic layer would not run the query',
+          ),
+        ),
+    };
+
+    const refusal: unknown = await ask(transport).catch(
+      (error: unknown) => error,
+    );
+
+    expect(refusal).toBeInstanceOf(AnalyticsUnavailable);
+    expect(refusal).not.toBeInstanceOf(DomainViolation);
   });
 
   it('treats an absent watermark as absence, whether empty or null', async () => {

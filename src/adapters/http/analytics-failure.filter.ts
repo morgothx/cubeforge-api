@@ -23,6 +23,14 @@ import { correlationOf } from './correlation.middleware';
  * not available right now and the same request may work later, which is true of
  * a timeout, an unreachable store and a setting nobody has supplied yet.
  *
+ * **It no longer answers every analytics failure.** A query the engine looked
+ * at and would not run never reaches here: it is a fact about the question,
+ * answered as a refusal rather than as an outage, because "the same request may
+ * work later" is the one thing that is not true of it. What remains is a
+ * service that could not be reached, one that answered something unusable, one
+ * that was never configured, and a question that timed out — and the argument
+ * above holds for each.
+ *
  * Filed against the request's correlation identifier (6.4), which is the only
  * thread joining this line to whatever else that request did.
  */

@@ -1,4 +1,7 @@
-import { AnalyticsUnavailable } from '../../application/analytics/analytics-failure';
+import {
+  AnalyticsUnavailable,
+  askingAs,
+} from '../../application/analytics/analytics-failure';
 import { CALENDAR } from '../../domain/analytics/period';
 import type {
   ModelQuestions,
@@ -76,11 +79,18 @@ export class CubeModel implements TenantScopedModel {
   ): Promise<ModelledAnswer> {
     const context = await this.contexts.for(tenantId, this.now());
 
+    // The watermark question is this platform's own, composed from a single
+    // member and never seen by whoever asked. `askingAs` re-files anything the
+    // transport raises about it — including a refusal it would have reported as
+    // the caller's question — because a query the caller did not write cannot
+    // be their mistake.
     const carried = completeThroughIn(
-      await this.transport.load({
-        context,
-        query: { measures: [WATERMARK_MEMBER] },
-      }),
+      await askingAs('model-rejected', () =>
+        this.transport.load({
+          context,
+          query: { measures: [WATERMARK_MEMBER] },
+        }),
+      ),
     );
 
     if (carried === null) {
@@ -148,7 +158,7 @@ function completeThroughIn(result: CubeResult): Date | null {
 
   if (typeof reported !== 'string') {
     throw new AnalyticsUnavailable(
-      'model-rejected',
+      'model-unreadable',
       new Error(`the watermark came back as a ${typeof reported}`),
     );
   }
@@ -160,7 +170,7 @@ function completeThroughIn(result: CubeResult): Date | null {
   const moment = new Date(`${reported.replace(' ', 'T')}Z`);
   if (Number.isNaN(moment.getTime())) {
     throw new AnalyticsUnavailable(
-      'model-rejected',
+      'model-unreadable',
       new Error(`the watermark is not a moment: "${reported}"`),
     );
   }

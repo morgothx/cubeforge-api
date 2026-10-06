@@ -152,7 +152,7 @@ export class CubeClient implements ModelTransport {
       }),
     );
 
-    const body = await askingAs('model-rejected', async () =>
+    const body = await askingAs('model-unreadable', async () =>
       responseBody(await response.json()),
     );
 

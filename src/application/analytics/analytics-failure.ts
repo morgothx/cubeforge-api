@@ -33,15 +33,28 @@ export type AnalyticsFailureReason =
    */
   | 'model-unreachable'
   /**
-   * The semantic layer answered, and what it answered was an error.
+   * The semantic layer answered an error that was **not** about the question.
    *
-   * In practice this is a member the platform offers and the model no longer
-   * defines, or a question the model refused to compose. Its own class rather
-   * than a kind of failure, because a service that answers is a service that
-   * can be asked what it objected to — in a log, never in a response, since a
-   * query layer's error body regularly carries the statement it generated.
+   * A refused credential — the context this platform signs, not the caller's —
+   * or the engine failing on its own account. A query the engine looked at and
+   * would not run is no longer here: that is a fact about the question, and it
+   * is answered as one rather than as the analytics being unavailable.
+   *
+   * Its own class rather than a kind of failure, because a service that answers
+   * is a service that can be asked what it objected to — in a log, never in a
+   * response, since a query layer's error body regularly carries the statement
+   * it generated.
    */
   | 'model-rejected'
+  /**
+   * The semantic layer answered something this cannot read: a body that is not
+   * an answer, or a watermark that is present and will not parse.
+   *
+   * Apart from `model-rejected` because it sends an operator somewhere else —
+   * one is a service objecting, the other is a service agreeing and then
+   * handing over something unusable, which is a defect rather than a refusal.
+   */
+  | 'model-unreadable'
   | 'question-timed-out'
   | 'question-failed';
 

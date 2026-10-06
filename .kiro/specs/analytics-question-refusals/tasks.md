@@ -80,7 +80,7 @@ only the deployment is ordered, and task 4.1 states what to check before it.
   - _Depends: 2.1_
   - _Boundary: The model transport_
 
-- [ ] 3.2 Keep an unreadable answer and a malformed watermark unavailable
+- [x] 3.2 Keep an unreadable answer and a malformed watermark unavailable
   - Both become one reason of their own. The reason that covered all three
     producers is **removed rather than narrowed**: a reason nothing can emit is
     the defect this repository's own rule warns about.
@@ -220,3 +220,35 @@ only the deployment is ordered, and task 4.1 states what to check before it.
 
   Five probes bit. Suite after 3.1: 818 tests across 93 suites; `lint` and
   `typecheck` clean.
+- **3.2** — **The design said remove `model-rejected`; reality said narrow it,
+  so it was narrowed.** The removal rested on "a reason nothing can emit", and
+  3.1's split by status left it with producers after all: the engine answering
+  an error that is *not* about the question — a refused credential, or its own
+  failure. A name with a live producer is not dead vocabulary. It is kept, with
+  its documentation rewritten around what it now means, and `model-unreadable`
+  is added for an answer that cannot be read and a watermark that will not
+  parse. **This is a deviation from `design.md`, taken knowingly.**
+
+  **The watermark edge 3.1 flagged is closed.** `CubeModel` wraps that load in
+  `askingAs('model-rejected', …)`, which re-files anything the transport raises
+  about it — including the question refusal the transport would otherwise have
+  produced. A query the caller never wrote cannot be their mistake. One line,
+  using a mechanism that already existed.
+
+  **An import probe cost a run.** The `askingAs` import was added by a pattern
+  written for a multi-line import statement; the file had a single-line one, so
+  nothing applied and 23 tests failed on an undefined function. The lesson is
+  the one 2.1 recorded in another form: match the file as it is, not as the
+  edit imagines it.
+
+  Three probes bit: a garbled watermark called a question refusal, the watermark
+  load left unfiled, and an unreadable answer kept under the old reason.
+
+  **Still open:** whether a refused credential and an engine failure deserve
+  separate reasons. Both are `model-rejected` today, and they send an operator
+  to different places — one to how this platform signs its context, the other to
+  the engine itself. Not split now; the taxonomy's own argument says it probably
+  should be.
+
+  Suite after 3.2: 820 tests across 93 suites; `lint`, `typecheck` and `build`
+  clean.

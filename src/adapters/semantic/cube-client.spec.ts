@@ -164,6 +164,27 @@ describe('reaching the semantic layer', () => {
     expect(calls.length).toBeLessThan(50);
   });
 
+  /**
+   * The engine answered, and what came back could not be read as an answer at
+   * all. That is this platform's problem or the engine's, never the caller's
+   * question — and it is a different thing to look at than a refused query.
+   */
+  it('reports an answer it cannot read as unreadable', async () => {
+    const refusal = await refusalFrom(
+      clientOver(
+        replying(
+          () =>
+            new Response('not json at all', {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+        ).fetching,
+      ).load({ query: A_QUESTION, context: CONTEXT }),
+    );
+
+    expect(refusal.reason).toBe('model-unreadable');
+  });
+
   it('reports a service that is not there as unreachable', async () => {
     const refusal = await refusalFrom(
       clientOver(() =>
