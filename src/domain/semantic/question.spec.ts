@@ -1,6 +1,12 @@
 import { DomainViolation } from '../errors';
 import { LONGEST_PERIOD_DAYS, day, periodFrom } from '../analytics/period';
-import { GROUPINGS, MEASURES } from './vocabulary';
+import { whyUnaskable } from './askable';
+import {
+  GROUPINGS,
+  GROUPING_SHAPES,
+  MEASURES,
+  MEASURE_TRAITS,
+} from './vocabulary';
 import { MAX_ANSWER_ROWS, questionFrom } from './question';
 
 const aWeek = periodFrom(day('2026-03-01'), day('2026-03-07'));
@@ -18,8 +24,92 @@ function violationFrom(build: () => unknown): DomainViolation {
   throw new Error('expected the question to be refused, and it was not');
 }
 
+describe('a question the platform cannot compose', () => {
+  const cumulative = MEASURES.filter(
+    (measure) => MEASURE_TRAITS[measure].cumulative,
+  );
+  const days = GROUPINGS.filter(
+    (grouping) => GROUPING_SHAPES[grouping].shape === 'day',
+  );
+
+  it('is refused as a question, carrying the rule’s own sentence', () => {
+    const violation = violationFrom(() =>
+      questionFrom({
+        measures: cumulative,
+        groupings: days,
+        period: aWeek,
+        by: 'recorded',
+      }),
+    );
+
+    // `question` and not `measures` or `groupings`: every name is one the
+    // platform offers, and blaming either list would send a caller to look for
+    // a mistake that is not there.
+    expect(violation.error).toEqual({
+      kind: 'validation',
+      field: 'question',
+      detail: whyUnaskable(cumulative, days),
+    });
+  });
+
+  it('is refused identically every time, so nobody is invited to retry it', () => {
+    const ask = () =>
+      questionFrom({
+        measures: cumulative,
+        groupings: days,
+        period: aWeek,
+        by: 'recorded',
+      });
+
+    expect(violationFrom(ask).error).toEqual(violationFrom(ask).error);
+  });
+
+  /**
+   * A caller who named something the platform does not offer has a mistake to
+   * fix; the combination rule is about names it does offer. Telling them about
+   * the combination first would send them to change a question that is wrong
+   * for a different reason.
+   */
+  it('yields to a name the platform does not offer', () => {
+    const violation = violationFrom(() =>
+      questionFrom({
+        measures: [...cumulative, 'revenue'],
+        groupings: days,
+        period: aWeek,
+        by: 'recorded',
+      }),
+    );
+
+    expect(violation.error).toMatchObject({ field: 'measures' });
+  });
+
+  it('is refused before the period is read, like every other composition', () => {
+    // The refusal is about the combination, so it holds for any period.
+    const other = periodFrom(day('2026-01-01'), day('2026-01-02'));
+
+    expect(
+      violationFrom(() =>
+        questionFrom({
+          measures: cumulative,
+          groupings: days,
+          period: other,
+          by: 'occurred',
+        }),
+      ).error,
+    ).toMatchObject({ field: 'question' });
+  });
+});
+
 describe('a composed question', () => {
-  it('combines any measures with any groupings, with nothing written for the combination', () => {
+  /**
+   * This used to read "with nothing written for the combination", and asked for
+   * every measure with every grouping at once to prove it. That belief was
+   * measured false against the running platform on 2026-10-01: a measure that
+   * counts earlier movements cannot meet both days, and the engine refuses it.
+   * Each part still carries its own bound; what changed is that the
+   * combination turned out to carry one too, and `askable.ts` states it.
+   */
+  it('combines measures with groupings, refusing only what the platform cannot compose', () => {
     const combinations = [
       { measures: ['net_quantity'], groupings: [] },
       { measures: ['movement_count'], groupings: ['kind'] },
@@ -27,7 +117,12 @@ describe('a composed question', () => {
         measures: ['net_quantity', 'on_hand_quantity'],
         groupings: ['recorded_day', 'product', 'location'],
       },
-      { measures: [...MEASURES], groupings: [...GROUPINGS] },
+      // Everything on offer but the second day, which is as far as "any with
+      // any" now reaches.
+      {
+        measures: [...MEASURES],
+        groupings: GROUPINGS.filter((name) => name !== 'occurred_day'),
+      },
     ];
 
     for (const { measures, groupings } of combinations) {

@@ -1,4 +1,5 @@
 import { DomainViolation } from '../errors';
+import { whyUnaskable } from './askable';
 import type { Period } from '../analytics/period';
 import {
   GROUPINGS,
@@ -47,11 +48,15 @@ export interface ModelledQuestion {
 }
 
 /**
- * The only way to compose one, and it refuses three things.
+ * The only way to compose one, and it refuses four things.
  *
- * Any measures with any groupings, with no definition written for the
- * combination — that freedom is the point of a model, and what pays for it is
- * that each part carries its own bound.
+ * Almost any measures with almost any groupings: that freedom is the point of a
+ * model, and what pays for it is that each part carries its own bound. For a
+ * long time this said the combination carried none, and asked for every measure
+ * with every grouping to prove it. Measured against the running platform on
+ * 2026-10-01, that was not true — `askable.ts` states the combinations the
+ * platform cannot compose, and they are refused here rather than discovered by
+ * a caller being told the service could not be reached.
  *
  * The period is the platform's existing one, **imported with its refusals
  * intact rather than restated here**. `periodFrom` already has no constructor
@@ -79,6 +84,21 @@ export function questionFrom(input: {
 
   if (!measures.ok || !groupings.ok) {
     throw refuse(measures, groupings);
+  }
+
+  // After the names resolve, because the rule is about what they are: a
+  // combination of names the platform does not offer is the other refusal, and
+  // a caller should hear that one first.
+  const unaskable = whyUnaskable(measures.names, groupings.names);
+  if (unaskable !== null) {
+    // `question` rather than either list: every name here is one the platform
+    // offers, and blaming a list would send a caller looking for a mistake
+    // that is not in it.
+    throw new DomainViolation({
+      kind: 'validation',
+      field: 'question',
+      detail: unaskable,
+    });
   }
 
   return {

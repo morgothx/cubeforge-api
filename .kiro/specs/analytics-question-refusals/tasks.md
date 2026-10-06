@@ -34,7 +34,7 @@ only the deployment is ordered, and task 4.1 states what to check before it.
   - _Requirements: 1.5, 2.1, 2.4_
   - _Boundary: The combination rules_
 
-- [ ] 1.2 Refuse such a question where a question is composed
+- [x] 1.2 Refuse such a question where a question is composed
   - Consulted once the names and the period are known, and refused exactly as
     an over-long period already is: a rejection naming the question as the part
     at fault and carrying the sentence a caller reads.
@@ -145,3 +145,27 @@ only the deployment is ordered, and task 4.1 states what to check before it.
 
   Suite after 1.1: 809 tests across 92 suites, with `typecheck` and `lint`
   clean. Nothing calls the rule yet — that is 1.2.
+- **1.2** — **The old belief was corrected where it was written, not worked
+  around.** `question.spec.ts` asked for every measure with every grouping to
+  prove the combination carried no bound, and `question.ts` said so in prose.
+  Both now say what was measured instead, and the test keeps an "everything on
+  offer" case with one day dropped — as far as "any with any" now reaches.
+
+  **The refusal blames the question, not a list.** Every name in it is one the
+  platform offers, so `field: 'measures'` would send a caller looking for a
+  mistake that is not there. A probe swapping the field turns the spec red.
+
+  **The ordering is enforced by the type system, not by a check.** A caller who
+  names something unknown hears about that first, because the rule takes
+  *resolved* names: calling it before resolution fails `typecheck` with TS2345.
+  That was verified by trying it, after a probe meant to reverse the order
+  turned out to be a no-op — the mutation returned `null` for want of resolved
+  names and changed nothing. **The blind one was the probe, not the test.**
+
+  Three probes bit: the rule never consulted, the refusal blaming a list, and
+  the sentence written at the call site instead of in the rule. The fourth is
+  replaced by the typecheck above, which is a stronger guarantee than a test.
+
+  Suite after 1.2: 813 tests across 92 suites; `lint`, `typecheck` and `build`
+  clean. No other caller of `questionFrom` composed the refused combination, so
+  nothing else moved.
