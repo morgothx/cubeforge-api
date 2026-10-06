@@ -52,9 +52,15 @@ export class DomainViolation extends Error {
   constructor(
     readonly error: DomainError,
     readonly reason?: string,
+    cause?: unknown,
   ) {
     super(describeDomainError(error));
     this.name = 'DomainViolation';
+    // The same arrangement `AnalyticsUnavailable` uses, and for the same
+    // reason: an engine's or a driver's wording routinely carries the
+    // statement it ran and the address it read from. It travels here, where
+    // the filter logs it, and never into `message` or `reason`.
+    this.cause = cause;
   }
 }
 

@@ -44,6 +44,10 @@ export class DomainErrorFilter implements ExceptionFilter<DomainViolation> {
       `${correlationOf(http.getRequest<Request>())} ${exception.error.kind}: ${
         exception.reason ?? describeDomainError(exception.error)
       }`,
+      // Present only where something else wrote the diagnosis — an engine
+      // refusing a query, today. It is the one record of what was refused, and
+      // it appears here and in no response.
+      exception.cause instanceof Error ? exception.cause.stack : undefined,
     );
 
     http.getResponse<Response>().status(mapped.status).json({

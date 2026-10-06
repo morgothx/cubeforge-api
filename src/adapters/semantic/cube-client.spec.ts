@@ -1,4 +1,5 @@
 import { AnalyticsUnavailable } from '../../application/analytics/analytics-failure';
+import { DomainViolation } from '../../domain/errors';
 import { CubeClient, type CubeQuery } from './cube-client';
 import type { SemanticConfig } from './semantic-config';
 
@@ -60,6 +61,20 @@ async function refusalFrom(
     await load;
   } catch (error) {
     if (error instanceof AnalyticsUnavailable) {
+      return error;
+    }
+    throw error;
+  }
+
+  throw new Error('expected the load to be refused, and it was not');
+}
+
+/** The refusal a load produced, when it is one about the question. */
+async function violationFrom(load: Promise<unknown>): Promise<DomainViolation> {
+  try {
+    await load;
+  } catch (error) {
+    if (error instanceof DomainViolation) {
       return error;
     }
     throw error;
@@ -159,12 +174,44 @@ describe('reaching the semantic layer', () => {
     expect(refusal.reason).toBe('model-unreachable');
   });
 
-  it('reports a service that answered with an error as rejected', async () => {
+  /**
+   * The engine looked at what it was sent and would not run it. That is a fact
+   * about the question, not about the service — it will be refused identically
+   * for as long as the question stands, so reporting it as an outage invites a
+   * retry that cannot succeed.
+   *
+   * Classified by **status**, never by what the error says. Matching an
+   * engine's wording is how a rephrased library message silently turns one
+   * kind of failure into another.
+   */
+  it('reports a query the engine would not run as a question nobody can answer', async () => {
     for (const response of [
       () => responded(400, { error: "Query param isn't set" }),
-      () => responded(403, { error: "Authorization header isn't set" }),
-      () => responded(500, { error: 'Internal Server Error' }),
+      () => responded(422, { error: 'Compile errors: unknown member' }),
       () => responded(200, { error: 'Compile errors: unknown member' }),
+    ]) {
+      const refused = await violationFrom(
+        clientOver(replying(response).fetching).load({
+          query: A_QUESTION,
+          context: CONTEXT,
+        }),
+      );
+
+      expect(refused.error).toEqual({ kind: 'unanswerable' });
+    }
+  });
+
+  /**
+   * Neither of these is the caller's question. A refused credential is the
+   * context this platform signed, and a `500` is the engine failing — both are
+   * ours to fix, and both leave the analytics genuinely unavailable.
+   */
+  it('reports a refused credential and an engine failure as unavailable', async () => {
+    for (const response of [
+      () => responded(401, { error: "Authorization header isn't set" }),
+      () => responded(403, { error: 'Forbidden' }),
+      () => responded(500, { error: 'Internal Server Error' }),
+      () => responded(503, { error: 'Service Unavailable' }),
     ]) {
       const refusal = await refusalFrom(
         clientOver(replying(response).fetching).load({
@@ -173,7 +220,7 @@ describe('reaching the semantic layer', () => {
         }),
       );
 
-      expect(refusal.reason).toBe('model-rejected');
+      expect(refusal).toBeInstanceOf(AnalyticsUnavailable);
     }
   });
 
@@ -186,17 +233,18 @@ describe('reaching the semantic layer', () => {
     const leaky =
       'Compile errors: SELECT tenant_id FROM movements at http://cube:4000';
 
-    const refusal = await refusalFrom(
+    const refused = await violationFrom(
       clientOver(
         replying(() => responded(400, { error: leaky })).fetching,
       ).load({ query: A_QUESTION, context: CONTEXT }),
     );
 
-    expect(refusal.message).not.toContain('SELECT');
-    expect(refusal.message).not.toContain('cube:4000');
+    expect(refused.message).not.toContain('SELECT');
+    expect(refused.message).not.toContain('cube:4000');
+    expect(JSON.stringify(refused.error)).not.toContain('SELECT');
     // What an operator reads in a log, which is the only place it may appear.
-    expect((refusal.cause as Error).message).toContain('SELECT');
-    expect((refusal.cause as Error).message).toContain('cube:4000');
+    expect((refused.cause as Error).message).toContain('SELECT');
+    expect((refused.cause as Error).message).toContain('cube:4000');
   });
 
   it('never asks twice for a question that was refused', async () => {
@@ -204,7 +252,10 @@ describe('reaching the semantic layer', () => {
       responded(400, { error: 'no such member' }),
     );
 
-    await refusalFrom(
+    // The refusal is about the question now rather than about the service, and
+    // the claim that matters is unchanged: a query the engine would not run is
+    // not run again.
+    await violationFrom(
       clientOver(fetching).load({ query: A_QUESTION, context: CONTEXT }),
     );
 

@@ -2,6 +2,7 @@ import {
   AnalyticsUnavailable,
   askingAs,
 } from '../../application/analytics/analytics-failure';
+import { DomainViolation } from '../../domain/errors';
 import type { SemanticConfig } from './semantic-config';
 
 /** One question, in the shape the semantic layer's own API takes. */
@@ -162,14 +163,38 @@ export class CubeClient implements ModelTransport {
       // The cause carries the body; the message carries none of it. A query
       // layer's error routinely contains the statement it generated and the
       // address it read from, and neither may reach a caller.
-      throw new AnalyticsUnavailable(
-        'model-rejected',
-        new Error(`the semantic layer refused: ${JSON.stringify(body)}`),
+      const cause = new Error(
+        `the semantic layer refused: ${JSON.stringify(body)}`,
       );
+
+      if (refusedTheQuestion(response.status)) {
+        throw new DomainViolation(
+          { kind: 'unanswerable' },
+          'the semantic layer would not run the query',
+          cause,
+        );
+      }
+
+      throw new AnalyticsUnavailable('model-rejected', cause);
     }
 
     return body;
   }
+}
+
+/**
+ * Whether the engine looked at the query and would not run it.
+ *
+ * **Decided on the status, never on what the error says.** Matching an
+ * engine's wording is how a rephrased library message silently turns one kind
+ * of failure into another, which this repository has written down as a rule.
+ *
+ * A `5xx` is the engine failing rather than refusing, and a refused credential
+ * is the context *this platform* signed — neither is the caller's question, and
+ * both leave the analytics genuinely unavailable.
+ */
+function refusedTheQuestion(status: number): boolean {
+  return status < 500 && status !== 401 && status !== 403;
 }
 
 interface CubeBody {

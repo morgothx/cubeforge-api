@@ -66,7 +66,7 @@ only the deployment is ordered, and task 4.1 states what to check before it.
 
 ## 3. Three classes where there is one
 
-- [ ] 3.1 Report an engine that refused the question as a question that could
+- [x] 3.1 Report an engine that refused the question as a question that could
       not be answered
   - Classified where the refusal happens, never by reading the engine's
     wording — a rephrased library message would otherwise turn every failure
@@ -189,3 +189,34 @@ only the deployment is ordered, and task 4.1 states what to check before it.
   message naming a measure, and the mapping removed (build).
 
   Suite after 2.1: 817 tests across 93 suites; `lint` and `typecheck` clean.
+- **3.1** — **"The engine answered with an error" was three things, not one.**
+  The existing spec grouped a compile error, a refused credential and a `500`
+  under one reason. Only the first is about the caller's question: the second is
+  the context *this platform* signed, and the third is the engine failing.
+  Mapping all three to the blameless refusal would have repeated, in a new
+  place, the mislabelling this feature exists to remove.
+
+  **Split by status, never by wording.** `refusedTheQuestion(status)` is
+  `status < 500 && status !== 401 && status !== 403`. A status is a protocol
+  signal; the rule this repository states forbids matching an engine's *message*,
+  and that rule is kept. Probes at the exact boundary bite: `<= 500` turns a
+  failing engine into a bad question, and dropping the credential exclusion
+  turns our own signing error into one.
+
+  **Boundary crossed deliberately, and recorded.** For the engine's body to
+  reach an operator through the domain refusal (3.3), `DomainViolation` gained
+  an optional `cause` and `DomainErrorFilter` now logs it — both files belong to
+  2.1's boundary. The alternative was a logger inside the transport, which
+  would have made a framework-free adapter depend on Nest for one line. The
+  arrangement mirrors `AnalyticsUnavailable`, which already works this way.
+
+  **An edge for 3.2.** `CubeClient` is also the transport for the *watermark*
+  query, which the platform composes from a single member and the caller never
+  sees. If the engine ever refused that one, it would now surface as a question
+  nobody can answer rather than as a defect. `CubeModel` is the only place that
+  knows which load is which, and `askingAs` already re-wraps anything that is
+  not an `AnalyticsUnavailable` — so wrapping the watermark load is a one-line
+  fix that belongs with 3.2.
+
+  Five probes bit. Suite after 3.1: 818 tests across 93 suites; `lint` and
+  `typecheck` clean.
